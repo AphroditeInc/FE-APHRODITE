@@ -1,7 +1,11 @@
 "use client";
 
-import AuthLayout from "@/components/auth/AuthLayout";
+import AuthCard from "@/components/auth/AuthCard";
+import Button from "@/components/button";
+import Image from "next/image";
 import { useState } from "react";
+import apple from "../../../public/icons/apple.svg";
+import facebook from "../../../public/icons/facebook.svg";
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
@@ -17,79 +21,42 @@ export default function SignUpPage() {
   };
 
   return (
-    <AuthLayout
-      title="Create Your Account"
-      description="Join thousands of users and start your journey today"
-      backgroundImage="/images/slidersimage/firstimg.svg"
-      showSlider={true}
+    <AuthCard
+      title="Welcome to Aphrodite"
+      description="By tapping ‘Create Account’ or ‘Sign in’, you agree to our Terms & Conditions."
+      // backgroundImage="/images/slidersimage/firstimg.svg"
+      // showSlider={true}
     >
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label
-            htmlFor="email"
-            className="block text-sm font-medium text-gray-700 mb-2"
-          >
-            Email Address
-          </label>
-          <input
-            id="email"
-            type="email"
-            required
-            value={formData.email}
-            onChange={(e) =>
-              setFormData({ ...formData, email: e.target.value })
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter your email"
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-gray-700 mb-2"
-          >
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            required
-            value={formData.password}
-            onChange={(e) =>
-              setFormData({ ...formData, password: e.target.value })
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Create a password"
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="confirmPassword"
-            className="block text-sm font-medium text-gray-700 mb-2"
-          >
-            Confirm Password
-          </label>
-          <input
-            id="confirmPassword"
-            type="password"
-            required
-            value={formData.confirmPassword}
-            onChange={(e) =>
-              setFormData({ ...formData, confirmPassword: e.target.value })
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Confirm your password"
-          />
-        </div>
-
-        <button
+        <Button
           type="submit"
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"
+          className="w-full bg-transparent border border-white/10 text-white hover:bg-white/10 flex items-center justify-center gap-2"
+          onClick={() => (window.location.href = "/auth/apple")}
         >
+          <Image src={apple} alt="Apple" width={24} height={24} />
+          <span className="text-white/60"> Sign up with Apple</span>
+        </Button>
+
+        <Button
+          type="submit"
+          className="w-full bg-transparent border border-white/10 text-white hover:bg-white/10 flex items-center justify-center gap-2"
+          onClick={() => (window.location.href = "/auth/facebook")}
+        >
+          <Image src={facebook} alt="Facebook" width={24} height={24} />
+          <span className="text-white/60"> Sign up with Facebook</span>
+        </Button>
+
+        <div className="flex items-center gap-3">
+          <hr className="flex-grow border-t border-white/10" />
+          <span className="text-white/60">or</span>
+          <hr className="flex-grow border-t border-white/10" />
+        </div>
+
+        {/* number input with country code */}
+
+        <Button type="submit" className="w-full">
           Create Account
-        </button>
+        </Button>
 
         <div className="text-center">
           <p className="text-sm text-gray-600">
@@ -100,6 +67,6 @@ export default function SignUpPage() {
           </p>
         </div>
       </form>
-    </AuthLayout>
+    </AuthCard>
   );
 }

@@ -12,19 +12,21 @@ export default function AuthCard({
   children,
 }: AuthCardProps) {
   return (
-    <div className="bg-white/6 backdrop-blur-md rounded-2xl p-10  max-w-lg w-full text-white">
+    <div className="bg-white/6 backdrop-blur-md rounded-2xl px-[90px] py-[40px]  max-w-[586px] w-full text-white">
       {/* Logo */}
-      <div className=" flex justify-center items-center">
-        <Logo />
-      </div>
+      <div>
+        <div className=" flex justify-center items-center">
+          <Logo />
+        </div>
 
-      {/* Title & Description */}
-      <div className="text-center mt-4 mb-6">
-        <h1 className="text-[40px] font-bold mb-2">{title}</h1>
-        {description && <p className="text-white/60 mb-6">{description}</p>}
+        {/* Title & Description */}
+        <div className="text-center mt-4 mb-6">
+          <h1 className="text-[40px] font-bold mb-2">{title}</h1>
+          {description && <p className="text-white/60 mb-6">{description}</p>}
+        </div>
+        {/* Content */}
+        <div>{children}</div>
       </div>
-      {/* Content */}
-      <div>{children}</div>
     </div>
   );
 }
