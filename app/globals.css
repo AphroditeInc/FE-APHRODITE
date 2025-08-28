@@ -3,6 +3,14 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  
+}
+
+.textlogo {
+  /* font-family: 'Geist Sans', sans-serif; */
+  font-size: 28px;
+  font-weight: bold;
+  color:  #FA266D;;
 }
 
 @theme inline {
