@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import AuthLayout from "../layout";
 import AuthCard from "@/components/auth/AuthCard";
 
 export default function UserTypePage() {
@@ -40,6 +39,7 @@ export default function UserTypePage() {
     <AuthCard
       title="Welcome to Aphrodite"
       description="Select a suitable account type of your choice to get started on Aphrodite Inc."
+      className="font-urbanist"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 gap-4">

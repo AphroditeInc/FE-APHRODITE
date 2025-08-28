@@ -1,6 +1,6 @@
 "use client";
 
-import AuthLayout from "@/components/auth/AuthLayout";
+import AuthCard from "@/components/auth/AuthCard";
 import { useState } from "react";
 
 export default function WelcomePage() {
@@ -9,13 +9,6 @@ export default function WelcomePage() {
     signUpAsClient: "",
     signUpAsInfluencer: "",
   });
-
-  const backgroundImages = [
-    "/images/slidersimage/firstimg.svg",
-    "/images/slidersimage/secondimg.svg",
-    "/images/slidersimage/thirdimg.svg",
-    "/images/slidersimage/fourthimg.svg",
-  ];
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({
@@ -30,12 +23,10 @@ export default function WelcomePage() {
   };
 
   return (
-    <AuthLayout
+    <AuthCard
       title="Welcome to Aphrodite"
       description="Find your perfect match for any service or talent you need"
-      backgroundImages={backgroundImages}
-      showSlider={true}
-      centered={true}
+      className="font-urbanist"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Sign Up as Freelancer */}
@@ -107,6 +98,6 @@ export default function WelcomePage() {
           </p>
         </div>
       </form>
-    </AuthLayout>
+    </AuthCard>
   );
 }

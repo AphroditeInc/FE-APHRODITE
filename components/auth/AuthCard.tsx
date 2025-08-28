@@ -4,15 +4,17 @@ interface AuthCardProps {
   title: string;
   description?: string;
   children: React.ReactNode;
+  className?: string;
 }
 
 export default function AuthCard({
   title,
   description,
   children,
+  className = "",
 }: AuthCardProps) {
   return (
-    <div className="bg-white/6 backdrop-blur-md rounded-2xl p-10  max-w-lg w-full text-white">
+    <div className={`bg-white/6 backdrop-blur-md rounded-2xl p-10 max-w-lg w-full text-white ${className}`}>
       {/* Logo */}
       <div className=" flex justify-center items-center">
         <Logo />

@@ -1,6 +1,6 @@
 "use client";
 
-import AuthLayout from "@/components/auth/AuthLayout";
+import AuthCard from "@/components/auth/AuthCard";
 import { useState } from "react";
 
 export default function SignUpPage() {
@@ -17,11 +17,10 @@ export default function SignUpPage() {
   };
 
   return (
-    <AuthLayout
+    <AuthCard
       title="Create Your Account"
       description="Join thousands of users and start your journey today"
-      backgroundImage="/images/slidersimage/firstimg.svg"
-      showSlider={true}
+      className="font-urbanist"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
@@ -100,6 +99,6 @@ export default function SignUpPage() {
           </p>
         </div>
       </form>
-    </AuthLayout>
+    </AuthCard>
   );
 }
