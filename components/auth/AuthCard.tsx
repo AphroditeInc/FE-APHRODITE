@@ -12,7 +12,7 @@ export default function AuthCard({
   children,
 }: AuthCardProps) {
   return (
-    <div className="bg-white/6 backdrop-blur-md rounded-2xl px-[90px] py-[40px]  max-w-[586px] w-full text-white">
+    <div className="bg-white/6 backdrop-blur-md rounded-2xl px-[90px] py-[40px]  max-w-[586px] h-[772px] w-full text-white">
       {/* Logo */}
       <div>
         <div className=" flex justify-center items-center">

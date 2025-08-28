@@ -75,7 +75,7 @@ export default function UserTypePage() {
                 <h3 className="text-lg font-semibold text-white">
                   {userType.title}
                 </h3>
-                <p className="text-sm text-gray-300 mt-1">
+                <p className="text-sm text-gray-300 mt-1 w-[344px]">
                   {userType.description}
                 </p>
               </div>
