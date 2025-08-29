@@ -1,6 +1,6 @@
 "use client";
 
-import AuthLayout from "@/components/auth/AuthLayout";
+import AuthCard from "@/components/auth/AuthCard";
 import { useState } from "react";
 import Image from "next/image";
 
@@ -16,10 +16,10 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthLayout
+    <AuthCard
       title="Welcome Back"
       description="Sign in to your account to continue"
-      backgroundImage="/images/slidersimage/thirdimg.svg"
+      className="font-urbanist"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
@@ -134,6 +134,6 @@ export default function LoginPage() {
           </p>
         </div>
       </form>
-    </AuthLayout>
+    </AuthCard>
   );
 }
