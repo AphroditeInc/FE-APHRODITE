@@ -5,6 +5,7 @@ import Button from "@/components/button";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Upload, CheckCircle, Camera } from "lucide-react";
 import Image from "next/image";
+import Logo from "@/components/logo";
 
 export default function IDVerifyPage() {
   const [currentStep, setCurrentStep] = useState<'capture' | 'verification' | 'completed'>('capture');
@@ -111,6 +112,8 @@ export default function IDVerifyPage() {
   };
 
   const handleContinue = () => {
+    // Set verification completed in localStorage
+    localStorage.setItem('idVerificationCompleted', 'true');
     // Go back to select verification method page with verification status
     window.location.href = "/id-verification?verified=true";
   };
@@ -320,14 +323,6 @@ export default function IDVerifyPage() {
           <div className="h-full flex flex-col justify-center w-[386px] mx-auto">
             
             {/* Logo */}
-            <div className="flex justify-center items-center mb-8">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-pink-500 rounded-lg flex items-center justify-center">
-                  <span className="text-white text-lg font-bold">A</span>
-                </div>
-                <span className="text-pink-500 text-xl font-bold">Aphrodite</span>
-              </div>
-            </div>
 
             {/* Success Icon */}
             <div className="flex justify-center mb-6">

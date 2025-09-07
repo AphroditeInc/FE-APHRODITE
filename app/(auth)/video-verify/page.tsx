@@ -109,6 +109,8 @@ export default function VideoVerifyPage() {
   };
 
   const handleContinue = () => {
+    // Set video verification completed in localStorage
+    localStorage.setItem('videoVerificationCompleted', 'true');
     // Go back to select verification method page with video verification status
     window.location.href = "/id-verification?videoVerified=true";
   };

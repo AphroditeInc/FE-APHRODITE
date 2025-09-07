@@ -2,9 +2,10 @@
 
 import AuthCard from "@/components/auth/AuthCard";
 import Button from "@/components/button";
-import { useState } from "react";
+import CustomDropdown from "@/components/CustomDropdown";
+import DatePicker from "@/components/DatePicker";
+import { useState, useRef, useEffect } from "react";
 import {
-  Calendar,
   User,
   Lock,
   MapPin,
@@ -22,6 +23,27 @@ export default function DetailsPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordRef = useRef<HTMLInputElement>(null);
+  
+  // Check for autofill values
+  useEffect(() => {
+    const checkAutofill = () => {
+      if (passwordRef.current && passwordRef.current.value !== formData.password) {
+        setFormData(prev => ({ ...prev, password: passwordRef.current?.value || "" }));
+      }
+      if (confirmPasswordRef.current && confirmPasswordRef.current.value !== formData.confirmPassword) {
+        setFormData(prev => ({ ...prev, confirmPassword: confirmPasswordRef.current?.value || "" }));
+      }
+    };
+
+    // Check immediately and after a delay for autofill
+    checkAutofill();
+    const timeout = setTimeout(checkAutofill, 100);
+    
+    return () => clearTimeout(timeout);
+  }, []);
+
   const [formData, setFormData] = useState({
     // Step 1: Basic Info
     age: "",
@@ -46,6 +68,52 @@ export default function DetailsPage() {
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  // Dropdown options
+  const genderOptions = [
+    { value: "", label: "Select Gender" },
+    { value: "male", label: "Male" },
+    { value: "female", label: "Female" },
+    { value: "other", label: "Other" },
+  ];
+
+  const countryOptions = [
+    { value: "", label: "Select Country" },
+    { value: "nigeria", label: "Nigeria" },
+    { value: "usa", label: "United States" },
+    { value: "uk", label: "United Kingdom" },
+    { value: "canada", label: "Canada" },
+  ];
+
+  const stateOptions = [
+    { value: "", label: "State" },
+    { value: "lagos", label: "Lagos" },
+    { value: "abuja", label: "Abuja" },
+    { value: "kano", label: "Kano" },
+  ];
+
+  const cityOptions = [
+    { value: "", label: "City" },
+    { value: "victoria-island", label: "Victoria Island" },
+    { value: "ikeja", label: "Ikeja" },
+    { value: "lekki", label: "Lekki" },
+  ];
+
+  const educationOptions = [
+    { value: "", label: "Education Level" },
+    { value: "high-school", label: "High School" },
+    { value: "bachelors", label: "Bachelor's Degree" },
+    { value: "masters", label: "Master's Degree" },
+    { value: "phd", label: "PhD" },
+  ];
+
+  const maritalStatusOptions = [
+    { value: "", label: "Marital Status" },
+    { value: "single", label: "Single" },
+    { value: "married", label: "Married" },
+    { value: "divorced", label: "Divorced" },
+    { value: "widowed", label: "Widowed" },
+  ];
 
 
 
@@ -154,29 +222,11 @@ export default function DetailsPage() {
       </div>
 
       {/* Date of Birth */}
-      <div className="relative">
-        <Calendar className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-        <input
-          type="date"
-          value={formData.dateOfBirth}
-          onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
-          className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
-          placeholder="Date of Birth"
-        />
-        <ChevronDown
-          className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5 cursor-pointer"
-          onClick={(e) => {
-            e.preventDefault();
-            const div = (e.target as HTMLElement).closest("div");
-            const input = div
-              ? (div.querySelector("input") as HTMLInputElement)
-              : null;
-            if (input && input.showPicker) {
-              input.showPicker();
-            }
-          }}
-        />
-      </div>
+      <DatePicker
+        value={formData.dateOfBirth}
+        onChange={(value) => handleInputChange("dateOfBirth", value)}
+        placeholder="Date of Birth"
+      />
 
       {/* Username */}
       <div className="relative">
@@ -208,107 +258,43 @@ export default function DetailsPage() {
       </div>
 
       {/* Gender Selection */}
-      <div className="relative">
-        <MarsStroke className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-
-        <select
-          value={formData.gender}
-          onChange={(e) => handleInputChange("gender", e.target.value)}
-          className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/20 rounded-[40px] text-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none"
-        >
-          <option value="" className="bg-gray-800 text-white">
-            Select Gender
-          </option>
-          <option value="male" className="bg-gray-800 text-white">
-            Male
-          </option>
-          <option value="female" className="bg-gray-800 text-white">
-            Female
-          </option>
-          <option value="other" className="bg-gray-800 text-white">
-            Other
-          </option>
-        </select>
-        <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5 pointer-events-none" />
-      </div>
+      <CustomDropdown
+        value={formData.gender}
+        onChange={(value) => handleInputChange("gender", value)}
+        options={genderOptions}
+        placeholder="Select Gender"
+        icon={<MarsStroke className="h-5 w-5" />}
+      />
     </div>
   );
 
   const renderStep2 = () => (
     <div className="space-y-6">
       {/* Country Selection */}
-      <div className="relative">
-        <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-        <select
-          value={formData.country}
-          onChange={(e) => handleInputChange("country", e.target.value)}
-          className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/20 rounded-[40px] text-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none"
-        >
-          <option value="" className="bg-gray-800 text-white">
-            Select Country
-          </option>
-          <option value="nigeria" className="bg-gray-800 text-white">
-            Nigeria
-          </option>
-          <option value="usa" className="bg-gray-800 text-white">
-            United States
-          </option>
-          <option value="uk" className="bg-gray-800 text-white">
-            United Kingdom
-          </option>
-          <option value="canada" className="bg-gray-800 text-white">
-            Canada
-          </option>
-        </select>
-        <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5 pointer-events-none" />
-      </div>
+      <CustomDropdown
+        value={formData.country}
+        onChange={(value) => handleInputChange("country", value)}
+        options={countryOptions}
+        placeholder="Select Country"
+        icon={<MapPin className="h-5 w-5" />}
+      />
 
       {/* State & City */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="relative">
-          <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-          <select
-            value={formData.state}
-            onChange={(e) => handleInputChange("state", e.target.value)}
-            className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/20 rounded-[40px] text-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none"
-          >
-            <option value="" className="bg-gray-800 text-white">
-              State
-            </option>
-            <option value="lagos" className="bg-gray-800 text-white">
-              Lagos
-            </option>
-            <option value="abuja" className="bg-gray-800 text-white">
-              Abuja
-            </option>
-            <option value="kano" className="bg-gray-800 text-white">
-              Kano
-            </option>
-          </select>
-          <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5 pointer-events-none" />
-        </div>
-        <div className="relative">
-          <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-          <select
-            value={formData.city}
-            onChange={(e) => handleInputChange("city", e.target.value)}
-            className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/20 rounded-[40px] text-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none"
-          >
-            <option value="" className="bg-gray-800 text-white">
-              City
-            </option>
-            <option value="victoria-island" className="bg-gray-800 text-white">
-              Victoria Island
-            </option>
-            <option value="ikeja" className="bg-gray-800 text-white">
-              Ikeja
-            </option>
-            <option value="lekki" className="bg-gray-800 text-white">
-              Lekki
-            </option>
-          </select>
-          <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5 pointer-events-none" />
-        </div>
+        <CustomDropdown
+          value={formData.state}
+          onChange={(value) => handleInputChange("state", value)}
+          options={stateOptions}
+          placeholder="State"
+          icon={<MapPin className="h-5 w-5" />}
+        />
+        <CustomDropdown
+          value={formData.city}
+          onChange={(value) => handleInputChange("city", value)}
+          options={cityOptions}
+          placeholder="City"
+          icon={<MapPin className="h-5 w-5" />}
+        />
       </div>
 
       {/* Suggested Password Button */}
@@ -327,15 +313,17 @@ export default function DetailsPage() {
       <div className="relative">
         <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
         <input
+          ref={passwordRef}
           type={showPassword ? "text" : "password"}
           value={formData.password}
           onChange={(e) => handleInputChange("password", e.target.value)}
-          className={`w-full pl-12 pr-12 py-3 border border-white/20 rounded-[40px] placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200 -webkit-appearance-none ${
-            formData.password
-              ? "bg-transparent text-white"
-              : "bg-transparent text-white"
+          className={`w-full pl-12 pr-12 py-3 bg-transparent border rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200 ${
+            formData.password && formData.password.trim() !== "" 
+              ? "border-pink-500" 
+              : "border-white/20"
           }`}
           placeholder="Create Password"
+          autoComplete="new-password"
         />
         <button
           type="button"
@@ -354,15 +342,17 @@ export default function DetailsPage() {
       <div className="relative">
         <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
         <input
+          ref={confirmPasswordRef}
           type={showConfirmPassword ? "text" : "password"}
           value={formData.confirmPassword}
           onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
-          className={`w-full pl-12 pr-12 py-3 border border-white/20 rounded-[40px] placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200 ${
-            formData.confirmPassword
-              ? "bg-transparent text-white"
-              : "bg-transparent text-white"
+          className={`w-full pl-12 pr-12 py-3 bg-transparent border rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200 ${
+            formData.confirmPassword && formData.confirmPassword.trim() !== "" 
+              ? "border-pink-500" 
+              : "border-white/20"
           }`}
           placeholder="Confirm Password"
+          autoComplete="new-password"
         />
         <button
           type="button"
@@ -382,31 +372,13 @@ export default function DetailsPage() {
   const renderStep3 = () => (
     <div className="space-y-6">
       {/* Education Level */}
-      <div className="relative">
-        <GraduationCap className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-        <select
-          value={formData.educationLevel}
-          onChange={(e) => handleInputChange("educationLevel", e.target.value)}
-          className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/20 rounded-[40px] text-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none"
-        >
-          <option value="" className="bg-gray-800 text-white">
-            Education Level
-          </option>
-          <option value="high-school" className="bg-gray-800 text-white">
-            High School
-          </option>
-          <option value="bachelors" className="bg-gray-800 text-white">
-            Bachelor&apos;s Degree
-          </option>
-          <option value="masters" className="bg-gray-800 text-white">
-            Master&apos;s Degree
-          </option>
-          <option value="phd" className="bg-gray-800 text-white">
-            PhD
-          </option>
-        </select>
-        <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5 pointer-events-none" />
-      </div>
+      <CustomDropdown
+        value={formData.educationLevel}
+        onChange={(value) => handleInputChange("educationLevel", value)}
+        options={educationOptions}
+        placeholder="Education Level"
+        icon={<GraduationCap className="h-5 w-5" />}
+      />
 
       {/* Occupation */}
       <div className="relative">
@@ -421,31 +393,13 @@ export default function DetailsPage() {
       </div>
 
       {/* Marital Status */}
-      <div className="relative">
-        <Heart className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-        <select
-          value={formData.maritalStatus}
-          onChange={(e) => handleInputChange("maritalStatus", e.target.value)}
-          className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/20 rounded-[40px] text-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none"
-        >
-          <option value="" className="bg-gray-800 text-white">
-            Marital Status
-          </option>
-          <option value="single" className="bg-gray-800 text-white">
-            Single
-          </option>
-          <option value="married" className="bg-gray-800 text-white">
-            Married
-          </option>
-          <option value="divorced" className="bg-gray-800 text-white">
-            Divorced
-          </option>
-          <option value="widowed" className="bg-gray-800 text-white">
-            Widowed
-          </option>
-        </select>
-        <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5 pointer-events-none" />
-      </div>
+      <CustomDropdown
+        value={formData.maritalStatus}
+        onChange={(value) => handleInputChange("maritalStatus", value)}
+        options={maritalStatusOptions}
+        placeholder="Marital Status"
+        icon={<Heart className="h-5 w-5" />}
+      />
 
       {/* Bio */}
       <div className="relative">
@@ -542,7 +496,7 @@ export default function DetailsPage() {
               <Button
                 onClick={handlePrevious}
                 variant="outline"
-                className="flex-1"
+                className="w-[30%]"
               >
                 Previous
               </Button>
@@ -550,7 +504,7 @@ export default function DetailsPage() {
             <Button
               onClick={currentStep === 3 ? handleSubmit : handleNext}
               disabled={!canProceed()}
-              className={`flex-1 ${
+              className={`w-[70%] ${
                 currentStep === 3
                   ? "bg-gradient-to-r from-pink-500 to-pink-600"
                   : ""

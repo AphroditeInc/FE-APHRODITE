@@ -1,6 +1,7 @@
 "use client";
 
 import Button from "@/components/button";
+import AuthCard from "@/components/auth/AuthCard";
 import { useState, useEffect } from "react";
 import { Video, Upload, ArrowLeft } from "lucide-react";
 
@@ -38,89 +39,107 @@ export default function IDVerificationPage() {
     if (urlParams.get('videoVerified') === 'true') {
       setVideoVerificationCompleted(true);
     }
+    
+    // Check localStorage for completed verifications
+    const storedIdVerification = localStorage.getItem('idVerificationCompleted');
+    const storedVideoVerification = localStorage.getItem('videoVerificationCompleted');
+    
+    if (storedIdVerification === 'true') {
+      setIdVerificationCompleted(true);
+    }
+    if (storedVideoVerification === 'true') {
+      setVideoVerificationCompleted(true);
+    }
   }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-      <div className="relative bg-white/6 backdrop-blur-md rounded-[24px] w-[586px] py-[40px] mx-4 text-white border border-white/20 font-urbanist">
-        <div className="h-full flex flex-col justify-center w-[486px] mx-auto">
-          
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 bg-pink-500 rounded-lg flex items-center justify-center">
-              <span className="text-white text-lg font-bold">A</span>
-            </div>
-            <span className="text-pink-500 text-xl font-bold">Aphrodite</span>
-          </div>
-
-          {/* Title & Description */}
-          <div className="text-center mb-8">
-            <h1 className="text-[32px] font-bold mb-4 leading-[100%] tracking-[-0.02em]">
-              Let&apos;s verify your Identity
-            </h1>
-            <p className="text-white/60 text-base leading-relaxed max-w-md mx-auto">
-              You are required to verify your identity before you can use the application for trust and security. Your information will be securely handled and will not be shared.
-            </p>
-          </div>
+      <AuthCard
+      
+        title={idVerificationCompleted && videoVerificationCompleted 
+          ? "Identity Verification Complete!" 
+          : "Let's verify your Identity"
+        }
+        description={idVerificationCompleted && videoVerificationCompleted 
+          ? "Congratulations! You have successfully completed both verification steps. You can now proceed to use the application."
+          : "We are required to verify your identity before you can use the application for trust and security. Your information will be encrypted and stored securely."
+        }
+      >
 
 
 
           {/* Verification Options */}
-          <div className="space-y-6 mb-8">
-                         {/* Video Proof Option */}
-             <div className="bg-white/5 rounded-[20px] p-6 border border-white/10">
-               <div className="mb-4">
-                 <div className="flex items-center gap-2 mb-2">
-                   <h3 className="text-white text-lg font-semibold">Video Proof</h3>
-                   {videoVerificationCompleted && (
-                     <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
-                       <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                       </svg>
-                     </div>
-                   )}
-                 </div>
-                 <p className="text-white/60 text-sm leading-relaxed">
-                   Record a short selfie video to confirm your identity. This helps us to create a trusted space for all users.
-                 </p>
-               </div>
-              <Button
-                onClick={handleVideoProof}
-                fullWidth
-                size="lg"
-                className="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold"
-              >
-                <Video className="w-5 h-5 mr-2" />
-                Start Recording
-              </Button>
+          <div className="space-y-6 mb-8 mt-[40px]">
+            {/* Video Proof Option */}
+            <div className="bg-white/5 rounded-[20px] p-6 border border-white/10 flex flex-col w-[406px] mx-auto h-[130px]">
+            <div className="flex flex-col h-full mx-auto ">
+              <div className="flex items-center justify-between mt-[-10px] mb-[16px]">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-white text-lg font-semibold">Video Proof</h3>
+                  {videoVerificationCompleted && (
+                    <img src="/icons/verify.svg" alt="Verified" className="w-5 h-5" />
+                  )}
+                </div>
+                <button
+                  onClick={handleVideoProof}
+                 
+                  className={videoVerificationCompleted 
+                    ? "hover:bg-green-600 text-white font-semibold rounded-[25px]" 
+                    : "bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold rounded-[25px]"
+                  }
+                >
+                  {videoVerificationCompleted ? (
+                    <>
+                      
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2 px-[16px] py-[8px] rounded-[25px]">
+                     Start Recording
+                      <Video className="w-[20px] h-[20px] mr-1" />
+                     
+                    </div>
+                  )}
+                </button>
+              </div>
+              <p className="text-white/60 text-sm leading-relaxed">
+                Record a short selfie video to confirm your identity and ensure a safe, trusted space for all users.
+              </p>
+              </div>
             </div>
 
-                         {/* Government ID Option */}
-             <div className="bg-white/5 rounded-[20px] p-6 border border-white/10">
-               <div className="mb-4">
-                 <div className="flex items-center gap-2 mb-2">
-                   <h3 className="text-white text-lg font-semibold">Government Issued ID</h3>
-                                       {idVerificationCompleted && (
-                      <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
-                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </div>
-                    )}
-                 </div>
-                 <p className="text-white/60 text-sm leading-relaxed">
-                   Upload a government ID to verify your age and identity. Your details are encrypted and securely stored.
-                 </p>
-               </div>
-              <Button
-                onClick={handleGovernmentID}
-                fullWidth
-                size="lg"
-                className="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold"
-              >
-                <Upload className="w-5 h-5 mr-2" />
-                Upload ID
-              </Button>
+            {/* Government ID Option */}
+            <div className="bg-white/5 rounded-[20px] p-6 border border-white/10 flex flex-col w-[406px] mx-auto h-[130px]">
+            <div className="flex flex-col h-full mx-auto ">
+              <div className="flex items-center justify-between mt-[-10px] mb-[16px]">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-white text-lg font-semibold">Government Issued ID</h3>
+                  {idVerificationCompleted && (
+                    <img src="/icons/verify.svg" alt="Verified" className="w-5 h-5" />
+                  )}
+                </div>
+                <button
+                  onClick={handleGovernmentID}
+                  className={idVerificationCompleted 
+                    ? "hover:bg-green-600 text-white font-semibold rounded-[25px]" 
+                    : "bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-semibold rounded-[25px]"
+                  }
+                >
+                  {idVerificationCompleted ? (
+                    <>
+                       
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2 px-[16px] py-[8px] rounded-[25px]">
+                      Capture
+                      <Upload className="w-[20px] h-[20px] mr-1" />
+                    </div>
+                  )}
+                </button>
+              </div>
+              <p className="text-white/60 text-sm leading-relaxed">
+                Upload a valid photo ID to verify your age and identity. Your details are safe and securely stored.
+              </p>
+            </div>
             </div>
           </div>
 
@@ -134,18 +153,17 @@ export default function IDVerificationPage() {
             </button>
           </div>
 
-          {/* Back Navigation */}
-          <div className="flex justify-start mt-6">
-            <button
-              onClick={handleBack}
-              className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back to details</span>
-            </button>
-          </div>
+        {/* Back Navigation */}
+        <div className="flex justify-start mt-6">
+          <button
+            onClick={handleBack}
+            className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to details</span>
+          </button>
         </div>
-      </div>
+      </AuthCard>
     </div>
   );
 }
