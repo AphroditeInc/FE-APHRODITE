@@ -37,8 +37,8 @@ export default function UserTypePage() {
     e.preventDefault();
     if (selectedType) {
       console.log("Selected user type:", selectedType);
-      // Navigate to signup page
-      router.push("/signup");
+      // Navigate to signup page with user type as query parameter
+      router.push(`/signup?userType=${selectedType}`);
       // alert(`Navigating to signup with user type: ${selectedType}`);
     }
   };

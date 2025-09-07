@@ -4,7 +4,8 @@ import AuthCard from "@/components/auth/AuthCard";
 import Button from "@/components/button";
 import CustomDropdown from "@/components/CustomDropdown";
 import DatePicker from "@/components/DatePicker";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   User,
   Lock,
@@ -19,13 +20,23 @@ import {
   Eye,
 } from "lucide-react";
 
-export default function DetailsPage() {
+function DetailsForm() {
   const [currentStep, setCurrentStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [userType, setUserType] = useState<string>("");
   const passwordRef = useRef<HTMLInputElement>(null);
   const confirmPasswordRef = useRef<HTMLInputElement>(null);
+  const searchParams = useSearchParams();
   
+  // Get user type from URL parameters
+  useEffect(() => {
+    const userTypeParam = searchParams.get('userType');
+    if (userTypeParam) {
+      setUserType(userTypeParam);
+    }
+  }, [searchParams]);
+
   // Check for autofill values
   useEffect(() => {
     const checkAutofill = () => {
@@ -132,8 +143,14 @@ export default function DetailsPage() {
   const handleSubmit = () => {
     // Handle final submission
     console.log("Form submitted:", formData);
-    // Redirect to next step
-    window.location.href = "/id-verification";
+    
+    if (userType === "client" || userType === "aphroRyder") {
+      // For clients and riders, redirect to dashboard or main app
+      window.location.href = "/";
+    } else {
+      // For divas/hunks, proceed to ID verification
+      window.location.href = "/id-verification";
+    }
   };
 
   const isStep1Valid =
@@ -448,7 +465,7 @@ export default function DetailsPage() {
       case 2:
         return "Continue";
       case 3:
-        return "Proceed to ID Verification";
+        return (userType === "client" || userType === "aphroRyder") ? "Finish Setup" : "Proceed to ID Verification";
       default:
         return "Continue";
     }
@@ -516,5 +533,20 @@ export default function DetailsPage() {
         </div>
       </AuthCard>
     </div>
+  );
+}
+
+export default function DetailsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    }>
+      <DetailsForm />
+    </Suspense>
   );
 }

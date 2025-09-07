@@ -3,14 +3,17 @@
 import AuthCard from "@/components/auth/AuthCard";
 import Button from "@/components/button";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import apple from "../../../public/icons/apple.svg";
 import facebook from "../../../public/icons/facebook.svg";
 import { Phone } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function SignUpPage() {
+function SignUpForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [userType, setUserType] = useState<string>("");
+  
   const [formData, setFormData] = useState({
     phone: "",
     countryCode: "+234", // Default to Nigeria
@@ -20,6 +23,14 @@ export default function SignUpPage() {
   });
 
   const [phoneValid, setPhoneValid] = useState(false);
+
+  // Get user type from URL parameters
+  useEffect(() => {
+    const userTypeParam = searchParams.get('userType');
+    if (userTypeParam) {
+      setUserType(userTypeParam);
+    }
+  }, [searchParams]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -35,7 +46,8 @@ export default function SignUpPage() {
     e.preventDefault();
     // Handle signup logic
     console.log("Signup attempt:", formData);
-    router.push("/otp");
+    // Pass user type to OTP page
+    router.push(`/otp?userType=${userType}`);
   };
 
   return (
@@ -120,5 +132,20 @@ export default function SignUpPage() {
         </div>
       </form>
     </AuthCard>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    }>
+      <SignUpForm />
+    </Suspense>
   );
 }
