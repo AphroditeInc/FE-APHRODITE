@@ -3,7 +3,7 @@
 import AuthCard from "@/components/auth/AuthCard";
 import Button from "@/components/button";
 import Logo from "@/components/logo";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import success from "../../../public/icons/success.svg";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -83,8 +83,6 @@ export default function OTPPage() {
                         <Button
                             onClick={handleVerify}
                             disabled={!isOtpComplete}
-
-
                             className="mt-8 bg-pink-600 hover:bg-pink-700 text-white rounded-[40px] px-4 py-3 text-base w-full"
                         >
                             Verify
@@ -93,7 +91,7 @@ export default function OTPPage() {
                         {/* Resend Code Option */}
                         <div className="text-center">
                             <p className="text-white/60 text-sm">
-                                Didn't receive the code?{" "}
+                                Didn&apos;t receive the code?{" "}
                                 <button className="text-pink-500 hover:text-pink-400 font-medium">
                                     Resend
                                 </button>
@@ -121,7 +119,7 @@ export default function OTPPage() {
                         <div className="text-center mb-8">
                             <h2 className="text-2xl font-bold mb-3">Verification Successful</h2>
                             <p className="text-white/60 text-base leading-relaxed">
-                                Your phone number is verified—let's get started! You can now proceed to finish setting up your account.
+                                Your phone number is verified—let&apos;s get started! You can now proceed to finish setting up your account.
                             </p>
                         </div>
 
@@ -129,7 +127,6 @@ export default function OTPPage() {
                         <Button
                             onClick={handleContinue}
                             fullWidth
-
                             className="bg-pink-600 hover:bg-pink-700"
                         >
                             Continue

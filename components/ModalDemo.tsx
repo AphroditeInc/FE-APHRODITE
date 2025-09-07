@@ -3,9 +3,16 @@
 import { useState } from "react";
 import BasicDetailsModal from "./BasicDetailsModal";
 
+interface BasicDetailsData {
+  isOver18: boolean;
+  dateOfBirth: string;
+  username: string;
+  gender: string;
+}
+
 export default function ModalDemo() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState<any>(null);
+  const [formData, setFormData] = useState<BasicDetailsData | null>(null);
 
   const handleOpenModal = () => {
     setIsModalOpen(true);
@@ -15,7 +22,7 @@ export default function ModalDemo() {
     setIsModalOpen(false);
   };
 
-  const handleContinue = (data: any) => {
+  const handleContinue = (data: BasicDetailsData) => {
     setFormData(data);
     setIsModalOpen(false);
     console.log("Form submitted:", data);

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Logo from "./logo";
 
 interface BasicDetailsModalProps {
@@ -69,7 +68,7 @@ export default function BasicDetailsModal({
           <h2 className="text-[40px] font-bold mb-2 leading-[100%] tracking-[-0.02em]">Basic Details</h2>
           <div className="w-[386px] h-[42px] mx-auto">
             <p className="text-white/60 text-base font-medium leading-[130%] tracking-[-0.02em] text-center">
-              Input basic details in all the fields provided below, we'll like to get to know you better.
+              Input basic details in all the fields provided below, we&apos;ll like to get to know you better.
             </p>
           </div>
         </div>
