@@ -521,7 +521,7 @@ function DetailsForm() {
             <Button
               onClick={currentStep === 3 ? handleSubmit : handleNext}
               disabled={!canProceed()}
-              className={`w-[70%] ${
+              className={`${currentStep === 1 ? "w-full" : "w-[70%]"} ${
                 currentStep === 3
                   ? "bg-gradient-to-r from-pink-500 to-pink-600"
                   : ""
