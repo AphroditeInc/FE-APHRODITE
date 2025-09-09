@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import AuthLayout from "../layout";
 import AuthCard from "@/components/auth/AuthCard";
+import { Circle, CheckCircle2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import Button from "@/components/button";
 
 export default function UserTypePage() {
   const [selectedType, setSelectedType] = useState<string>("");
+  const router = useRouter();
 
   const userTypes = [
     {
@@ -28,11 +31,15 @@ export default function UserTypePage() {
     },
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (
+    e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>
+  ) => {
     e.preventDefault();
     if (selectedType) {
       console.log("Selected user type:", selectedType);
-      // Navigate to next step or save preference
+      // Navigate to signup page with user type as query parameter
+      router.push(`/signup?userType=${selectedType}`);
+      // alert(`Navigating to signup with user type: ${selectedType}`);
     }
   };
 
@@ -40,32 +47,36 @@ export default function UserTypePage() {
     <AuthCard
       title="Welcome to Aphrodite"
       description="Select a suitable account type of your choice to get started on Aphrodite Inc."
+      className="font-urbanist"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 gap-4">
           {userTypes.map((userType) => (
             <label
               key={userType.id}
-              className={`cursor-pointer rounded-xl  border p-4 transition-all  relative 
-                  ${
-                    selectedType === userType.id
-                      ? "border-pink-500 "
-                      : "border-white/20 hover:border-pink-400 hover:bg-white/10"
-                  }`}
+              onClick={() => setSelectedType(userType.id)}
+              className={`cursor-pointer rounded-xl border p-4 transition-all relative 
+                ${
+                  selectedType === userType.id
+                    ? "border-pink-500 bg-white/10"
+                    : "border-white/20 hover:border-pink-400 hover:bg-white/5"
+                }`}
             >
-              <input
-                type="checkbox"
-                name="userType"
-                value={userType.id}
-                checked={selectedType === userType.id}
-                onChange={(e) => setSelectedType(e.target.value)}
-                className="right-4 top-4 absolute w-5 h-5 text-pink-600 bg-transparent border-gray-300 focus:ring-pink-500 cursor-pointer"
-              />
+              {/* Circle Icon (like radio button) */}
+              <div className="absolute right-4 top-4">
+                {selectedType === userType.id ? (
+                  <CheckCircle2 className="w-6 h-6 text-pink-500" />
+                ) : (
+                  <Circle className="w-6 h-6 text-gray-400" />
+                )}
+              </div>
+
+              {/* Title + Description */}
               <div>
                 <h3 className="text-lg font-semibold text-white">
                   {userType.title}
                 </h3>
-                <p className="text-sm text-gray-300 mt-1">
+                <p className="text-sm text-gray-300 mt-1 w-[344px]">
                   {userType.description}
                 </p>
               </div>
@@ -73,13 +84,18 @@ export default function UserTypePage() {
           ))}
         </div>
 
-        <button
+        <Button
           type="submit"
+          onClick={handleSubmit}
           disabled={!selectedType}
-          className="w-full py-3 px-4 rounded-lg bg-pink-600 hover:bg-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition text-white font-medium"
+          className={`w-full py-3 px-4 font-medium transition-all duration-200 cursor-pointer ${
+            selectedType
+              ? "bg-pink-600 hover:bg-pink-700 text-white"
+              : "bg-gray-700 text-gray-400 cursor-not-allowed"
+          }`}
         >
           Continue
-        </button>
+        </Button>
       </form>
     </AuthCard>
   );

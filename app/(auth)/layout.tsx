@@ -2,16 +2,17 @@
 
 import Image from "next/image";
 import { ReactNode, useEffect, useState } from "react";
-import image1 from "../../public/images/slidersimage/firstimg.svg";
-import image2 from "../../public/images/slidersimage/secondimg.svg";
-import image3 from "../../public/images/slidersimage/thirdimg.svg";
-import image4 from "../../public/images/slidersimage/fourthimg.svg";
 
 interface AuthLayoutProps {
   children: ReactNode;
 }
 
-const images = [image1, image2, image3, image4];
+const images = [
+  "/images/slidersimage/firstimg.svg",
+  "/images/slidersimage/secondimg.svg",
+  "/images/slidersimage/thirdimg.svg",
+  "/images/slidersimage/fourthimg.svg",
+];
 
 export default function AuthLayout({ children }: AuthLayoutProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -24,7 +25,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
   }, []);
 
   return (
-    <div className="relative w-full h-screen flex items-center justify-center overflow-hidden">
+    <div className="relative w-full h-screen flex items-center justify-center overflow-hidden font-urbanist">
       {/* Background slider */}
       <div className="absolute inset-0">
         {images.map((img, index) => (

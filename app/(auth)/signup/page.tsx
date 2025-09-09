@@ -1,105 +1,151 @@
 "use client";
 
-import AuthLayout from "@/components/auth/AuthLayout";
-import { useState } from "react";
+import AuthCard from "@/components/auth/AuthCard";
+import Button from "@/components/button";
+import Image from "next/image";
+import { useState, useEffect, Suspense } from "react";
+import apple from "../../../public/icons/apple.svg";
+import facebook from "../../../public/icons/facebook.svg";
+import { Phone } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function SignUpPage() {
+function SignUpForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [userType, setUserType] = useState<string>("");
+  
   const [formData, setFormData] = useState({
+    phone: "",
+    countryCode: "+234", // Default to Nigeria
     email: "",
     password: "",
     confirmPassword: "",
   });
 
+  const [phoneValid, setPhoneValid] = useState(false);
+
+  // Get user type from URL parameters
+  useEffect(() => {
+    const userTypeParam = searchParams.get('userType');
+    if (userTypeParam) {
+      setUserType(userTypeParam);
+    }
+  }, [searchParams]);
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+
+    if (field === "phone") {
+      // Basic phone validation (10-15 digits)
+      const phoneRegex = /^\d{10,15}$/;
+      setPhoneValid(phoneRegex.test(value));
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // Handle signup logic
     console.log("Signup attempt:", formData);
+    // Pass user type to OTP page
+    router.push(`/otp?userType=${userType}`);
   };
 
   return (
-    <AuthLayout
-      title="Create Your Account"
-      description="Join thousands of users and start your journey today"
-      backgroundImage="/images/slidersimage/firstimg.svg"
-      showSlider={true}
+    <AuthCard
+      title="Welcome to Aphrodite"
+      description="By tapping ‘Create Account’ or ‘Sign in’, you agree to our Terms & Conditions."
+      // backgroundImage="/images/slidersimage/firstimg.svg"
+      // showSlider={true}
     >
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label
-            htmlFor="email"
-            className="block text-sm font-medium text-gray-700 mb-2"
-          >
-            Email Address
-          </label>
-          <input
-            id="email"
-            type="email"
-            required
-            value={formData.email}
-            onChange={(e) =>
-              setFormData({ ...formData, email: e.target.value })
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter your email"
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-gray-700 mb-2"
-          >
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            required
-            value={formData.password}
-            onChange={(e) =>
-              setFormData({ ...formData, password: e.target.value })
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Create a password"
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="confirmPassword"
-            className="block text-sm font-medium text-gray-700 mb-2"
-          >
-            Confirm Password
-          </label>
-          <input
-            id="confirmPassword"
-            type="password"
-            required
-            value={formData.confirmPassword}
-            onChange={(e) =>
-              setFormData({ ...formData, confirmPassword: e.target.value })
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Confirm your password"
-          />
-        </div>
-
-        <button
+        <Button
           type="submit"
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"
+          className="w-full bg-transparent border border-white/10 text-white hover:bg-white/10 flex items-center justify-center gap-2"
+          onClick={() => (window.location.href = "/auth/apple")}
         >
-          Create Account
-        </button>
+          <Image src={apple} alt="Apple" width={24} height={24} />
+          <span className="text-white/60"> Sign up with Apple</span>
+        </Button>
 
-        <div className="text-center">
-          <p className="text-sm text-gray-600">
+        <Button
+          type="submit"
+          className="w-full bg-transparent border border-white/10 text-white hover:bg-white/10 flex items-center justify-center gap-2"
+          onClick={() => (window.location.href = "/auth/facebook")}
+        >
+          <Image src={facebook} alt="Facebook" width={24} height={24} />
+          <span className="text-white/60"> Sign up with Facebook</span>
+        </Button>
+
+        <div className="flex items-center gap-3">
+          <hr className="flex-grow border-t border-white/10" />
+          <span className="text-white/60">or</span>
+          <hr className="flex-grow border-t border-white/10" />
+        </div>
+
+        {/* Phone number input with country code */}
+        <div className="relative">
+          <div className="relative">
+            <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-[20px] w-[20px] z-10" />
+            <span className="absolute left-12 top-1/2 transform -translate-y-1/2 text-white/60 text-sm font-medium">
+              {formData.countryCode} -
+            </span>
+            <input
+              type="tel"
+              placeholder=""
+              value={formData.phone}
+              onChange={(e) => handleInputChange("phone", e.target.value)}
+              className={`w-full pl-24 pr-4 py-3 bg-transparent border ${
+                phoneValid
+                  ? "border-green-500"
+                  : "border-white/10"
+              } rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent  transition-all duration-200`}
+            />
+          </div>
+          
+          {/* Country code selector - moved below for better UX */}
+          {/* <div className="mt-2 flex justify-center">
+            <select
+              value={formData.countryCode}
+              onChange={(e) => handleInputChange("countryCode", e.target.value)}
+              className="bg-transparent text-white/60 text-sm border border-white/10 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+            >
+              <option value="+234">🇳🇬 Nigeria (+234)</option>
+              <option value="+1">🇺🇸 USA (+1)</option>
+              <option value="+44">🇬🇧 UK (+44)</option>
+              <option value="+91">🇮🇳 India (+91)</option>
+              <option value="+86">🇨🇳 China (+86)</option>
+            </select>
+          </div> */}
+        </div>
+
+        <Button type="submit" className="w-full">
+          Create Account
+        </Button>
+
+        <div className="text-center text-[16px]">
+          <p className="text-sm text-white/60">
             Already have an account?{" "}
-            <a href="/login" className="text-blue-600 hover:text-blue-500">
+            <a href="/login" className="text-white hover:text-blue-500">
               Sign in
             </a>
           </p>
         </div>
       </form>
-    </AuthLayout>
+    </AuthCard>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+        <div className="text-white text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    }>
+      <SignUpForm />
+    </Suspense>
   );
 }
