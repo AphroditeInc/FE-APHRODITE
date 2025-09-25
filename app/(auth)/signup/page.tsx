@@ -6,7 +6,6 @@ import Image from "next/image";
 import { useState } from "react";
 import apple from "../../../public/icons/apple.svg";
 import facebook from "../../../public/icons/facebook.svg";
-import { Phone } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function SignUpPage() {
@@ -41,9 +40,8 @@ export default function SignUpPage() {
   return (
     <AuthCard
       title="Welcome to Aphrodite"
-      description="By tapping ‘Create Account’ or ‘Sign in’, you agree to our Terms & Conditions."
-      // backgroundImage="/images/slidersimage/firstimg.svg"
-      // showSlider={true}
+      description="By tapping 'Create Account' or 'Sign in', you agree to our Terms & Conditions."
+      className="font-urbanist"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <Button
@@ -73,7 +71,9 @@ export default function SignUpPage() {
         {/* Phone number input with country code */}
         <div className="relative">
           <div className="relative">
-            <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-[20px] w-[20px] z-10" />
+            <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-[20px] w-[20px] z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
             <span className="absolute left-12 top-1/2 transform -translate-y-1/2 text-white/60 text-sm font-medium">
               {formData.countryCode} -
             </span>
@@ -89,21 +89,6 @@ export default function SignUpPage() {
               } rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent  transition-all duration-200`}
             />
           </div>
-          
-          {/* Country code selector - moved below for better UX */}
-          {/* <div className="mt-2 flex justify-center">
-            <select
-              value={formData.countryCode}
-              onChange={(e) => handleInputChange("countryCode", e.target.value)}
-              className="bg-transparent text-white/60 text-sm border border-white/10 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-            >
-              <option value="+234">🇳🇬 Nigeria (+234)</option>
-              <option value="+1">🇺🇸 USA (+1)</option>
-              <option value="+44">🇬🇧 UK (+44)</option>
-              <option value="+91">🇮🇳 India (+91)</option>
-              <option value="+86">🇨🇳 China (+86)</option>
-            </select>
-          </div> */}
         </div>
 
         <Button type="submit" className="w-full">

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import AuthCard from "@/components/auth/AuthCard";
-import { Circle, CheckCircle2 } from "lucide-react";
+// import { Circle, CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/button";
 
@@ -65,9 +65,11 @@ export default function UserTypePage() {
               {/* Circle Icon (like radio button) */}
               <div className="absolute right-4 top-4">
                 {selectedType === userType.id ? (
-                  <CheckCircle2 className="w-6 h-6 text-pink-500" />
+                  // <CheckCircle2 className="w-6 h-6 text-pink-500" />
+                  <></>
                 ) : (
-                  <Circle className="w-6 h-6 text-gray-400" />
+                  // <Circle className="w-6 h-6 text-gray-400" />
+                  <></>
                 )}
               </div>
 
