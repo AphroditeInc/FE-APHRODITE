@@ -34,7 +34,7 @@ export default function DocumentsPage() {
               <div className="flex items-center gap-3">
                 <FileText className="h-5 w-5 text-pink-500" />
                 <div>
-                  <p className="text-white font-medium">Driver's License</p>
+                  <p className="text-white font-medium">Driver&apos;s License</p>
                   <p className="text-sm text-white/60">Uploaded 2 days ago</p>
                 </div>
               </div>

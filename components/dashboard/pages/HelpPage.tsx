@@ -30,7 +30,7 @@ export default function HelpPage() {
               </div>
               <div className="border-b border-white/10 pb-4">
                 <h4 className="text-white font-medium mb-2">How long does verification take?</h4>
-                <p className="text-white/60 text-sm">Most verifications are completed within 24-48 hours. You'll receive an email notification once it's processed.</p>
+                <p className="text-white/60 text-sm">Most verifications are completed within 24-48 hours. You&apos;ll receive an email notification once it&apos;s processed.</p>
               </div>
               <div className="border-b border-white/10 pb-4">
                 <h4 className="text-white font-medium mb-2">Can I change my profile information?</h4>

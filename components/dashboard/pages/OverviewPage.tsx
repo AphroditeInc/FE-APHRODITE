@@ -12,7 +12,7 @@ export default function OverviewPage() {
           Welcome to your <span className="text-pink-500">Dashboard</span>
         </h1>
         <p className="text-xl text-white/60 mb-8 max-w-3xl mx-auto leading-relaxed">
-          You've successfully signed in to Aphrodite. Manage your profile, 
+          You&apos;ve successfully signed in to Aphrodite. Manage your profile, 
           verify your identity, and access all the features of our platform.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
