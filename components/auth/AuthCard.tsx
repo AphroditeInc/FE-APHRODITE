@@ -24,7 +24,7 @@ export default function AuthCard({
         </div>
 
         {/* Title & Description */}
-        <div className="text-center mt-4 mb-6">
+        <div className="text-center mt-4 mb-6 w-[414px] mx-auto">
           <h1 className="text-[40px] font-bold mb-[16px] leading-[100%] tracking-[-0.02em]">
             {title}
           </h1>

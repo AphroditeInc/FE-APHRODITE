@@ -3,16 +3,26 @@
 import AuthCard from "@/components/auth/AuthCard";
 import Button from "@/components/button";
 import Logo from "@/components/logo";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import success from "../../../public/icons/success.svg";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function OTPPage() {
+function OTPForm() {
     const [otp, setOtp] = useState(["", "", "", ""]);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [userType, setUserType] = useState<string>("");
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
     const router = useRouter();
+    const searchParams = useSearchParams();
+
+    // Get user type from URL parameters
+    useEffect(() => {
+        const userTypeParam = searchParams.get('userType');
+        if (userTypeParam) {
+            setUserType(userTypeParam);
+        }
+    }, [searchParams]);
 
     const handleOtpChange = (index: number, value: string) => {
         if (value.length > 1) return; // Only allow single digit
@@ -45,8 +55,8 @@ export default function OTPPage() {
     };
 
     const handleContinue = () => {
-        // Redirect to next step or dashboard
-       router.push("/details")
+        // Redirect to details page with user type
+        router.push(`/details?userType=${userType}`);
     };
 
     const isOtpComplete = otp.every(digit => digit !== "");
@@ -83,8 +93,6 @@ export default function OTPPage() {
                         <Button
                             onClick={handleVerify}
                             disabled={!isOtpComplete}
-
-
                             className="mt-8 bg-pink-600 hover:bg-pink-700 text-white rounded-[40px] px-4 py-3 text-base w-full"
                         >
                             Verify
@@ -93,7 +101,7 @@ export default function OTPPage() {
                         {/* Resend Code Option */}
                         <div className="text-center">
                             <p className="text-white/60 text-sm">
-                                Didn't receive the code?{" "}
+                                Didn&apos;t receive the code?{" "}
                                 <button className="text-pink-500 hover:text-pink-400 font-medium">
                                     Resend
                                 </button>
@@ -121,7 +129,7 @@ export default function OTPPage() {
                         <div className="text-center mb-8">
                             <h2 className="text-2xl font-bold mb-3">Verification Successful</h2>
                             <p className="text-white/60 text-base leading-relaxed">
-                                Your phone number is verified—let's get started! You can now proceed to finish setting up your account.
+                                Your phone number is verified—let&apos;s get started! You can now proceed to finish setting up your account.
                             </p>
                         </div>
 
@@ -129,7 +137,6 @@ export default function OTPPage() {
                         <Button
                             onClick={handleContinue}
                             fullWidth
-
                             className="bg-pink-600 hover:bg-pink-700"
                         >
                             Continue
@@ -138,5 +145,20 @@ export default function OTPPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+export default function OTPPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+                <div className="text-white text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
+                    <p>Loading...</p>
+                </div>
+            </div>
+        }>
+            <OTPForm />
+        </Suspense>
     );
 }
