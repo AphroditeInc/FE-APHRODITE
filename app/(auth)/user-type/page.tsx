@@ -13,9 +13,15 @@ export default function UserTypePage() {
   const userTypes = [
     {
       id: "diva",
-      title: "Sign Up As Diva/Hunk",
+      title: "Sign Up As Diva",
       description:
-        "Are you ready to earn on your own terms? Join as a Diva or Hunk to offer exclusive companionship and premium experiences to verified clients.",
+        "Are you ready to earn on your own terms? Join as a Diva to offer exclusive companionship and premium experiences to verified clients.",
+    },
+    {
+      id: "hunk",
+      title: "Sign Up As Hunk",
+      description:
+        "Are you ready to earn on your own terms? Join as a Hunk to offer exclusive companionship and premium experiences to verified clients.",
     },
     {
       id: "client",
@@ -24,7 +30,7 @@ export default function UserTypePage() {
         "Looking for discreet companionship and unforgettable moments? Join to explore top-rated Divas and Hunks, book appointment, and enjoy secure, personalized experiences.",
     },
     {
-      id: "aphroRyder",
+      id: "rider",
       title: "Sign Up As AphroRyder",
       description:
         "Are you ready to earn on your own terms? Choose when you want to work, earn cash bonuses and many more",
@@ -37,9 +43,7 @@ export default function UserTypePage() {
     e.preventDefault();
     if (selectedType) {
       console.log("Selected user type:", selectedType);
-      // Navigate to signup page with user type as query parameter
       router.push(`/signup?userType=${selectedType}`);
-      // alert(`Navigating to signup with user type: ${selectedType}`);
     }
   };
 
@@ -55,7 +59,7 @@ export default function UserTypePage() {
             <label
               key={userType.id}
               onClick={() => setSelectedType(userType.id)}
-              className={`cursor-pointer rounded-xl border p-4 transition-all relative 
+              className={`cursor-pointer rounded-xl border p-4 transition-all relative
                 ${
                   selectedType === userType.id
                     ? "border-pink-500 bg-white/10"

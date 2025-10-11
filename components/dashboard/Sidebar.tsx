@@ -1,8 +1,19 @@
 "use client";
 
-import { 
-  Home, FileText, CreditCard, BarChart3, MessageCircle, Calendar, HelpCircle,
-  ChevronLeft, ChevronRight, LogOut, User, Settings, Shield
+import {
+  Home,
+  FileText,
+  CreditCard,
+  BarChart3,
+  MessageCircle,
+  Calendar,
+  HelpCircle,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+  User,
+  Settings,
+  Shield,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 
@@ -15,20 +26,26 @@ interface SidebarProps {
 }
 
 const sidebarItems = [
-  { id: 'overview', label: 'Home', icon: Home, href: '/dashboard' },
-  { id: 'chat', label: 'Chat', icon: MessageCircle, href: '/chat' },
-//   { id: 'profile', label: 'Profile', icon: User, href: '/profile' },
-//   { id: 'documents', label: 'Documents', icon: FileText, href: '/documents' },
-//   { id: 'verification', label: 'Verification', icon: Shield, href: '/verification' },
-//   { id: 'billing', label: 'Billing', icon: CreditCard, href: '/billing' },
-//   { id: 'analytics', label: 'Analytics', icon: BarChart3, href: '/analytics' },
-//   { id: 'messages', label: 'Messages', icon: MessageCircle, href: '/chat' },
-//   { id: 'calendar', label: 'Calendar', icon: Calendar, href: '/calendar' },
-//   { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
-//   { id: 'help', label: 'Help & Support', icon: HelpCircle, href: '/help' },
+  { id: "overview", label: "Home", icon: Home, href: "/dashboard" },
+  { id: "chat", label: "Chat", icon: MessageCircle, href: "/chat" },
+  //   { id: 'profile', label: 'Profile', icon: User, href: '/profile' },
+  //   { id: 'documents', label: 'Documents', icon: FileText, href: '/documents' },
+  //   { id: 'verification', label: 'Verification', icon: Shield, href: '/verification' },
+  //   { id: 'billing', label: 'Billing', icon: CreditCard, href: '/billing' },
+  //   { id: 'analytics', label: 'Analytics', icon: BarChart3, href: '/analytics' },
+  //   { id: 'messages', label: 'Messages', icon: MessageCircle, href: '/chat' },
+  //   { id: 'calendar', label: 'Calendar', icon: Calendar, href: '/calendar' },
+  //   { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
+  //   { id: 'help', label: 'Help & Support', icon: HelpCircle, href: '/help' },
 ];
 
-export default function Sidebar({ isOpen, onToggle, activePage, onPageChange, onLogout }: SidebarProps) {
+export default function Sidebar({
+  isOpen,
+  onToggle,
+  activePage,
+  onPageChange,
+  onLogout,
+}: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -37,21 +54,30 @@ export default function Sidebar({ isOpen, onToggle, activePage, onPageChange, on
   };
 
   return (
-    <div className={`${isOpen ? 'w-[280px]' : 'w-[80px]'} transition-all duration-300 bg-[#2A243E] backdrop-blur-md  flex flex-col mx-auto `}>
+    <div
+      className={`${
+        isOpen ? "w-[280px]" : "w-[80px]"
+      } transition-all duration-300 bg-[#2A243E] backdrop-blur-md  flex flex-col mx-auto `}
+    >
       {/* Sidebar Header */}
       <div className="pt-[56px] px-[80px] pb-[80px] ">
         <div className="flex items-center justify-between">
           {isOpen && (
             <div className="flex items-center gap-3">
-             
-              <span className="text-[#FA266D] text-[28px] font-bold font-urbanist ">Aphrodite</span>
+              <span className="text-[#FA266D] text-[28px] font-bold font-urbanist ">
+                Aphrodite
+              </span>
             </div>
           )}
           <button
             onClick={onToggle}
             className="text-white/60 hover:text-white p-1 rounded transition-colors"
           >
-            {isOpen ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+            {isOpen ? (
+              <ChevronLeft className="h-5 w-5" />
+            ) : (
+              <ChevronRight className="h-5 w-5" />
+            )}
           </button>
         </div>
       </div>
@@ -62,24 +88,47 @@ export default function Sidebar({ isOpen, onToggle, activePage, onPageChange, on
           const Icon = item.icon;
           const isActive = pathname === item.href;
           return (
-              <button
-                key={item.id}
-                onClick={() => handleNavigation(item.href)}
-                className={`w-full h-[58px] flex items-center  transition-all duration-200 font-urbanist ${
-                  isActive
-                    ? ' text-[#FA266D] '
-                    : 'text-[#999999] text-[16px] hover:text-white'
-                }`}
-                style={{
-                  paddingLeft: '40px',
-                  paddingRight: isOpen ? '16px' : '40px'
-                }}
-              >
-                <Icon className="h-[24px] w-[24px] flex-shrink-0" />
-                {isOpen && <span className="text-sm font-medium ml-3">{item.label}</span>}
-              </button>
+            <button
+              key={item.id}
+              onClick={() => handleNavigation(item.href)}
+              className={`w-full h-[58px] flex items-center  transition-all duration-200 font-urbanist ${
+                isActive
+                  ? " text-[#FA266D] "
+                  : "text-[#999999] text-[16px] hover:text-white"
+              }`}
+              style={{
+                paddingLeft: "40px",
+                paddingRight: isOpen ? "16px" : "40px",
+              }}
+            >
+              <Icon className="h-[24px] w-[24px] flex-shrink-0" />
+              {isOpen && (
+                <span className="text-sm font-medium ml-3">{item.label}</span>
+              )}
+            </button>
           );
         })}
+
+        {/* complete ur profile setup */}
+        <div>
+          {isOpen && (
+            <div className="mt-10 mx-4 p-4 bg-white/6 rounded-[24px] text-white">
+              <p className="text-[18px] font-bold mb-2">
+                Complete Your Profile Setup Now!
+              </p>
+              <p className="text-[14px] mb-4 text-white/60">
+                Finish setting up your account, add your services and pricing to
+                start getting clients.
+              </p>
+              <button
+                onClick={() => handleNavigation("/profile")}
+                className="w-full flex items-center justify-center px-[24px] py-[10px] text-white bg-[#FA266D] rounded-[40px] transition-all duration-200 cursor-pointer"
+              >
+                <span className="text-[16px] font-semibold">Go to Profile</span>
+              </button>
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* Sidebar Footer */}

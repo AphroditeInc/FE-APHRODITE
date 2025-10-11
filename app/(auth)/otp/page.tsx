@@ -12,15 +12,22 @@ function OTPForm() {
     const [otp, setOtp] = useState(["", "", "", ""]);
     const [showSuccess, setShowSuccess] = useState(false);
     const [userType, setUserType] = useState<string>("");
+    const [userId, setUserId] = useState<string>("");
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    // Get user type from URL parameters
+    // Get user type and userId from URL parameters
     useEffect(() => {
         const userTypeParam = searchParams.get('userType');
+        const userIdParam = searchParams.get('userId');
+        console.log('OTP Page - userType from URL:', userTypeParam);
+        console.log('OTP Page - userId from URL:', userIdParam);
         if (userTypeParam) {
             setUserType(userTypeParam);
+        }
+        if (userIdParam) {
+            setUserId(userIdParam);
         }
     }, [searchParams]);
 
@@ -55,8 +62,10 @@ function OTPForm() {
     };
 
     const handleContinue = () => {
-        // Redirect to details page with user type
-        router.push(`/details?userType=${userType}`);
+        // Redirect to details page with user type and userId
+        console.log('OTP Page - Continuing with userId:', userId);
+        console.log('OTP Page - Continuing with userType:', userType);
+        router.push(`/details?userType=${userType}&userId=${userId}`);
     };
 
     const isOtpComplete = otp.every(digit => digit !== "");

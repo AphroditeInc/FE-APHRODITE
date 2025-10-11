@@ -28,13 +28,22 @@ export default function Home() {
             {/* Desktop Navigation */}
             <div className="hidden md:block">
               <div className="ml-10 flex items-baseline space-x-8">
-                <a href="#features" className="text-white hover:text-pink-400 px-3 py-2 text-sm font-medium transition-colors">
+                <a
+                  href="#features"
+                  className="text-white hover:text-pink-400 px-3 py-2 text-sm font-medium transition-colors"
+                >
                   Features
                 </a>
-                <a href="#about" className="text-white hover:text-pink-400 px-3 py-2 text-sm font-medium transition-colors">
+                <a
+                  href="#about"
+                  className="text-white hover:text-pink-400 px-3 py-2 text-sm font-medium transition-colors"
+                >
                   About
                 </a>
-                <a href="#contact" className="text-white hover:text-pink-400 px-3 py-2 text-sm font-medium transition-colors">
+                <a
+                  href="#contact"
+                  className="text-white hover:text-pink-400 px-3 py-2 text-sm font-medium transition-colors"
+                >
                   Contact
                 </a>
               </div>
@@ -47,7 +56,7 @@ export default function Home() {
                   Sign In
                 </button>
               </Link>
-              <Link href="/signup">
+              <Link href="/user-type">
                 <button className="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white px-6 py-2 rounded-[25px] text-sm font-semibold transition-all duration-200">
                   Get Started
                 </button>
@@ -60,7 +69,11 @@ export default function Home() {
                 onClick={toggleMenu}
                 className="text-white hover:text-pink-400 p-2"
               >
-                {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                {isMenuOpen ? (
+                  <X className="h-6 w-6" />
+                ) : (
+                  <Menu className="h-6 w-6" />
+                )}
               </button>
             </div>
           </div>
@@ -70,13 +83,22 @@ export default function Home() {
         {isMenuOpen && (
           <div className="md:hidden bg-white/5 backdrop-blur-md border-t border-white/10">
             <div className="px-2 pt-2 pb-3 space-y-1">
-              <a href="#features" className="text-white hover:text-pink-400 block px-3 py-2 text-base font-medium">
+              <a
+                href="#features"
+                className="text-white hover:text-pink-400 block px-3 py-2 text-base font-medium"
+              >
                 Features
               </a>
-              <a href="#about" className="text-white hover:text-pink-400 block px-3 py-2 text-base font-medium">
+              <a
+                href="#about"
+                className="text-white hover:text-pink-400 block px-3 py-2 text-base font-medium"
+              >
                 About
               </a>
-              <a href="#contact" className="text-white hover:text-pink-400 block px-3 py-2 text-base font-medium">
+              <a
+                href="#contact"
+                className="text-white hover:text-pink-400 block px-3 py-2 text-base font-medium"
+              >
                 Contact
               </a>
               <div className="pt-4 space-y-2">
@@ -85,7 +107,7 @@ export default function Home() {
                     Sign In
                   </button>
                 </Link>
-                <Link href="/signup">
+                <Link href="/user-type">
                   <button className="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white px-6 py-2 rounded-[25px] text-sm font-semibold transition-all duration-200 w-full">
                     Get Started
                   </button>
@@ -104,8 +126,9 @@ export default function Home() {
               Welcome to <span className="text-pink-500">Aphrodite</span>
             </h1>
             <p className="text-xl text-white/60 mb-8 max-w-3xl mx-auto leading-relaxed">
-              Experience the future of digital identity verification. Secure, fast, and user-friendly 
-              authentication that protects your privacy while ensuring trust.
+              Experience the future of digital identity verification. Secure,
+              fast, and user-friendly authentication that protects your privacy
+              while ensuring trust.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/signup">
@@ -132,8 +155,8 @@ export default function Home() {
               Why Choose Aphrodite?
             </h2>
             <p className="text-lg text-white/60 max-w-2xl mx-auto">
-              Our platform combines cutting-edge technology with user-friendly design 
-              to deliver the best identity verification experience.
+              Our platform combines cutting-edge technology with user-friendly
+              design to deliver the best identity verification experience.
             </p>
           </div>
 
@@ -143,10 +166,12 @@ export default function Home() {
               <div className="w-16 h-16 bg-pink-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Shield className="w-8 h-8 text-pink-500" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-4">Secure & Private</h3>
+              <h3 className="text-xl font-semibold text-white mb-4">
+                Secure & Private
+              </h3>
               <p className="text-white/60 leading-relaxed">
-                Your data is encrypted and protected with enterprise-grade security. 
-                We never share your personal information.
+                Your data is encrypted and protected with enterprise-grade
+                security. We never share your personal information.
               </p>
             </div>
 
@@ -155,10 +180,12 @@ export default function Home() {
               <div className="w-16 h-16 bg-pink-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Zap className="w-8 h-8 text-pink-500" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-4">Lightning Fast</h3>
+              <h3 className="text-xl font-semibold text-white mb-4">
+                Lightning Fast
+              </h3>
               <p className="text-white/60 leading-relaxed">
-                Get verified in minutes, not days. Our AI-powered system processes 
-                your verification quickly and accurately.
+                Get verified in minutes, not days. Our AI-powered system
+                processes your verification quickly and accurately.
               </p>
             </div>
 
@@ -167,9 +194,11 @@ export default function Home() {
               <div className="w-16 h-16 bg-pink-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Users className="w-8 h-8 text-pink-500" />
               </div>
-              <h3 className="text-xl font-semibold text-white mb-4">User Friendly</h3>
+              <h3 className="text-xl font-semibold text-white mb-4">
+                User Friendly
+              </h3>
               <p className="text-white/60 leading-relaxed">
-                Simple, intuitive interface that makes identity verification 
+                Simple, intuitive interface that makes identity verification
                 accessible to everyone, regardless of technical expertise.
               </p>
             </div>
@@ -186,19 +215,23 @@ export default function Home() {
                 Built for the Future
               </h2>
               <p className="text-lg text-white/60 mb-6 leading-relaxed">
-                Aphrodite represents the next generation of digital identity verification. 
-                We combine advanced biometric technology with user-centric design to create 
-                a seamless experience that puts you in control.
+                Aphrodite represents the next generation of digital identity
+                verification. We combine advanced biometric technology with
+                user-centric design to create a seamless experience that puts
+                you in control.
               </p>
               <p className="text-lg text-white/60 mb-8 leading-relaxed">
-                Our mission is to make digital identity verification accessible, secure, 
-                and trustworthy for everyone. Join thousands of users who trust Aphrodite 
-                with their digital identity.
+                Our mission is to make digital identity verification accessible,
+                secure, and trustworthy for everyone. Join thousands of users
+                who trust Aphrodite with their digital identity.
               </p>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-1">
                   {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
+                    <Star
+                      key={i}
+                      className="w-5 h-5 text-yellow-400 fill-current"
+                    />
                   ))}
                 </div>
                 <span className="text-white/60">4.9/5 from 10,000+ users</span>
@@ -211,8 +244,12 @@ export default function Home() {
                     <Shield className="w-6 h-6 text-pink-500" />
                   </div>
                   <div>
-                    <h4 className="text-lg font-semibold text-white">Bank-Level Security</h4>
-                    <p className="text-white/60">256-bit encryption and secure protocols</p>
+                    <h4 className="text-lg font-semibold text-white">
+                      Bank-Level Security
+                    </h4>
+                    <p className="text-white/60">
+                      256-bit encryption and secure protocols
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -220,8 +257,12 @@ export default function Home() {
                     <Zap className="w-6 h-6 text-pink-500" />
                   </div>
                   <div>
-                    <h4 className="text-lg font-semibold text-white">Instant Verification</h4>
-                    <p className="text-white/60">Get verified in under 2 minutes</p>
+                    <h4 className="text-lg font-semibold text-white">
+                      Instant Verification
+                    </h4>
+                    <p className="text-white/60">
+                      Get verified in under 2 minutes
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -229,8 +270,12 @@ export default function Home() {
                     <Users className="w-6 h-6 text-pink-500" />
                   </div>
                   <div>
-                    <h4 className="text-lg font-semibold text-white">Global Reach</h4>
-                    <p className="text-white/60">Available in 50+ countries worldwide</p>
+                    <h4 className="text-lg font-semibold text-white">
+                      Global Reach
+                    </h4>
+                    <p className="text-white/60">
+                      Available in 50+ countries worldwide
+                    </p>
                   </div>
                 </div>
               </div>
@@ -247,7 +292,8 @@ export default function Home() {
               Ready to Get Started?
             </h2>
             <p className="text-lg text-white/60 mb-8 max-w-2xl mx-auto">
-              Join thousands of users who trust Aphrodite for their digital identity verification needs.
+              Join thousands of users who trust Aphrodite for their digital
+              identity verification needs.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/signup">
