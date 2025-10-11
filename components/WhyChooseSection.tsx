@@ -57,13 +57,13 @@ export default function WhyChooseSection() {
           <div className="space-y-6">
             <div className="relative rounded-2xl overflow-hidden shadow-lg">
               <img 
-                src="/images/intimate-couple.jpg" 
+                src="/images/intimate-couple.svg" 
                 alt="Premium companionship service"
                 className="w-full h-[253px] object-cover"
               />
-              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                <div className="text-center px-8">
-                  <p className="text-white text-lg md:text-xl leading-relaxed max-w-md">
+              <div className="absolute inset-0 bg-black/50 flex items-end-safe pb-4 justify-start">
+                <div className="text-left px-8">
+                  <p className="text-white text-lg md:text-xl leading-relaxed max-w-[378px]">
                     Our platform is designed for busy professionals who value quality, discretion, and convenience above all else.
                   </p>
                 </div>
