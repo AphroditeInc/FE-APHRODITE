@@ -2,21 +2,24 @@
 
 import AuthCard from "@/components/auth/AuthCard";
 import Button from "@/components/button";
+import CustomDropdown from "@/components/CustomDropdown";
 import Image from "next/image";
 import { useState, useEffect, Suspense } from "react";
 import apple from "../../../public/icons/apple.svg";
 import facebook from "../../../public/icons/facebook.svg";
 import { Phone } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useApi } from "@/lib/context/ApiContext";
 
 function SignUpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { registerUser, isLoading, error } = useApi();
   const [userType, setUserType] = useState<string>("");
-  
+
   const [formData, setFormData] = useState({
     phone: "",
-    countryCode: "+234", // Default to Nigeria
+    countryCode: "+1", // Default to USA
     email: "",
     password: "",
     confirmPassword: "",
@@ -26,7 +29,7 @@ function SignUpForm() {
 
   // Get user type from URL parameters
   useEffect(() => {
-    const userTypeParam = searchParams.get('userType');
+    const userTypeParam = searchParams.get("userType");
     if (userTypeParam) {
       setUserType(userTypeParam);
     }
@@ -42,12 +45,30 @@ function SignUpForm() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle signup logic
-    console.log("Signup attempt:", formData);
-    // Pass user type to OTP page
-    router.push(`/otp?userType=${userType}`);
+
+    if (!phoneValid || !userType) {
+      return;
+    }
+
+    try {
+      const response = await registerUser({
+        userType: userType as "client" | "rider" | "diva" | "hunk",
+        countryCode: formData.countryCode,
+        phoneNumber: formData.phone,
+      });
+
+      if (response.success && response.data) {
+        console.log('Registration successful, user data:', response.data);
+        console.log('Navigating with userId:', response.data.id);
+        router.push(
+          `/otp?userType=${userType}&phone=${formData.countryCode}${formData.phone}&userId=${response.data.id}`
+        );
+      }
+    } catch (error) {
+      console.error("Registration failed:", error);
+    }
   };
 
   return (
@@ -56,7 +77,13 @@ function SignUpForm() {
       description="By tapping 'Create Account' or 'Sign in', you agree to our Terms & Conditions."
       className="font-urbanist"
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6 font-urbanist">
+        {error && (
+          <div className="bg-red-500/10 border border-red-500 rounded-lg p-3 text-red-400 text-sm font-urbanist">
+            {error}
+          </div>
+        )}
+
         <Button
           type="submit"
           className="w-full bg-transparent border border-white/10 text-white hover:bg-white/10 flex items-center justify-center gap-2"
@@ -81,31 +108,51 @@ function SignUpForm() {
           <hr className="flex-grow border-t border-white/10" />
         </div>
 
-        {/* Phone number input with country code */}
-        <div className="relative">
-          <div className="relative">
-            <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-[20px] w-[20px] z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-            </svg>
-            <span className="absolute left-12 top-1/2 transform -translate-y-1/2 text-white/60 text-sm font-medium">
-              {formData.countryCode} -
-            </span>
-            <input
-              type="tel"
-              placeholder=""
-              value={formData.phone}
-              onChange={(e) => handleInputChange("phone", e.target.value)}
-              className={`w-full pl-24 pr-4 py-3 bg-transparent border ${
-                phoneValid
-                  ? "border-green-500"
-                  : "border-white/10"
-              } rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent  transition-all duration-200`}
+        {/* Phone number input */}
+        <div>
+          <label className="block text-white/80 text-sm font-medium mb-2">
+            Phone Number
+          </label>
+          <div className="flex gap-2">
+            <CustomDropdown
+              value={formData.countryCode}
+              onChange={(value) => handleInputChange("countryCode", value)}
+              options={[
+                { value: "+1", label: "+1" },
+                { value: "+234", label: "+234" },
+                { value: "+44", label: "+44" },
+                { value: "+91", label: "+91" },
+                { value: "+86", label: "+86" },
+              ]}
+              placeholder="+1"
+              icon={<Phone className="h-5 w-5" />}
+              className="w-[140px]"
             />
+            <div className="relative flex-1">
+              <input
+                type="tel"
+                placeholder="Enter phone number"
+                value={formData.phone}
+                onChange={(e) => handleInputChange("phone", e.target.value)}
+                className={`w-full px-4 py-3 bg-transparent border ${
+                  phoneValid ? "border-green-500" : "border-white/10"
+                } rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200`}
+              />
+            </div>
           </div>
+          {formData.phone && !phoneValid && (
+            <p className="text-red-400 text-xs mt-1">
+              Please enter a valid phone number (10-15 digits)
+            </p>
+          )}
         </div>
 
-        <Button type="submit" className="w-full">
-          Create Account
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={!phoneValid || isLoading}
+        >
+          {isLoading ? "Creating Account..." : "Create Account"}
         </Button>
 
         <div className="text-center text-[16px]">
@@ -123,14 +170,16 @@ function SignUpForm() {
 
 export default function SignUpPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-        <div className="text-white text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
-          <p>Loading...</p>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+          <div className="text-white text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
+            <p>Loading...</p>
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <SignUpForm />
     </Suspense>
   );

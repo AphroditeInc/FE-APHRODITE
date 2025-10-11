@@ -5,7 +5,8 @@ import Button from "@/components/button";
 import CustomDropdown from "@/components/CustomDropdown";
 import DatePicker from "@/components/DatePicker";
 import { useState, useRef, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useApi } from "@/lib/context/ApiContext";
 import {
   User,
   Lock,
@@ -14,44 +15,69 @@ import {
   Briefcase,
   Heart,
   PenTool,
-  ChevronDown,
+  Mail,
   MarsStroke,
   EyeOff,
   Eye,
 } from "lucide-react";
 
 function DetailsForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { completeBasicDetails, user, isLoading, error } = useApi();
   const [currentStep, setCurrentStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [userType, setUserType] = useState<string>("");
+  const [userId, setUserId] = useState<string>("");
   const passwordRef = useRef<HTMLInputElement>(null);
   const confirmPasswordRef = useRef<HTMLInputElement>(null);
-  const searchParams = useSearchParams();
-  
-  // Get user type from URL parameters
+
+  // Get user type and userId from URL parameters
   useEffect(() => {
-    const userTypeParam = searchParams.get('userType');
+    const userTypeParam = searchParams.get("userType");
+    const userIdParam = searchParams.get("userId");
     if (userTypeParam) {
       setUserType(userTypeParam);
     }
+    if (userIdParam) {
+      setUserId(userIdParam);
+    }
   }, [searchParams]);
+
+  // Also try to get userId from context user
+  useEffect(() => {
+    if (user?.id && !userId) {
+      setUserId(user.id);
+    }
+  }, [user, userId]);
 
   // Check for autofill values
   useEffect(() => {
     const checkAutofill = () => {
-      if (passwordRef.current && passwordRef.current.value !== formData.password) {
-        setFormData(prev => ({ ...prev, password: passwordRef.current?.value || "" }));
+      if (
+        passwordRef.current &&
+        passwordRef.current.value !== formData.password
+      ) {
+        setFormData((prev) => ({
+          ...prev,
+          password: passwordRef.current?.value || "",
+        }));
       }
-      if (confirmPasswordRef.current && confirmPasswordRef.current.value !== formData.confirmPassword) {
-        setFormData(prev => ({ ...prev, confirmPassword: confirmPasswordRef.current?.value || "" }));
+      if (
+        confirmPasswordRef.current &&
+        confirmPasswordRef.current.value !== formData.confirmPassword
+      ) {
+        setFormData((prev) => ({
+          ...prev,
+          confirmPassword: confirmPasswordRef.current?.value || "",
+        }));
       }
     };
 
-    // Check immediately and after a delay for autofill
     checkAutofill();
     const timeout = setTimeout(checkAutofill, 100);
-    
+
     return () => clearTimeout(timeout);
   }, []);
 
@@ -59,6 +85,9 @@ function DetailsForm() {
     // Step 1: Basic Info
     age: "",
     dateOfBirth: "",
+    email: "",
+    firstName: "",
+    lastName: "",
     username: "",
     gender: "",
 
@@ -69,7 +98,7 @@ function DetailsForm() {
     password: "",
     confirmPassword: "",
 
-    // Step 3: Personal Details
+    // Step 3: Personal Details (optional)
     educationLevel: "",
     occupation: "",
     maritalStatus: "",
@@ -90,24 +119,27 @@ function DetailsForm() {
 
   const countryOptions = [
     { value: "", label: "Select Country" },
-    { value: "nigeria", label: "Nigeria" },
-    { value: "usa", label: "United States" },
-    { value: "uk", label: "United Kingdom" },
-    { value: "canada", label: "Canada" },
+    { value: "Nigeria", label: "Nigeria" },
+    { value: "United States", label: "United States" },
+    { value: "United Kingdom", label: "United Kingdom" },
+    { value: "Canada", label: "Canada" },
   ];
 
   const stateOptions = [
     { value: "", label: "State" },
-    { value: "lagos", label: "Lagos" },
-    { value: "abuja", label: "Abuja" },
-    { value: "kano", label: "Kano" },
+    { value: "Lagos", label: "Lagos" },
+    { value: "Abuja", label: "Abuja" },
+    { value: "Kano", label: "Kano" },
+    { value: "California", label: "California" },
+    { value: "New York", label: "New York" },
   ];
 
   const cityOptions = [
     { value: "", label: "City" },
-    { value: "victoria-island", label: "Victoria Island" },
-    { value: "ikeja", label: "Ikeja" },
-    { value: "lekki", label: "Lekki" },
+    { value: "Victoria Island", label: "Victoria Island" },
+    { value: "Ikeja", label: "Ikeja" },
+    { value: "Lekki", label: "Lekki" },
+    { value: "Los Angeles", label: "Los Angeles" },
   ];
 
   const educationOptions = [
@@ -126,8 +158,6 @@ function DetailsForm() {
     { value: "widowed", label: "Widowed" },
   ];
 
-
-
   const handleNext = () => {
     if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
@@ -140,24 +170,44 @@ function DetailsForm() {
     }
   };
 
-  const handleSubmit = () => {
-    // Handle final submission
-    console.log("Form submitted:", formData);
-    
-    if (userType === "client" || userType === "aphroRyder") {
-      // For clients and riders, redirect to dashboard or main app
-      window.location.href = "/";
-    } else {
-      // For divas/hunks, proceed to ID verification
-      window.location.href = "/id-verification";
+  const handleSubmit = async () => {
+    const finalUserId = userId || user?.id;
+
+    if (!finalUserId) {
+      console.error("User ID not found");
+      return;
+    }
+
+    try {
+      // Only send fields that the API accepts
+      const payload = {
+        is18: formData.age === "Yes",
+        dob: formData.dateOfBirth,
+        username: formData.username,
+        gender: formData.gender,
+        country: formData.country,
+        state: formData.state,
+        city: formData.city,
+        password: formData.password,
+      };
+
+      const response = await completeBasicDetails(finalUserId, payload);
+
+      if (response.success) {
+        // Always redirect to dashboard after successful registration
+        router.push("/dashboard");
+      }
+    } catch (error) {
+      console.error("Failed to complete basic details:", error);
     }
   };
 
   const isStep1Valid =
-    formData.age === "Yes" && // Must be "Yes" to proceed
+    formData.age === "Yes" &&
     formData.dateOfBirth &&
     formData.username &&
     formData.gender;
+
   const isStep2Valid =
     formData.country &&
     formData.state &&
@@ -165,11 +215,9 @@ function DetailsForm() {
     formData.password &&
     formData.confirmPassword &&
     formData.password === formData.confirmPassword;
-  const isStep3Valid =
-    formData.educationLevel &&
-    formData.occupation &&
-    formData.maritalStatus &&
-    formData.bio;
+
+  // Step 3 is optional
+  const isStep3Valid = true;
 
   const renderStep1 = () => (
     <div className="space-y-6">
@@ -229,13 +277,6 @@ function DetailsForm() {
             </label>
           ))}
         </div>
-        {/* {formData.age === "No" && (
-          <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-red-400 text-sm">
-              Sorry, you must be at least 18 years old to proceed.
-            </p>
-          </div>
-        )} */}
       </div>
 
       {/* Date of Birth */}
@@ -244,6 +285,42 @@ function DetailsForm() {
         onChange={(value) => handleInputChange("dateOfBirth", value)}
         placeholder="Date of Birth"
       />
+
+      {/* Email
+      <div className="relative">
+        <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+        <input
+          type="email"
+          value={formData.email}
+          onChange={(e) => handleInputChange("email", e.target.value)}
+          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+          placeholder="Email Address"
+        />
+      </div>
+
+      {/* First Name */}
+      {/* <div className="relative">
+        <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+        <input
+          type="text"
+          value={formData.firstName}
+          onChange={(e) => handleInputChange("firstName", e.target.value)}
+          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+          placeholder="First Name"
+        />
+      </div> */}
+
+      {/* Last Name */}
+      {/* <div className="relative">
+        <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+        <input
+          type="text"
+          value={formData.lastName}
+          onChange={(e) => handleInputChange("lastName", e.target.value)}
+          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+          placeholder="Last Name"
+        />
+      </div>  */}
 
       {/* Username */}
       <div className="relative">
@@ -314,18 +391,6 @@ function DetailsForm() {
         />
       </div>
 
-      {/* Suggested Password Button */}
-      {/* <div className="flex justify-center">
-        <button
-          type="button"
-          onClick={handleSuggestedPassword}
-          className="flex items-center gap-2 px-6 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-[20px] text-white/80 hover:text-white transition-all duration-200"
-        >
-          <Key className="h-4 w-4" />
-          <span className="text-sm">Use Suggested Password</span>
-        </button>
-      </div> */}
-
       {/* Password */}
       <div className="relative">
         <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
@@ -335,8 +400,8 @@ function DetailsForm() {
           value={formData.password}
           onChange={(e) => handleInputChange("password", e.target.value)}
           className={`w-full pl-12 pr-12 py-3 bg-transparent border rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200 ${
-            formData.password && formData.password.trim() !== "" 
-              ? "border-pink-500" 
+            formData.password && formData.password.trim() !== ""
+              ? "border-pink-500"
               : "border-white/20"
           }`}
           placeholder="Create Password"
@@ -364,8 +429,8 @@ function DetailsForm() {
           value={formData.confirmPassword}
           onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
           className={`w-full pl-12 pr-12 py-3 bg-transparent border rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200 ${
-            formData.confirmPassword && formData.confirmPassword.trim() !== "" 
-              ? "border-pink-500" 
+            formData.confirmPassword && formData.confirmPassword.trim() !== ""
+              ? "border-pink-500"
               : "border-white/20"
           }`}
           placeholder="Confirm Password"
@@ -393,7 +458,7 @@ function DetailsForm() {
         value={formData.educationLevel}
         onChange={(value) => handleInputChange("educationLevel", value)}
         options={educationOptions}
-        placeholder="Education Level"
+        placeholder="Education Level (Optional)"
         icon={<GraduationCap className="h-5 w-5" />}
       />
 
@@ -405,7 +470,7 @@ function DetailsForm() {
           value={formData.occupation}
           onChange={(e) => handleInputChange("occupation", e.target.value)}
           className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-          placeholder="Occupation"
+          placeholder="Occupation (Optional)"
         />
       </div>
 
@@ -414,19 +479,19 @@ function DetailsForm() {
         value={formData.maritalStatus}
         onChange={(value) => handleInputChange("maritalStatus", value)}
         options={maritalStatusOptions}
-        placeholder="Marital Status"
+        placeholder="Marital Status (Optional)"
         icon={<Heart className="h-5 w-5" />}
       />
 
       {/* Bio */}
       <div className="relative">
-        <PenTool className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+        <PenTool className="absolute left-4 top-4 text-white/60 h-5 w-5" />
         <textarea
           value={formData.bio}
           onChange={(e) => handleInputChange("bio", e.target.value)}
-          rows={1}
+          rows={3}
           className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[24px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent resize-none"
-          placeholder="Write bio"
+          placeholder="Write a short bio about yourself (Optional)"
         />
       </div>
     </div>
@@ -452,7 +517,7 @@ function DetailsForm() {
       case 2:
         return "Tell us where you're located and set up your account security.";
       case 3:
-        return "Share more about yourself to help us personalize your experience.";
+        return "Share more about yourself to help us personalize your experience. (Optional)";
       default:
         return "Input basic details in all the fields provided below. We'll like to get to know you better.";
     }
@@ -465,7 +530,7 @@ function DetailsForm() {
       case 2:
         return "Continue";
       case 3:
-        return (userType === "client" || userType === "aphroRyder") ? "Finish Setup" : "Proceed to ID Verification";
+        return "Finish Setup";
       default:
         return "Continue";
     }
@@ -488,6 +553,13 @@ function DetailsForm() {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
       <AuthCard title={getStepTitle()} description={getStepDescription()}>
         <div className="space-y-8">
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500 rounded-lg p-3 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
           {/* Progress Indicator */}
           <div className="flex gap-5">
             {[1, 2, 3].map((step) => (
@@ -520,14 +592,14 @@ function DetailsForm() {
             )}
             <Button
               onClick={currentStep === 3 ? handleSubmit : handleNext}
-              disabled={!canProceed()}
+              disabled={!canProceed() || isLoading}
               className={`${currentStep === 1 ? "w-full" : "w-[70%]"} ${
                 currentStep === 3
                   ? "bg-gradient-to-r from-pink-500 to-pink-600"
                   : ""
               }`}
             >
-              {getButtonText()}
+              {isLoading ? "Submitting..." : getButtonText()}
             </Button>
           </div>
         </div>
@@ -538,14 +610,16 @@ function DetailsForm() {
 
 export default function DetailsPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-        <div className="text-white text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
-          <p>Loading...</p>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+          <div className="text-white text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
+            <p>Loading...</p>
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <DetailsForm />
     </Suspense>
   );
