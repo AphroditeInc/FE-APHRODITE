@@ -2,31 +2,38 @@
 
 import AuthCard from "@/components/auth/AuthCard";
 import Button from "@/components/button";
+import CustomDropdown from "@/components/CustomDropdown";
 import Image from "next/image";
 import { useState, useEffect, Suspense } from "react";
 import apple from "../../../public/icons/apple.svg";
 import facebook from "../../../public/icons/facebook.svg";
-import { Phone } from "lucide-react";
+import { Phone, Mail } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useApi } from "@/lib/context/ApiContext";
 
 function SignUpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { registerUser, registerWithEmail, isLoading, error } = useApi();
   const [userType, setUserType] = useState<string>("");
-  
+  const [registrationMethod, setRegistrationMethod] = useState<"phone" | "email">("phone");
+
   const [formData, setFormData] = useState({
     phone: "",
-    countryCode: "+234", // Default to Nigeria
+    countryCode: "+1", // Default to USA
     email: "",
     password: "",
     confirmPassword: "",
+    firstName: "",
+    lastName: "",
   });
 
   const [phoneValid, setPhoneValid] = useState(false);
+  const [emailValid, setEmailValid] = useState(false);
 
   // Get user type from URL parameters
   useEffect(() => {
-    const userTypeParam = searchParams.get('userType');
+    const userTypeParam = searchParams.get("userType");
     if (userTypeParam) {
       setUserType(userTypeParam);
     }
@@ -39,25 +46,86 @@ function SignUpForm() {
       // Basic phone validation (10-15 digits)
       const phoneRegex = /^\d{10,15}$/;
       setPhoneValid(phoneRegex.test(value));
+    } else if (field === "email") {
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      setEmailValid(emailRegex.test(value));
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle signup logic
-    console.log("Signup attempt:", formData);
-    // Pass user type to OTP page
-    router.push(`/otp?userType=${userType}`);
+
+    if (!userType) {
+      return;
+    }
+
+    try {
+      if (registrationMethod === "phone") {
+        // Phone registration validation
+        if (!phoneValid) {
+          return;
+        }
+
+        // Register the user with phone number
+        const registerResponse = await registerUser({
+          userType: userType as "client" | "rider" | "diva" | "hunk",
+          countryCode: formData.countryCode,
+          phoneNumber: formData.phone,
+        });
+
+        if (registerResponse.success && registerResponse.data) {
+          console.log('Phone registration successful, user data:', registerResponse.data);
+          
+          // Go directly to details page to complete profile
+          router.push(
+            `/details?userType=${userType}&userId=${registerResponse.data.id}`
+          );
+        }
+      } else {
+        // Email registration validation
+        if (!emailValid || !formData.firstName || !formData.lastName) {
+          return;
+        }
+
+        // Register the user with email using the /auth/register endpoint
+        const registerResponse = await registerWithEmail({
+          email: formData.email,
+          password: formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          userType: userType as "client" | "rider" | "diva" | "hunk",
+          countryCode: "+1", // Default country code for email registration
+          number: "0000000000", // Placeholder number for email registration
+        });
+
+        if (registerResponse.success && registerResponse.data) {
+          console.log('Email registration successful, user data:', registerResponse.data);
+          
+          // Go to details page to complete profile
+          router.push(
+            `/details?userType=${userType}&userId=${registerResponse.data.user.id}`
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Registration failed:", error);
+    }
   };
 
   return (
     <AuthCard
       title="Welcome to Aphrodite"
-      description="By tapping ‘Create Account’ or ‘Sign in’, you agree to our Terms & Conditions."
-      // backgroundImage="/images/slidersimage/firstimg.svg"
-      // showSlider={true}
+      description="By tapping 'Create Account' or 'Sign in', you agree to our Terms & Conditions."
+      className="font-urbanist"
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6 font-urbanist">
+        {error && (
+          <div className="bg-red-500/10 border border-red-500 rounded-lg p-3 text-red-400 text-sm font-urbanist">
+            {error}
+          </div>
+        )}
+
         <Button
           type="submit"
           className="w-full bg-transparent border border-white/10 text-white hover:bg-white/10 flex items-center justify-center gap-2"
@@ -82,44 +150,173 @@ function SignUpForm() {
           <hr className="flex-grow border-t border-white/10" />
         </div>
 
-        {/* Phone number input with country code */}
-        <div className="relative">
-          <div className="relative">
-            <Phone className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-[20px] w-[20px] z-10" />
-            <span className="absolute left-12 top-1/2 transform -translate-y-1/2 text-white/60 text-sm font-medium">
-              {formData.countryCode} -
-            </span>
-            <input
-              type="tel"
-              placeholder=""
-              value={formData.phone}
-              onChange={(e) => handleInputChange("phone", e.target.value)}
-              className={`w-full pl-24 pr-4 py-3 bg-transparent border ${
-                phoneValid
-                  ? "border-green-500"
-                  : "border-white/10"
-              } rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent  transition-all duration-200`}
-            />
-          </div>
-          
-          {/* Country code selector - moved below for better UX */}
-          {/* <div className="mt-2 flex justify-center">
-            <select
-              value={formData.countryCode}
-              onChange={(e) => handleInputChange("countryCode", e.target.value)}
-              className="bg-transparent text-white/60 text-sm border border-white/10 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-            >
-              <option value="+234">🇳🇬 Nigeria (+234)</option>
-              <option value="+1">🇺🇸 USA (+1)</option>
-              <option value="+44">🇬🇧 UK (+44)</option>
-              <option value="+91">🇮🇳 India (+91)</option>
-              <option value="+86">🇨🇳 China (+86)</option>
-            </select>
-          </div> */}
+        {/* Registration Method Toggle */}
+        <div className="flex bg-white/5 rounded-[40px] p-1">
+          <button
+            type="button"
+            onClick={() => setRegistrationMethod("phone")}
+            className={`flex-1 py-2 px-4 rounded-[40px] text-sm font-medium transition-all duration-200 ${
+              registrationMethod === "phone"
+                ? "bg-pink-500 text-white"
+                : "text-white/60 hover:text-white"
+            }`}
+          >
+            <Phone className="h-4 w-4 inline mr-2" />
+            Phone
+          </button>
+          <button
+            type="button"
+            onClick={() => setRegistrationMethod("email")}
+            className={`flex-1 py-2 px-4 rounded-[40px] text-sm font-medium transition-all duration-200 ${
+              registrationMethod === "email"
+                ? "bg-pink-500 text-white"
+                : "text-white/60 hover:text-white"
+            }`}
+          >
+            <Mail className="h-4 w-4 inline mr-2" />
+            Email
+          </button>
         </div>
 
-        <Button type="submit" className="w-full">
-          Create Account
+        {registrationMethod === "phone" ? (
+          /* Phone number input */
+          <div>
+            <label className="block text-white/80 text-sm font-medium mb-2">
+              Phone Number
+            </label>
+            <div className="flex gap-2">
+              <CustomDropdown
+                value={formData.countryCode}
+                onChange={(value) => handleInputChange("countryCode", value)}
+                options={[
+                  { value: "+1", label: "+1" },
+                  { value: "+234", label: "+234" },
+                  { value: "+44", label: "+44" },
+                  { value: "+91", label: "+91" },
+                  { value: "+86", label: "+86" },
+                ]}
+                placeholder="+1"
+                icon={<Phone className="h-5 w-5" />}
+                className="w-[140px]"
+              />
+              <div className="relative flex-1">
+                <input
+                  type="tel"
+                  placeholder="Enter phone number"
+                  value={formData.phone}
+                  onChange={(e) => handleInputChange("phone", e.target.value)}
+                  className={`w-full px-4 py-3 bg-transparent border ${
+                    phoneValid ? "border-green-500" : "border-white/10"
+                  } rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200`}
+                />
+              </div>
+            </div>
+            {formData.phone && !phoneValid && (
+              <p className="text-red-400 text-xs mt-1">
+                Please enter a valid phone number (10-15 digits)
+              </p>
+            )}
+          </div>
+        ) : (
+          /* Email registration fields */
+          <div className="space-y-4">
+            <div>
+              <label className="block text-white/80 text-sm font-medium mb-2">
+                First Name
+              </label>
+              <input
+                type="text"
+                placeholder="Enter first name"
+                value={formData.firstName}
+                onChange={(e) => handleInputChange("firstName", e.target.value)}
+                className="w-full px-4 py-3 bg-transparent border border-white/10 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
+              />
+            </div>
+
+            <div>
+              <label className="block text-white/80 text-sm font-medium mb-2">
+                Last Name
+              </label>
+              <input
+                type="text"
+                placeholder="Enter last name"
+                value={formData.lastName}
+                onChange={(e) => handleInputChange("lastName", e.target.value)}
+                className="w-full px-4 py-3 bg-transparent border border-white/10 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
+              />
+            </div>
+
+            <div>
+              <label className="block text-white/80 text-sm font-medium mb-2">
+                Email Address
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+                <input
+                  type="email"
+                  placeholder="Enter email address"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange("email", e.target.value)}
+                  className={`w-full pl-12 pr-4 py-3 bg-transparent border ${
+                    emailValid ? "border-green-500" : "border-white/10"
+                  } rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200`}
+                />
+              </div>
+              {formData.email && !emailValid && (
+                <p className="text-red-400 text-xs mt-1">
+                  Please enter a valid email address
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-white/80 text-sm font-medium mb-2">
+                Password
+              </label>
+              <input
+                type="password"
+                placeholder="Create password"
+                value={formData.password}
+                onChange={(e) => handleInputChange("password", e.target.value)}
+                className="w-full px-4 py-3 bg-transparent border border-white/10 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
+              />
+            </div>
+
+            <div>
+              <label className="block text-white/80 text-sm font-medium mb-2">
+                Confirm Password
+              </label>
+              <input
+                type="password"
+                placeholder="Confirm password"
+                value={formData.confirmPassword}
+                onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
+                className={`w-full px-4 py-3 bg-transparent border ${
+                  formData.confirmPassword && formData.password === formData.confirmPassword
+                    ? "border-green-500"
+                    : formData.confirmPassword
+                    ? "border-red-500"
+                    : "border-white/10"
+                } rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200`}
+              />
+              {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                <p className="text-red-400 text-xs mt-1">
+                  Passwords do not match
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={
+            isLoading ||
+            (registrationMethod === "phone" ? !phoneValid : !emailValid || !formData.firstName || !formData.lastName)
+          }
+        >
+          {isLoading ? "Creating Account..." : "Create Account"}
         </Button>
 
         <div className="text-center text-[16px]">
@@ -137,14 +334,16 @@ function SignUpForm() {
 
 export default function SignUpPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-        <div className="text-white text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
-          <p>Loading...</p>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+          <div className="text-white text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
+            <p>Loading...</p>
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <SignUpForm />
     </Suspense>
   );

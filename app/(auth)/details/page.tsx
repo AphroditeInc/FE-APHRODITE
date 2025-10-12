@@ -5,7 +5,8 @@ import Button from "@/components/button";
 import CustomDropdown from "@/components/CustomDropdown";
 import DatePicker from "@/components/DatePicker";
 import { useState, useRef, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useApi } from "@/lib/context/ApiContext";
 import {
   User,
   Lock,
@@ -14,44 +15,69 @@ import {
   Briefcase,
   Heart,
   PenTool,
-  ChevronDown,
+  Mail,
   MarsStroke,
   EyeOff,
   Eye,
 } from "lucide-react";
 
 function DetailsForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { completeBasicDetails, registerWithEmail, updateUser, updateProfile, user, isLoading, error } = useApi();
   const [currentStep, setCurrentStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [userType, setUserType] = useState<string>("");
+  const [userId, setUserId] = useState<string>("");
   const passwordRef = useRef<HTMLInputElement>(null);
   const confirmPasswordRef = useRef<HTMLInputElement>(null);
-  const searchParams = useSearchParams();
-  
-  // Get user type from URL parameters
+
+  // Get user type and userId from URL parameters
   useEffect(() => {
-    const userTypeParam = searchParams.get('userType');
+    const userTypeParam = searchParams.get("userType");
+    const userIdParam = searchParams.get("userId");
     if (userTypeParam) {
       setUserType(userTypeParam);
     }
+    if (userIdParam) {
+      setUserId(userIdParam);
+    }
   }, [searchParams]);
+
+  // Also try to get userId from context user
+  useEffect(() => {
+    if (user?.id && !userId) {
+      setUserId(user.id);
+    }
+  }, [user, userId]);
 
   // Check for autofill values
   useEffect(() => {
     const checkAutofill = () => {
-      if (passwordRef.current && passwordRef.current.value !== formData.password) {
-        setFormData(prev => ({ ...prev, password: passwordRef.current?.value || "" }));
+      if (
+        passwordRef.current &&
+        passwordRef.current.value !== formData.password
+      ) {
+        setFormData((prev) => ({
+          ...prev,
+          password: passwordRef.current?.value || "",
+        }));
       }
-      if (confirmPasswordRef.current && confirmPasswordRef.current.value !== formData.confirmPassword) {
-        setFormData(prev => ({ ...prev, confirmPassword: confirmPasswordRef.current?.value || "" }));
+      if (
+        confirmPasswordRef.current &&
+        confirmPasswordRef.current.value !== formData.confirmPassword
+      ) {
+        setFormData((prev) => ({
+          ...prev,
+          confirmPassword: confirmPasswordRef.current?.value || "",
+        }));
       }
     };
 
-    // Check immediately and after a delay for autofill
     checkAutofill();
     const timeout = setTimeout(checkAutofill, 100);
-    
+
     return () => clearTimeout(timeout);
   }, []);
 
@@ -59,6 +85,9 @@ function DetailsForm() {
     // Step 1: Basic Info
     age: "",
     dateOfBirth: "",
+    email: "",
+    firstName: "",
+    lastName: "",
     username: "",
     gender: "",
 
@@ -69,7 +98,7 @@ function DetailsForm() {
     password: "",
     confirmPassword: "",
 
-    // Step 3: Personal Details
+    // Step 3: Personal Details (optional)
     educationLevel: "",
     occupation: "",
     maritalStatus: "",
@@ -90,24 +119,27 @@ function DetailsForm() {
 
   const countryOptions = [
     { value: "", label: "Select Country" },
-    { value: "nigeria", label: "Nigeria" },
-    { value: "usa", label: "United States" },
-    { value: "uk", label: "United Kingdom" },
-    { value: "canada", label: "Canada" },
+    { value: "Nigeria", label: "Nigeria" },
+    { value: "United States", label: "United States" },
+    { value: "United Kingdom", label: "United Kingdom" },
+    { value: "Canada", label: "Canada" },
   ];
 
   const stateOptions = [
     { value: "", label: "State" },
-    { value: "lagos", label: "Lagos" },
-    { value: "abuja", label: "Abuja" },
-    { value: "kano", label: "Kano" },
+    { value: "Lagos", label: "Lagos" },
+    { value: "Abuja", label: "Abuja" },
+    { value: "Kano", label: "Kano" },
+    { value: "California", label: "California" },
+    { value: "New York", label: "New York" },
   ];
 
   const cityOptions = [
     { value: "", label: "City" },
-    { value: "victoria-island", label: "Victoria Island" },
-    { value: "ikeja", label: "Ikeja" },
-    { value: "lekki", label: "Lekki" },
+    { value: "Victoria Island", label: "Victoria Island" },
+    { value: "Ikeja", label: "Ikeja" },
+    { value: "Lekki", label: "Lekki" },
+    { value: "Los Angeles", label: "Los Angeles" },
   ];
 
   const educationOptions = [
@@ -126,8 +158,6 @@ function DetailsForm() {
     { value: "widowed", label: "Widowed" },
   ];
 
-
-
   const handleNext = () => {
     if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
@@ -140,24 +170,127 @@ function DetailsForm() {
     }
   };
 
-  const handleSubmit = () => {
-    // Handle final submission
-    console.log("Form submitted:", formData);
-    
-    if (userType === "client" || userType === "aphroRyder") {
-      // For clients and riders, redirect to dashboard or main app
-      window.location.href = "/";
-    } else {
-      // For divas/hunks, proceed to ID verification
-      window.location.href = "/id-verification";
+
+  const handleSubmit = async () => {
+    const finalUserId = userId || user?.id;
+
+    try {
+      // Check if this is phone registration (has userId) or email registration (no userId)
+      if (finalUserId) {
+        // Phone Registration Path: Complete basic details
+        const basicDetailsPayload = {
+          is18: formData.age === "Yes",
+          dob: formData.dateOfBirth,
+          username: formData.username + Math.random().toString(36).substr(2, 5), // Add random suffix to ensure uniqueness
+          gender: formData.gender,
+          country: formData.country,
+          state: formData.state,
+          city: formData.city,
+          password: formData.password,
+        };
+
+        console.log("Sending basic details payload:", basicDetailsPayload);
+        const basicDetailsResponse = await completeBasicDetails(finalUserId, basicDetailsPayload);
+        console.log("Basic details response:", basicDetailsResponse);
+
+        if (basicDetailsResponse.success) {
+          // Basic details completed successfully and returned authentication tokens
+          // The ApiContext should have automatically set the tokens via setTokens()
+          console.log("Basic details completed successfully, user is now authenticated");
+          
+          if (currentStep === 3) {
+            // Move to step 4 (profile details)
+            setCurrentStep(4);
+          } else if (currentStep === 4) {
+            // Handle profile update with firstName, lastName, email
+            const profileUpdatePayload = {
+              firstName: formData.firstName,
+              lastName: formData.lastName,
+              email: formData.email,
+            };
+
+            console.log("Updating profile with:", profileUpdatePayload);
+            try {
+              const profileUpdateResponse = await updateProfile(profileUpdatePayload);
+              console.log("Profile update response:", profileUpdateResponse);
+              
+              if (profileUpdateResponse.success) {
+                // Profile updated successfully, redirect to dashboard
+                router.push("/dashboard");
+              } else {
+                console.error("Profile update failed:", profileUpdateResponse.error);
+              }
+            } catch (error) {
+              console.error("Profile update error:", error);
+            }
+          }
+        } else {
+          console.error("Basic details failed:", basicDetailsResponse.error);
+          // The error will be displayed by the ApiContext error handling
+        }
+      } else {
+        // Email Registration Path: Register with email and password
+        const emailRegistrationPayload = {
+          email: formData.email,
+          password: formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          userType: userType as "client" | "rider" | "diva" | "hunk",
+          countryCode: "+1", // Default country code for email registration
+          number: "0000000000", // Placeholder number for email registration
+        };
+
+        const registrationResponse = await registerWithEmail(emailRegistrationPayload);
+
+        if (registrationResponse.success && registrationResponse.data) {
+          const newUserId = registrationResponse.data.user.id;
+
+          if (currentStep === 2) {
+            // Move to step 3 (personal details - optional)
+            setCurrentStep(3);
+          } else if (currentStep === 3) {
+            // Handle personal details update
+            if (formData.educationLevel || formData.occupation || formData.maritalStatus || formData.bio) {
+              const personalDetailsPayload = {
+                bio: formData.bio,
+                education: formData.educationLevel,
+                occupation: formData.occupation,
+                maritalStatus: formData.maritalStatus,
+              };
+
+              console.log("Updating personal details:", personalDetailsPayload);
+              try {
+                const personalDetailsResponse = await updateProfile(personalDetailsPayload);
+                console.log("Personal details update response:", personalDetailsResponse);
+              } catch (error) {
+                console.error("Personal details update error:", error);
+              }
+            }
+            
+            // Redirect to dashboard
+            router.push("/dashboard");
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to complete registration:", error);
     }
   };
 
-  const isStep1Valid =
-    formData.age === "Yes" && // Must be "Yes" to proceed
-    formData.dateOfBirth &&
-    formData.username &&
-    formData.gender;
+  // Check if this is phone registration (has userId) or email registration (no userId)
+  const isPhoneRegistration = userId || user?.id;
+  
+  const isStep1Valid = isPhoneRegistration
+    ? // Phone registration: basic details only
+      formData.age === "Yes" &&
+      formData.dateOfBirth &&
+      formData.username &&
+      formData.gender
+    : // Email registration: personal details
+      formData.firstName &&
+      formData.lastName &&
+      userType;
+
   const isStep2Valid =
     formData.country &&
     formData.state &&
@@ -165,123 +298,170 @@ function DetailsForm() {
     formData.password &&
     formData.confirmPassword &&
     formData.password === formData.confirmPassword;
-  const isStep3Valid =
-    formData.educationLevel &&
-    formData.occupation &&
-    formData.maritalStatus &&
-    formData.bio;
+
+  // Step 3 is optional personal details - always valid since it's optional
+  const isStep3Valid = true;
+
+  // Step 4 is profile details (only for phone registration)
+  const isStep4Valid = isPhoneRegistration
+    ? formData.firstName &&
+      formData.lastName &&
+      formData.email
+    : true; // Email registration doesn't have step 4
+
 
   const renderStep1 = () => (
     <div className="space-y-6">
-      {/* Age Confirmation */}
-      <div>
-        <label className="block text-white/40 text-sm font-medium mb-3">
-          Are you up to 18 years old yet?{" "}
-          <span className="text-pink-500">*</span>
-        </label>
-        <div className="flex gap-4 w-full">
-          {["Yes", "No"].map((option) => (
-            <label key={option} className="flex-1 cursor-pointer">
-              <input
-                type="radio"
-                name="age"
-                value={option}
-                checked={formData.age === option}
-                onChange={(e) => handleInputChange("age", e.target.value)}
-                className="sr-only"
-              />
-              <div
-                className={`flex items-center justify-between w-full py-3 px-4 rounded-[40px] border-2 transition-all duration-200 ${
-                  formData.age === option
-                    ? option === "No"
-                      ? "border-red-500"
-                      : "border-pink-500"
-                    : "border-white/20"
-                }`}
-              >
-                <span className="text-white font-medium">{option}</span>
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                    formData.age === option
-                      ? option === "No"
-                        ? "bg-red-500"
-                        : "bg-pink-500"
-                      : "border-2 border-white/30"
-                  }`}
-                >
-                  {formData.age === option && (
-                    <svg
-                      className="w-3 h-3 text-white"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={3}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  )}
-                </div>
-              </div>
+      {isPhoneRegistration ? (
+        // Phone Registration: Basic Details
+        <>
+          {/* Age Confirmation */}
+          <div>
+            <label className="block text-white/40 text-sm font-medium mb-3">
+              Are you up to 18 years old yet?{" "}
+              <span className="text-pink-500">*</span>
             </label>
-          ))}
-        </div>
-        {/* {formData.age === "No" && (
-          <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-red-400 text-sm">
-              Sorry, you must be at least 18 years old to proceed.
-            </p>
+            <div className="flex gap-4 w-full">
+              {["Yes", "No"].map((option) => (
+                <label key={option} className="flex-1 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="age"
+                    value={option}
+                    checked={formData.age === option}
+                    onChange={(e) => handleInputChange("age", e.target.value)}
+                    className="sr-only"
+                  />
+                  <div
+                    className={`flex items-center justify-between w-full py-3 px-4 rounded-[40px] border-2 transition-all duration-200 ${
+                      formData.age === option
+                        ? option === "No"
+                          ? "border-red-500"
+                          : "border-pink-500"
+                        : "border-white/20"
+                    }`}
+                  >
+                    <span className="text-white font-medium">{option}</span>
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                        formData.age === option
+                          ? option === "No"
+                            ? "bg-red-500"
+                            : "bg-pink-500"
+                          : "border-2 border-white/30"
+                      }`}
+                    >
+                      {formData.age === option && (
+                        <svg
+                          className="w-3 h-3 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={3}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
           </div>
-        )} */}
-      </div>
 
-      {/* Date of Birth */}
-      <DatePicker
-        value={formData.dateOfBirth}
-        onChange={(value) => handleInputChange("dateOfBirth", value)}
-        placeholder="Date of Birth"
-      />
+          {/* Date of Birth */}
+          <DatePicker
+            value={formData.dateOfBirth}
+            onChange={(value) => handleInputChange("dateOfBirth", value)}
+            placeholder="Date of Birth"
+          />
 
-      {/* Username */}
-      <div className="relative">
-        <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-        <input
-          type="text"
-          value={formData.username}
-          onChange={(e) => handleInputChange("username", e.target.value)}
-          className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-          placeholder="Username"
-        />
-        {formData.username && formData.username.length >= 3 && (
-          <div className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
-            <svg
-              className="w-3 h-3 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={3}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
+          {/* Username */}
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+            <input
+              type="text"
+              value={formData.username}
+              onChange={(e) => handleInputChange("username", e.target.value)}
+              className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              placeholder="Username"
+            />
+            {formData.username && formData.username.length >= 3 && (
+              <div className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                <svg
+                  className="w-3 h-3 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={3}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Gender Selection */}
-      <CustomDropdown
-        value={formData.gender}
-        onChange={(value) => handleInputChange("gender", value)}
-        options={genderOptions}
-        placeholder="Select Gender"
-        icon={<MarsStroke className="h-5 w-5" />}
-      />
+          {/* Gender Selection */}
+          <CustomDropdown
+            value={formData.gender}
+            onChange={(value) => handleInputChange("gender", value)}
+            options={genderOptions}
+            placeholder="Select Gender"
+            icon={<MarsStroke className="h-5 w-5" />}
+          />
+        </>
+      ) : (
+        // Email Registration: Personal Details
+        <>
+          {/* First Name */}
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+            <input
+              type="text"
+              value={formData.firstName}
+              onChange={(e) => handleInputChange("firstName", e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              placeholder="First Name"
+              required
+            />
+          </div>
+
+          {/* Last Name */}
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+            <input
+              type="text"
+              value={formData.lastName}
+              onChange={(e) => handleInputChange("lastName", e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              placeholder="Last Name"
+              required
+            />
+          </div>
+
+          {/* User Type */}
+          <CustomDropdown
+            value={userType}
+            onChange={(value) => setUserType(value)}
+            options={[
+              { value: "client", label: "Client" },
+              { value: "rider", label: "Rider" },
+              { value: "diva", label: "Diva" },
+              { value: "hunk", label: "Hunk" },
+            ]}
+            placeholder="Select User Type"
+            icon={<User className="h-5 w-5" />}
+          />
+        </>
+      )}
     </div>
   );
 
@@ -314,18 +494,6 @@ function DetailsForm() {
         />
       </div>
 
-      {/* Suggested Password Button */}
-      {/* <div className="flex justify-center">
-        <button
-          type="button"
-          onClick={handleSuggestedPassword}
-          className="flex items-center gap-2 px-6 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-[20px] text-white/80 hover:text-white transition-all duration-200"
-        >
-          <Key className="h-4 w-4" />
-          <span className="text-sm">Use Suggested Password</span>
-        </button>
-      </div> */}
-
       {/* Password */}
       <div className="relative">
         <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
@@ -335,12 +503,13 @@ function DetailsForm() {
           value={formData.password}
           onChange={(e) => handleInputChange("password", e.target.value)}
           className={`w-full pl-12 pr-12 py-3 bg-transparent border rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200 ${
-            formData.password && formData.password.trim() !== "" 
-              ? "border-pink-500" 
+            formData.password && formData.password.trim() !== ""
+              ? "border-pink-500"
               : "border-white/20"
           }`}
           placeholder="Create Password"
           autoComplete="new-password"
+          required
         />
         <button
           type="button"
@@ -364,12 +533,15 @@ function DetailsForm() {
           value={formData.confirmPassword}
           onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
           className={`w-full pl-12 pr-12 py-3 bg-transparent border rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200 ${
-            formData.confirmPassword && formData.confirmPassword.trim() !== "" 
-              ? "border-pink-500" 
+            formData.confirmPassword && formData.confirmPassword.trim() !== ""
+              ? formData.password === formData.confirmPassword
+                ? "border-green-500"
+                : "border-red-500"
               : "border-white/20"
           }`}
           placeholder="Confirm Password"
           autoComplete="new-password"
+          required
         />
         <button
           type="button"
@@ -382,18 +554,37 @@ function DetailsForm() {
             <Eye className="h-5 w-5" />
           )}
         </button>
+        {formData.confirmPassword && formData.password === formData.confirmPassword && (
+          <div className="absolute right-12 top-1/2 transform -translate-y-1/2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+            <svg
+              className="w-3 h-3 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={3}
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          </div>
+        )}
       </div>
+
     </div>
   );
 
   const renderStep3 = () => (
     <div className="space-y-6">
+      {/* Personal Details (Optional) */}
       {/* Education Level */}
       <CustomDropdown
         value={formData.educationLevel}
         onChange={(value) => handleInputChange("educationLevel", value)}
         options={educationOptions}
-        placeholder="Education Level"
+        placeholder="Education Level (Optional)"
         icon={<GraduationCap className="h-5 w-5" />}
       />
 
@@ -405,7 +596,7 @@ function DetailsForm() {
           value={formData.occupation}
           onChange={(e) => handleInputChange("occupation", e.target.value)}
           className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-          placeholder="Occupation"
+          placeholder="Occupation (Optional)"
         />
       </div>
 
@@ -414,23 +605,68 @@ function DetailsForm() {
         value={formData.maritalStatus}
         onChange={(value) => handleInputChange("maritalStatus", value)}
         options={maritalStatusOptions}
-        placeholder="Marital Status"
+        placeholder="Marital Status (Optional)"
         icon={<Heart className="h-5 w-5" />}
       />
 
       {/* Bio */}
       <div className="relative">
-        <PenTool className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+        <PenTool className="absolute left-4 top-4 text-white/60 h-5 w-5" />
         <textarea
           value={formData.bio}
           onChange={(e) => handleInputChange("bio", e.target.value)}
-          rows={1}
+          rows={3}
           className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[24px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent resize-none"
-          placeholder="Write bio"
+          placeholder="Write a short bio about yourself (Optional)"
         />
       </div>
     </div>
   );
+
+  const renderStep4 = () => (
+    <div className="space-y-6">
+      {/* Profile Details (firstName, lastName, email) - Only for phone registration */}
+      {/* First Name */}
+      <div className="relative">
+        <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+        <input
+          type="text"
+          value={formData.firstName}
+          onChange={(e) => handleInputChange("firstName", e.target.value)}
+          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+          placeholder="First Name"
+          required
+        />
+      </div>
+
+      {/* Last Name */}
+      <div className="relative">
+        <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+        <input
+          type="text"
+          value={formData.lastName}
+          onChange={(e) => handleInputChange("lastName", e.target.value)}
+          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+          placeholder="Last Name"
+          required
+        />
+      </div>
+
+      {/* Email */}
+      <div className="relative">
+        <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+        <input
+          type="email"
+          value={formData.email}
+          onChange={(e) => handleInputChange("email", e.target.value)}
+          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+          placeholder="Email Address"
+          required
+        />
+      </div>
+    </div>
+  );
+
 
   const getStepTitle = () => {
     switch (currentStep) {
@@ -439,7 +675,9 @@ function DetailsForm() {
       case 2:
         return "Location & Security";
       case 3:
-        return "Personal Details";
+        return "Personal Details (Optional)";
+      case 4:
+        return "Profile Details";
       default:
         return "Basic Details";
     }
@@ -452,7 +690,9 @@ function DetailsForm() {
       case 2:
         return "Tell us where you're located and set up your account security.";
       case 3:
-        return "Share more about yourself to help us personalize your experience.";
+        return "Share more about yourself to help us personalize your experience. (Optional)";
+      case 4:
+        return "Complete your profile with your personal information.";
       default:
         return "Input basic details in all the fields provided below. We'll like to get to know you better.";
     }
@@ -465,7 +705,7 @@ function DetailsForm() {
       case 2:
         return "Continue";
       case 3:
-        return (userType === "client" || userType === "aphroRyder") ? "Finish Setup" : "Proceed to ID Verification";
+        return "Finish Setup";
       default:
         return "Continue";
     }
@@ -479,6 +719,8 @@ function DetailsForm() {
         return isStep2Valid;
       case 3:
         return isStep3Valid;
+      case 4:
+        return isStep4Valid;
       default:
         return false;
     }
@@ -488,6 +730,13 @@ function DetailsForm() {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
       <AuthCard title={getStepTitle()} description={getStepDescription()}>
         <div className="space-y-8">
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500 rounded-lg p-3 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
           {/* Progress Indicator */}
           <div className="flex gap-5">
             {[1, 2, 3].map((step) => (
@@ -505,6 +754,7 @@ function DetailsForm() {
             {currentStep === 1 && renderStep1()}
             {currentStep === 2 && renderStep2()}
             {currentStep === 3 && renderStep3()}
+            {currentStep === 4 && renderStep4()}
           </div>
 
           {/* Navigation Buttons */}
@@ -519,15 +769,19 @@ function DetailsForm() {
               </Button>
             )}
             <Button
-              onClick={currentStep === 3 ? handleSubmit : handleNext}
-              disabled={!canProceed()}
+              onClick={
+                currentStep === 3 || currentStep === 4
+                  ? handleSubmit 
+                  : handleNext
+              }
+              disabled={!canProceed() || isLoading}
               className={`${currentStep === 1 ? "w-full" : "w-[70%]"} ${
-                currentStep === 3
+                currentStep === 3 || currentStep === 4
                   ? "bg-gradient-to-r from-pink-500 to-pink-600"
                   : ""
               }`}
             >
-              {getButtonText()}
+              {isLoading ? "Submitting..." : getButtonText()}
             </Button>
           </div>
         </div>
@@ -538,14 +792,16 @@ function DetailsForm() {
 
 export default function DetailsPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-        <div className="text-white text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
-          <p>Loading...</p>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+          <div className="text-white text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
+            <p>Loading...</p>
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <DetailsForm />
     </Suspense>
   );

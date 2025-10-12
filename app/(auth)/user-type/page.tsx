@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import AuthCard from "@/components/auth/AuthCard";
-import { Circle, CheckCircle2 } from "lucide-react";
+// import { Circle, CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/button";
 
@@ -13,9 +13,9 @@ export default function UserTypePage() {
   const userTypes = [
     {
       id: "diva",
-      title: "Sign Up As Diva/Hunk",
+      title: "Sign up as Diva/Hunk",
       description:
-        "Are you ready to earn on your own terms? Join as a Diva or Hunk to offer exclusive companionship and premium experiences to verified clients.",
+        "Are you ready to earn on your own terms? Join as a Diva to offer exclusive companionship and premium experiences to verified clients.",
     },
     {
       id: "client",
@@ -24,7 +24,7 @@ export default function UserTypePage() {
         "Looking for discreet companionship and unforgettable moments? Join to explore top-rated Divas and Hunks, book appointment, and enjoy secure, personalized experiences.",
     },
     {
-      id: "aphroRyder",
+      id: "rider",
       title: "Sign Up As AphroRyder",
       description:
         "Are you ready to earn on your own terms? Choose when you want to work, earn cash bonuses and many more",
@@ -37,9 +37,7 @@ export default function UserTypePage() {
     e.preventDefault();
     if (selectedType) {
       console.log("Selected user type:", selectedType);
-      // Navigate to signup page with user type as query parameter
       router.push(`/signup?userType=${selectedType}`);
-      // alert(`Navigating to signup with user type: ${selectedType}`);
     }
   };
 
@@ -55,7 +53,7 @@ export default function UserTypePage() {
             <label
               key={userType.id}
               onClick={() => setSelectedType(userType.id)}
-              className={`cursor-pointer rounded-xl border p-4 transition-all relative 
+              className={`cursor-pointer rounded-xl border p-4 transition-all relative
                 ${
                   selectedType === userType.id
                     ? "border-pink-500 bg-white/10"
@@ -65,9 +63,11 @@ export default function UserTypePage() {
               {/* Circle Icon (like radio button) */}
               <div className="absolute right-4 top-4">
                 {selectedType === userType.id ? (
-                  <CheckCircle2 className="w-6 h-6 text-pink-500" />
+                  // <CheckCircle2 className="w-6 h-6 text-pink-500" />
+                  <></>
                 ) : (
-                  <Circle className="w-6 h-6 text-gray-400" />
+                  // <Circle className="w-6 h-6 text-gray-400" />
+                  <></>
                 )}
               </div>
 

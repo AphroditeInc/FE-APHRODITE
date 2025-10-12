@@ -2,9 +2,11 @@
 
 import { Search, Filter, MessageCircle, Bell, LogOut, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useAuthProfile } from "@/lib/hooks";
 
 export default function Header() {
   const router = useRouter();
+  const { user, loading } = useAuthProfile();
 
   const handleLogout = () => {
     // Clear any stored authentication data
@@ -57,9 +59,20 @@ export default function Header() {
 
           {/* User Profile and Logout */}
           <div className="flex items-center gap-3">
+            {/* User Info */}
+            {user && (
+              <div className="flex items-center gap-2">
+                <span className="text-white text-sm font-medium">
+                  {user.firstName} {user.lastName}
+                </span>
+              </div>
+            )}
+            
             {/* Profile Picture */}
             <div className="w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center">
-              <span className="text-gray-800 font-bold text-sm">U</span>
+              <span className="text-gray-800 font-bold text-sm">
+                {loading ? "..." : user ? `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}` : "U"}
+              </span>
             </div>
             
             {/* Logout Button */}
