@@ -83,7 +83,7 @@ export default function DriveSection() {
           <div className="relative">
             <div className="relative rounded-2xl overflow-hidden shadow-lg">
               <img 
-                src="/images/driver-smartphone.jpg" 
+                src="/driver-smartphone.svg" 
                 alt="Driver using smartphone with map navigation"
                 className="w-full h-96 object-cover"
               />

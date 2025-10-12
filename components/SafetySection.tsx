@@ -55,8 +55,8 @@ export default function SafetySection() {
                   <Mail className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <p className="text-gray-900 font-medium">contact@afretrade.com</p>
-                  <p className="text-pink-600 text-sm">(24/7 Response within 24 hours)</p>
+                  <p className="text-gray-900 font-medium">contact@afretrade.com {""}
+                  <span className="text-pink-600 text-sm">(24/7 Response within 24 hours)</span></p>
                 </div>
               </div>
 
@@ -66,8 +66,8 @@ export default function SafetySection() {
                   <Phone className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <p className="text-gray-900 font-medium">+1 (555) 123-4567</p>
-                  <p className="text-pink-600 text-sm">(24/7 Hotline)</p>
+                  <p className="text-gray-900 font-medium">+1 (555) 123-4567 {" "}
+                  <span className="text-pink-600 text-sm">(24/7 Hotline)</span> </p>
                 </div>
               </div>
             </div>

@@ -98,7 +98,7 @@ export default function HowItWorksSection() {
               <div className="relative">
                 <div className="relative rounded-2xl overflow-hidden">
                   <img 
-                    src="/images/intimate-couple.svg" 
+                    src="/aphrodite.svg" 
                     alt="Premium companionship experience"
                     className="w-full h-80 object-cover"
                   />
