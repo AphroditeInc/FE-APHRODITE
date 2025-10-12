@@ -3,17 +3,47 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import Button from "./button";
+import { useState, useEffect } from "react";
 
 export default function HeroSection() {
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  useEffect(() => {
+    // Preload the hero image from CDN
+    const img = new Image();
+    img.onload = () => setImageLoaded(true);
+    // Use Cloudinary CDN URL
+    img.src = 'https://res.cloudinary.com/dpynyht1l/image/upload/v1760294571/image_grid_kib4ze.png';
+    // Fallback to local if CDN fails
+    img.onerror = () => {
+      img.src = '/hero.svg';
+    };
+  }, []);
+
   return (
     <div id="hero-section" className="min-h-screen relative overflow-hidden">
-      {/* Background Image */}
+      {/* Background Image with loading state */}
       <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-500 ${
+          imageLoaded ? 'opacity-100' : 'opacity-0'
+        }`}
         style={{
-          backgroundImage: "url('/hero.svg')"
+          backgroundImage: imageLoaded ? "url('https://res.cloudinary.com/dpynyht1l/image/upload/v1760294571/image_grid_kib4ze.png')" : "none"
         }}
       ></div>
+      
+      {/* Fallback background while loading */}
+      {!imageLoaded && (
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-pink-900 to-red-900">
+          {/* Loading indicator */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-white/60 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-400 mx-auto mb-4"></div>
+              <p className="text-sm">Loading...</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Dark Overlay */}
       <div className="absolute inset-0 bg-black/60"></div>

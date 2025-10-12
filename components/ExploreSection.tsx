@@ -3,6 +3,22 @@
 import { ArrowRight, Heart } from "lucide-react";
 
 export default function ExploreSection() {
+  // Array of background images for variety
+  const backgroundImages = [
+    "/home/image.svg",
+    "/home/image2.svg",
+    "/home/image3.svg",
+    "/home/image4.svg",
+    "/home/image5.svg",
+    "/home/image6.svg",
+    "/home/image7.svg",
+    "/home/image8.svg",
+    "/home/image9.svg",
+    "/home/image10.svg",
+    "/home/image11.svg",
+    "/home/image12.svg"
+  ];
+
   const profiles = [
     {
       id: 1,
@@ -103,7 +119,7 @@ export default function ExploreSection() {
               {/* Profile Image */}
               <div className="relative w-full h-full">
                 <img 
-                  src="/images/diverHunks/first.svg" 
+                  src={backgroundImages[(profile.id - 1) % backgroundImages.length]} 
                   alt={profile.name}
                   className="w-full h-full object-cover"
                 />
