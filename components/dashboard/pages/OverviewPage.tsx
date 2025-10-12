@@ -1,132 +1,225 @@
 "use client";
 
-import { ArrowRight, Star, Users, Shield, Zap } from "lucide-react";
-import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Star, MapPin, Heart, Check } from "lucide-react";
+import { mockProfiles, type Profile } from "@/lib/data/profiles";
+
+
+// Array of background images
+const backgroundImages = [
+  "/home/image.svg",
+  "/home/image2.svg",
+  "/home/image3.svg",
+  "/home/image4.svg",
+  "/home/image5.svg",
+  "/home/image6.svg",
+  "/home/image7.svg",
+  "/home/image8.svg",
+  "/home/image9.svg",
+  "/home/image10.svg",
+  "/home/image11.svg",
+  "/home/image12.svg",
+  "/home/image13.svg",
+  "/home/image14.svg",
+  "/home/image15.svg",
+  "/home/image16.svg"
+];
+
+// Function to get random background image
+const getRandomBackgroundImage = (index: number) => {
+  return backgroundImages[index % backgroundImages.length];
+};
+
 
 export default function OverviewPage() {
+  const [profiles, setProfiles] = useState<Profile[]>(mockProfiles);
+  const router = useRouter();
+
+  const handleLike = (profileId: string) => {
+    setProfiles(prev => prev.map(profile => 
+      profile.id === profileId 
+        ? { ...profile, isLiked: !profile.isLiked }
+        : profile
+    ));
+  };
+
+  const handleCardClick = (profileId: string) => {
+    router.push(`/profile/${profileId}`);
+  };
+
   return (
-    <div className="p-6 space-y-8">
-      {/* Welcome Section */}
-      <section className="text-center">
-        <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
-          Welcome to your <span className="text-pink-500">Dashboard</span>
-        </h1>
-        <p className="text-xl text-white/60 mb-8 max-w-3xl mx-auto leading-relaxed">
-          You&apos;ve successfully signed in to Aphrodite. Manage your profile, 
-          verify your identity, and access all the features of our platform.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link href="/details">
-            <button className="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white px-8 py-4 rounded-[25px] text-lg font-semibold transition-all duration-200 flex items-center gap-2">
-              Complete Profile
-              <ArrowRight className="w-5 h-5" />
-            </button>
-          </Link>
-          <Link href="/id-verification">
-            <button className="border border-white/20 hover:border-pink-500 text-white px-8 py-4 rounded-[25px] text-lg font-semibold transition-all duration-200">
-              Verify Identity
-            </button>
-          </Link>
+    <div className="h-full bg-[#1F1B2C] overflow-y-auto">
+      {/* Top Rated Divas/Hunks Section */}
+      <section className="py-8">
+        {/* Header */}
+        <div className="px-8 mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold text-[#FA266D]">
+            Top Rated Divas/Hunks
+          </h1>
+        </div>
+
+        {/* Profile Cards Horizontal Scroll Slider */}
+        <div className="px-8 mb-12">
+          <div className="relative">
+            {/* Cards Container */}
+            <div className="overflow-x-auto scrollbar-hide">
+              <div className="flex gap-6 pb-4" style={{ width: 'max-content' }}>
+                {profiles.map((profile, index) => (
+                  <div key={profile.id} className="flex-shrink-0 w-80">
+                    <div 
+                      className="relative overflow-hidden group cursor-pointer aspect-[4/5] rounded-[20px]"
+                      onClick={() => handleCardClick(profile.id)}
+                    >
+                      {/* Profile Image */}
+                      <div className="relative w-full h-full">
+                        <div 
+                          className="w-full h-full rounded-[20px] overflow-hidden relative bg-cover bg-center"
+                          style={{ backgroundImage: `url(${getRandomBackgroundImage(index)})` }}
+                        >
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+                        </div>
+                        
+                        {/* Profile Info Overlay */}
+                        <div className="absolute text-white bottom-4 left-4 right-4 rounded-2xl bg-white/[0.06] backdrop-blur-[40px] p-4">
+                          {/* Name and Verification */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center">
+                              <h3 className="text-lg font-bold text-white mr-2">{profile.name}</h3>
+                              <Check className="w-4 h-4 text-green-500" />
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLike(profile.id);
+                              }}
+                              className="transition-colors"
+                            >
+                              <Heart 
+                                className={`w-6 h-6 ${
+                                  profile.isLiked ? 'text-[#FA266D] fill-current' : 'text-gray-400'
+                                }`} 
+                              />
+                            </button>
+                          </div>
+
+                          {/* Location and Rating */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center">
+                              <span className="text-pink-500 mr-1">📍</span>
+                              <p className="text-sm text-gray-200">{profile.location}</p>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="text-yellow-400 mr-1">★</span>
+                              <span className="text-sm font-medium text-gray-200">{profile.rating}</span>
+                            </div>
+                          </div>
+
+                          {/* Service Tags */}
+                          <div className="flex flex-wrap gap-1">
+                            {profile.services.slice(0, 5).map((service, serviceIndex) => (
+                              <span
+                                key={serviceIndex}
+                                className="px-2 py-1 border border-white text-white text-xs rounded-full"
+                              >
+                                {service}
+                              </span>
+                            ))}
+                            <span className="px-2 py-1 text-white text-xs">
+                              ...
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Quick Actions Section */}
-      <section>
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Quick Actions
+      {/* Explore All Divas/Hunks Section */}
+      <section className="px-8 pb-8">
+        {/* Header */}
+        <div className="text-left mb-8">
+          <h2 className="text-3xl md:text-4xl font-bold text-[#FA266D] mb-4">
+            Explore All Divas/Hunks
           </h2>
-          <p className="text-lg text-white/60 max-w-2xl mx-auto">
-            Manage your account and access key features from your dashboard.
-          </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          {/* Profile Management */}
-          <div className="bg-white/5 backdrop-blur-md rounded-[20px] p-8 border border-white/10 text-center">
-            <div className="w-16 h-16 bg-pink-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Users className="w-8 h-8 text-pink-500" />
-            </div>
-            <h3 className="text-xl font-semibold text-white mb-4">Profile Management</h3>
-            <p className="text-white/60 leading-relaxed mb-6">
-              Update your personal information, preferences, and account settings.
-            </p>
-            <Link href="/details">
-              <button className="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white px-6 py-3 rounded-[20px] text-sm font-semibold transition-all duration-200">
-                Manage Profile
-              </button>
-            </Link>
-          </div>
+        {/* Grid of Profile Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 min-[0px]:gap-4 min-[640px]:gap-6">
+          {profiles.map((profile, index) => (
+            <div key={profile.id} className="w-full min-w-[280px]">
+              <div 
+                className="relative overflow-hidden group cursor-pointer aspect-[4/5] rounded-[20px] min-h-[350px]"
+                onClick={() => handleCardClick(profile.id)}
+              >
+              {/* Profile Image */}
+              <div className="relative w-full h-full">
+                <div 
+                  className="w-full h-full rounded-[20px] overflow-hidden relative bg-cover bg-center"
+                  style={{ backgroundImage: `url(${getRandomBackgroundImage(index)})` }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+                </div>
+                
+                {/* Profile Info Overlay */}
+                <div className="absolute text-white bottom-4 left-4 right-4 rounded-2xl bg-white/[0.06] backdrop-blur-[40px] p-4">
+                  {/* Name and Verification */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center">
+                      <h3 className="text-lg font-bold text-white mr-2">{profile.name}</h3>
+                      <Check className="w-4 h-4 text-green-500" />
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleLike(profile.id);
+                      }}
+                      className="transition-colors"
+                    >
+                      <Heart 
+                        className={`w-6 h-6 ${
+                          profile.isLiked ? 'text-[#FA266D] fill-current' : 'text-gray-400'
+                        }`} 
+                      />
+                    </button>
+                  </div>
 
-          {/* Identity Verification */}
-          <div className="bg-white/5 backdrop-blur-md rounded-[20px] p-8 border border-white/10 text-center">
-            <div className="w-16 h-16 bg-pink-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Shield className="w-8 h-8 text-pink-500" />
-            </div>
-            <h3 className="text-xl font-semibold text-white mb-4">Identity Verification</h3>
-            <p className="text-white/60 leading-relaxed mb-6">
-              Complete your identity verification to unlock all platform features.
-            </p>
-            <Link href="/id-verification">
-              <button className="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white px-6 py-3 rounded-[20px] text-sm font-semibold transition-all duration-200">
-                Verify Identity
-              </button>
-            </Link>
-          </div>
+                  {/* Location and Rating */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center">
+                      <span className="text-pink-500 mr-1">📍</span>
+                      <p className="text-sm text-gray-200">{profile.location}</p>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-yellow-400 mr-1">★</span>
+                      <span className="text-sm font-medium text-gray-200">{profile.rating}</span>
+                    </div>
+                  </div>
 
-          {/* Settings */}
-          <div className="bg-white/5 backdrop-blur-md rounded-[20px] p-8 border border-white/10 text-center">
-            <div className="w-16 h-16 bg-pink-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Zap className="w-8 h-8 text-pink-500" />
-            </div>
-            <h3 className="text-xl font-semibold text-white mb-4">Account Settings</h3>
-            <p className="text-white/60 leading-relaxed mb-6">
-              Customize your experience and manage your account preferences.
-            </p>
-            <button className="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white px-6 py-3 rounded-[20px] text-sm font-semibold transition-all duration-200">
-              Open Settings
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section>
-        <div className="bg-white/5 backdrop-blur-md rounded-[24px] p-12 border border-white/10">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Your Account Status
-            </h2>
-            <p className="text-lg text-white/60 max-w-2xl mx-auto">
-              Track your progress and account completion status.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="w-10 h-10 text-green-500" />
+                  {/* Service Tags */}
+                  <div className="flex flex-wrap gap-1">
+                    {profile.services.slice(0, 5).map((service, serviceIndex) => (
+                      <span
+                        key={serviceIndex}
+                        className="px-2 py-1 border border-white text-white text-xs rounded-full"
+                      >
+                        {service}
+                      </span>
+                    ))}
+                    <span className="px-2 py-1 text-white text-xs">
+                      ...
+                    </span>
+                  </div>
+                </div>
               </div>
-              <h3 className="text-2xl font-bold text-white mb-2">Account Created</h3>
-              <p className="text-white/60">Successfully signed up</p>
             </div>
-
-            <div className="text-center">
-              <div className="w-20 h-20 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Shield className="w-10 h-10 text-yellow-500" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-2">Verification Pending</h3>
-              <p className="text-white/60">Complete identity verification</p>
             </div>
-
-            <div className="text-center">
-              <div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Zap className="w-10 h-10 text-blue-500" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-2">Ready to Go</h3>
-              <p className="text-white/60">Start using the platform</p>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
     </div>

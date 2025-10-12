@@ -24,7 +24,7 @@ import {
 function DetailsForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { completeBasicDetails, user, isLoading, error } = useApi();
+  const { completeBasicDetails, registerWithEmail, updateUser, updateProfile, user, isLoading, error } = useApi();
   const [currentStep, setCurrentStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -170,43 +170,126 @@ function DetailsForm() {
     }
   };
 
+
   const handleSubmit = async () => {
     const finalUserId = userId || user?.id;
 
-    if (!finalUserId) {
-      console.error("User ID not found");
-      return;
-    }
-
     try {
-      // Only send fields that the API accepts
-      const payload = {
-        is18: formData.age === "Yes",
-        dob: formData.dateOfBirth,
-        username: formData.username,
-        gender: formData.gender,
-        country: formData.country,
-        state: formData.state,
-        city: formData.city,
-        password: formData.password,
-      };
+      // Check if this is phone registration (has userId) or email registration (no userId)
+      if (finalUserId) {
+        // Phone Registration Path: Complete basic details
+        const basicDetailsPayload = {
+          is18: formData.age === "Yes",
+          dob: formData.dateOfBirth,
+          username: formData.username + Math.random().toString(36).substr(2, 5), // Add random suffix to ensure uniqueness
+          gender: formData.gender,
+          country: formData.country,
+          state: formData.state,
+          city: formData.city,
+          password: formData.password,
+        };
 
-      const response = await completeBasicDetails(finalUserId, payload);
+        console.log("Sending basic details payload:", basicDetailsPayload);
+        const basicDetailsResponse = await completeBasicDetails(finalUserId, basicDetailsPayload);
+        console.log("Basic details response:", basicDetailsResponse);
 
-      if (response.success) {
-        // Always redirect to dashboard after successful registration
-        router.push("/dashboard");
+        if (basicDetailsResponse.success) {
+          // Basic details completed successfully and returned authentication tokens
+          // The ApiContext should have automatically set the tokens via setTokens()
+          console.log("Basic details completed successfully, user is now authenticated");
+          
+          if (currentStep === 3) {
+            // Move to step 4 (profile details)
+            setCurrentStep(4);
+          } else if (currentStep === 4) {
+            // Handle profile update with firstName, lastName, email
+            const profileUpdatePayload = {
+              firstName: formData.firstName,
+              lastName: formData.lastName,
+              email: formData.email,
+            };
+
+            console.log("Updating profile with:", profileUpdatePayload);
+            try {
+              const profileUpdateResponse = await updateProfile(profileUpdatePayload);
+              console.log("Profile update response:", profileUpdateResponse);
+              
+              if (profileUpdateResponse.success) {
+                // Profile updated successfully, redirect to dashboard
+                router.push("/dashboard");
+              } else {
+                console.error("Profile update failed:", profileUpdateResponse.error);
+              }
+            } catch (error) {
+              console.error("Profile update error:", error);
+            }
+          }
+        } else {
+          console.error("Basic details failed:", basicDetailsResponse.error);
+          // The error will be displayed by the ApiContext error handling
+        }
+      } else {
+        // Email Registration Path: Register with email and password
+        const emailRegistrationPayload = {
+          email: formData.email,
+          password: formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          userType: userType as "client" | "rider" | "diva" | "hunk",
+          countryCode: "+1", // Default country code for email registration
+          number: "0000000000", // Placeholder number for email registration
+        };
+
+        const registrationResponse = await registerWithEmail(emailRegistrationPayload);
+
+        if (registrationResponse.success && registrationResponse.data) {
+          const newUserId = registrationResponse.data.user.id;
+
+          if (currentStep === 2) {
+            // Move to step 3 (personal details - optional)
+            setCurrentStep(3);
+          } else if (currentStep === 3) {
+            // Handle personal details update
+            if (formData.educationLevel || formData.occupation || formData.maritalStatus || formData.bio) {
+              const personalDetailsPayload = {
+                bio: formData.bio,
+                education: formData.educationLevel,
+                occupation: formData.occupation,
+                maritalStatus: formData.maritalStatus,
+              };
+
+              console.log("Updating personal details:", personalDetailsPayload);
+              try {
+                const personalDetailsResponse = await updateProfile(personalDetailsPayload);
+                console.log("Personal details update response:", personalDetailsResponse);
+              } catch (error) {
+                console.error("Personal details update error:", error);
+              }
+            }
+            
+            // Redirect to dashboard
+            router.push("/dashboard");
+          }
+        }
       }
     } catch (error) {
-      console.error("Failed to complete basic details:", error);
+      console.error("Failed to complete registration:", error);
     }
   };
 
-  const isStep1Valid =
-    formData.age === "Yes" &&
-    formData.dateOfBirth &&
-    formData.username &&
-    formData.gender;
+  // Check if this is phone registration (has userId) or email registration (no userId)
+  const isPhoneRegistration = userId || user?.id;
+  
+  const isStep1Valid = isPhoneRegistration
+    ? // Phone registration: basic details only
+      formData.age === "Yes" &&
+      formData.dateOfBirth &&
+      formData.username &&
+      formData.gender
+    : // Email registration: personal details
+      formData.firstName &&
+      formData.lastName &&
+      userType;
 
   const isStep2Valid =
     formData.country &&
@@ -216,149 +299,169 @@ function DetailsForm() {
     formData.confirmPassword &&
     formData.password === formData.confirmPassword;
 
-  // Step 3 is optional
+  // Step 3 is optional personal details - always valid since it's optional
   const isStep3Valid = true;
+
+  // Step 4 is profile details (only for phone registration)
+  const isStep4Valid = isPhoneRegistration
+    ? formData.firstName &&
+      formData.lastName &&
+      formData.email
+    : true; // Email registration doesn't have step 4
+
 
   const renderStep1 = () => (
     <div className="space-y-6">
-      {/* Age Confirmation */}
-      <div>
-        <label className="block text-white/40 text-sm font-medium mb-3">
-          Are you up to 18 years old yet?{" "}
-          <span className="text-pink-500">*</span>
-        </label>
-        <div className="flex gap-4 w-full">
-          {["Yes", "No"].map((option) => (
-            <label key={option} className="flex-1 cursor-pointer">
-              <input
-                type="radio"
-                name="age"
-                value={option}
-                checked={formData.age === option}
-                onChange={(e) => handleInputChange("age", e.target.value)}
-                className="sr-only"
-              />
-              <div
-                className={`flex items-center justify-between w-full py-3 px-4 rounded-[40px] border-2 transition-all duration-200 ${
-                  formData.age === option
-                    ? option === "No"
-                      ? "border-red-500"
-                      : "border-pink-500"
-                    : "border-white/20"
-                }`}
-              >
-                <span className="text-white font-medium">{option}</span>
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                    formData.age === option
-                      ? option === "No"
-                        ? "bg-red-500"
-                        : "bg-pink-500"
-                      : "border-2 border-white/30"
-                  }`}
-                >
-                  {formData.age === option && (
-                    <svg
-                      className="w-3 h-3 text-white"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={3}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  )}
-                </div>
-              </div>
+      {isPhoneRegistration ? (
+        // Phone Registration: Basic Details
+        <>
+          {/* Age Confirmation */}
+          <div>
+            <label className="block text-white/40 text-sm font-medium mb-3">
+              Are you up to 18 years old yet?{" "}
+              <span className="text-pink-500">*</span>
             </label>
-          ))}
-        </div>
-      </div>
-
-      {/* Date of Birth */}
-      <DatePicker
-        value={formData.dateOfBirth}
-        onChange={(value) => handleInputChange("dateOfBirth", value)}
-        placeholder="Date of Birth"
-      />
-
-      {/* Email
-      <div className="relative">
-        <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-        <input
-          type="email"
-          value={formData.email}
-          onChange={(e) => handleInputChange("email", e.target.value)}
-          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-          placeholder="Email Address"
-        />
-      </div>
-
-      {/* First Name */}
-      {/* <div className="relative">
-        <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-        <input
-          type="text"
-          value={formData.firstName}
-          onChange={(e) => handleInputChange("firstName", e.target.value)}
-          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-          placeholder="First Name"
-        />
-      </div> */}
-
-      {/* Last Name */}
-      {/* <div className="relative">
-        <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-        <input
-          type="text"
-          value={formData.lastName}
-          onChange={(e) => handleInputChange("lastName", e.target.value)}
-          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-          placeholder="Last Name"
-        />
-      </div>  */}
-
-      {/* Username */}
-      <div className="relative">
-        <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-        <input
-          type="text"
-          value={formData.username}
-          onChange={(e) => handleInputChange("username", e.target.value)}
-          className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-          placeholder="Username"
-        />
-        {formData.username && formData.username.length >= 3 && (
-          <div className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
-            <svg
-              className="w-3 h-3 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={3}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
+            <div className="flex gap-4 w-full">
+              {["Yes", "No"].map((option) => (
+                <label key={option} className="flex-1 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="age"
+                    value={option}
+                    checked={formData.age === option}
+                    onChange={(e) => handleInputChange("age", e.target.value)}
+                    className="sr-only"
+                  />
+                  <div
+                    className={`flex items-center justify-between w-full py-3 px-4 rounded-[40px] border-2 transition-all duration-200 ${
+                      formData.age === option
+                        ? option === "No"
+                          ? "border-red-500"
+                          : "border-pink-500"
+                        : "border-white/20"
+                    }`}
+                  >
+                    <span className="text-white font-medium">{option}</span>
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                        formData.age === option
+                          ? option === "No"
+                            ? "bg-red-500"
+                            : "bg-pink-500"
+                          : "border-2 border-white/30"
+                      }`}
+                    >
+                      {formData.age === option && (
+                        <svg
+                          className="w-3 h-3 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={3}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Gender Selection */}
-      <CustomDropdown
-        value={formData.gender}
-        onChange={(value) => handleInputChange("gender", value)}
-        options={genderOptions}
-        placeholder="Select Gender"
-        icon={<MarsStroke className="h-5 w-5" />}
-      />
+          {/* Date of Birth */}
+          <DatePicker
+            value={formData.dateOfBirth}
+            onChange={(value) => handleInputChange("dateOfBirth", value)}
+            placeholder="Date of Birth"
+          />
+
+          {/* Username */}
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+            <input
+              type="text"
+              value={formData.username}
+              onChange={(e) => handleInputChange("username", e.target.value)}
+              className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              placeholder="Username"
+            />
+            {formData.username && formData.username.length >= 3 && (
+              <div className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                <svg
+                  className="w-3 h-3 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={3}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </div>
+            )}
+          </div>
+
+          {/* Gender Selection */}
+          <CustomDropdown
+            value={formData.gender}
+            onChange={(value) => handleInputChange("gender", value)}
+            options={genderOptions}
+            placeholder="Select Gender"
+            icon={<MarsStroke className="h-5 w-5" />}
+          />
+        </>
+      ) : (
+        // Email Registration: Personal Details
+        <>
+          {/* First Name */}
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+            <input
+              type="text"
+              value={formData.firstName}
+              onChange={(e) => handleInputChange("firstName", e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              placeholder="First Name"
+              required
+            />
+          </div>
+
+          {/* Last Name */}
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+            <input
+              type="text"
+              value={formData.lastName}
+              onChange={(e) => handleInputChange("lastName", e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+              placeholder="Last Name"
+              required
+            />
+          </div>
+
+          {/* User Type */}
+          <CustomDropdown
+            value={userType}
+            onChange={(value) => setUserType(value)}
+            options={[
+              { value: "client", label: "Client" },
+              { value: "rider", label: "Rider" },
+              { value: "diva", label: "Diva" },
+              { value: "hunk", label: "Hunk" },
+            ]}
+            placeholder="Select User Type"
+            icon={<User className="h-5 w-5" />}
+          />
+        </>
+      )}
     </div>
   );
 
@@ -406,6 +509,7 @@ function DetailsForm() {
           }`}
           placeholder="Create Password"
           autoComplete="new-password"
+          required
         />
         <button
           type="button"
@@ -430,11 +534,14 @@ function DetailsForm() {
           onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
           className={`w-full pl-12 pr-12 py-3 bg-transparent border rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200 ${
             formData.confirmPassword && formData.confirmPassword.trim() !== ""
-              ? "border-pink-500"
+              ? formData.password === formData.confirmPassword
+                ? "border-green-500"
+                : "border-red-500"
               : "border-white/20"
           }`}
           placeholder="Confirm Password"
           autoComplete="new-password"
+          required
         />
         <button
           type="button"
@@ -447,12 +554,31 @@ function DetailsForm() {
             <Eye className="h-5 w-5" />
           )}
         </button>
+        {formData.confirmPassword && formData.password === formData.confirmPassword && (
+          <div className="absolute right-12 top-1/2 transform -translate-y-1/2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+            <svg
+              className="w-3 h-3 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={3}
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          </div>
+        )}
       </div>
+
     </div>
   );
 
   const renderStep3 = () => (
     <div className="space-y-6">
+      {/* Personal Details (Optional) */}
       {/* Education Level */}
       <CustomDropdown
         value={formData.educationLevel}
@@ -497,6 +623,51 @@ function DetailsForm() {
     </div>
   );
 
+  const renderStep4 = () => (
+    <div className="space-y-6">
+      {/* Profile Details (firstName, lastName, email) - Only for phone registration */}
+      {/* First Name */}
+      <div className="relative">
+        <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+        <input
+          type="text"
+          value={formData.firstName}
+          onChange={(e) => handleInputChange("firstName", e.target.value)}
+          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+          placeholder="First Name"
+          required
+        />
+      </div>
+
+      {/* Last Name */}
+      <div className="relative">
+        <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+        <input
+          type="text"
+          value={formData.lastName}
+          onChange={(e) => handleInputChange("lastName", e.target.value)}
+          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+          placeholder="Last Name"
+          required
+        />
+      </div>
+
+      {/* Email */}
+      <div className="relative">
+        <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+        <input
+          type="email"
+          value={formData.email}
+          onChange={(e) => handleInputChange("email", e.target.value)}
+          className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+          placeholder="Email Address"
+          required
+        />
+      </div>
+    </div>
+  );
+
+
   const getStepTitle = () => {
     switch (currentStep) {
       case 1:
@@ -504,7 +675,9 @@ function DetailsForm() {
       case 2:
         return "Location & Security";
       case 3:
-        return "Personal Details";
+        return "Personal Details (Optional)";
+      case 4:
+        return "Profile Details";
       default:
         return "Basic Details";
     }
@@ -518,6 +691,8 @@ function DetailsForm() {
         return "Tell us where you're located and set up your account security.";
       case 3:
         return "Share more about yourself to help us personalize your experience. (Optional)";
+      case 4:
+        return "Complete your profile with your personal information.";
       default:
         return "Input basic details in all the fields provided below. We'll like to get to know you better.";
     }
@@ -544,6 +719,8 @@ function DetailsForm() {
         return isStep2Valid;
       case 3:
         return isStep3Valid;
+      case 4:
+        return isStep4Valid;
       default:
         return false;
     }
@@ -577,6 +754,7 @@ function DetailsForm() {
             {currentStep === 1 && renderStep1()}
             {currentStep === 2 && renderStep2()}
             {currentStep === 3 && renderStep3()}
+            {currentStep === 4 && renderStep4()}
           </div>
 
           {/* Navigation Buttons */}
@@ -591,10 +769,14 @@ function DetailsForm() {
               </Button>
             )}
             <Button
-              onClick={currentStep === 3 ? handleSubmit : handleNext}
+              onClick={
+                currentStep === 3 || currentStep === 4
+                  ? handleSubmit 
+                  : handleNext
+              }
               disabled={!canProceed() || isLoading}
               className={`${currentStep === 1 ? "w-full" : "w-[70%]"} ${
-                currentStep === 3
+                currentStep === 3 || currentStep === 4
                   ? "bg-gradient-to-r from-pink-500 to-pink-600"
                   : ""
               }`}

@@ -14,6 +14,12 @@ import {
   User,
   Settings,
   Shield,
+  Smile,
+  Play,
+  ShoppingCart,
+  Users,
+  Megaphone,
+  Lock,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 
@@ -26,17 +32,14 @@ interface SidebarProps {
 }
 
 const sidebarItems = [
-  { id: "overview", label: "Home", icon: Home, href: "/dashboard" },
-  { id: "chat", label: "Chat", icon: MessageCircle, href: "/chat" },
-  //   { id: 'profile', label: 'Profile', icon: User, href: '/profile' },
-  //   { id: 'documents', label: 'Documents', icon: FileText, href: '/documents' },
-  //   { id: 'verification', label: 'Verification', icon: Shield, href: '/verification' },
-  //   { id: 'billing', label: 'Billing', icon: CreditCard, href: '/billing' },
-  //   { id: 'analytics', label: 'Analytics', icon: BarChart3, href: '/analytics' },
-  //   { id: 'messages', label: 'Messages', icon: MessageCircle, href: '/chat' },
-  //   { id: 'calendar', label: 'Calendar', icon: Calendar, href: '/calendar' },
-  //   { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
-  //   { id: 'help', label: 'Help & Support', icon: HelpCircle, href: '/help' },
+  { id: "home", label: "Home", icon: Home, href: "/dashboard" },
+  { id: "feeds", label: "Feeds", icon: Smile, href: "/feeds" },
+  { id: "strip-room", label: "Strip Room", icon: Play, href: "/strip-room" },
+  { id: "orders", label: "Orders", icon: ShoppingCart, href: "/orders" },
+  { id: "chats", label: "Chats", icon: MessageCircle, href: "/chat" },
+  { id: "connections", label: "Connections", icon: Users, href: "/connections" },
+  { id: "advertisement", label: "Advertisement", icon: Megaphone, href: "/advertisement" },
+  { id: "faq-help", label: "FAQs & Help", icon: HelpCircle, href: "/help" },
 ];
 
 export default function Sidebar({
@@ -57,14 +60,14 @@ export default function Sidebar({
     <div
       className={`${
         isOpen ? "w-[280px]" : "w-[80px]"
-      } transition-all duration-300 bg-[#2A243E] backdrop-blur-md  flex flex-col mx-auto `}
+      } transition-all duration-300 bg-[#2A243E] backdrop-blur-md flex flex-col h-full`}
     >
       {/* Sidebar Header */}
-      <div className="pt-[56px] px-[80px] pb-[80px] ">
+      <div className="pt-6 px-6 pb-6">
         <div className="flex items-center justify-between">
           {isOpen && (
             <div className="flex items-center gap-3">
-              <span className="text-[#FA266D] text-[28px] font-bold font-urbanist ">
+              <span className="text-[#FA266D] text-[28px] font-bold font-urbanist">
                 Aphrodite
               </span>
             </div>
@@ -91,28 +94,26 @@ export default function Sidebar({
             <button
               key={item.id}
               onClick={() => handleNavigation(item.href)}
-              className={`w-full h-[58px] flex items-center  transition-all duration-200 font-urbanist ${
+              className={`w-full h-[58px] flex items-center transition-all duration-200 font-urbanist px-6 ${
                 isActive
-                  ? " text-[#FA266D] "
-                  : "text-[#999999] text-[16px] hover:text-white"
+                  ? "text-[#FA266D]"
+                  : "text-[#999999] hover:text-white hover:bg-white/5"
               }`}
-              style={{
-                paddingLeft: "40px",
-                paddingRight: isOpen ? "16px" : "40px",
-              }}
             >
-              <Icon className="h-[24px] w-[24px] flex-shrink-0" />
-              {isOpen && (
-                <span className="text-sm font-medium ml-3">{item.label}</span>
-              )}
+              <div className="flex items-center gap-4">
+                <Icon className="h-6 w-6 flex-shrink-0" />
+                {isOpen && (
+                  <span className="text-base font-medium">{item.label}</span>
+                )}
+              </div>
             </button>
           );
         })}
 
         {/* complete ur profile setup */}
-        <div>
+        <div className="px-6 pb-6">
           {isOpen && (
-            <div className="mt-10 mx-4 p-4 bg-white/6 rounded-[24px] text-white">
+            <div className="mt-8 p-4 bg-white/6 rounded-[24px] text-white">
               <p className="text-[18px] font-bold mb-2">
                 Complete Your Profile Setup Now!
               </p>

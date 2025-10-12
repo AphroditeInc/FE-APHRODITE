@@ -43,7 +43,7 @@ export default function Header() {
 
           {/* Get Started Button */}
           <Link 
-            href="/user-type" 
+            href="/login" 
             className="flex items-center justify-center w-[148px] h-12 px-[27px] py-[15px] rounded-[43px] border-[1.71px] border-white/20 shadow-[0px_7.71px_34.29px_0px_rgba(85,156,255,0.2)] gap-[10px] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2"
             style={{
               background: 'linear-gradient(83.42deg, #FA266D 53.61%, #FF74A2 97.69%)'

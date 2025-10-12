@@ -17,7 +17,10 @@ import {
   X,
   Briefcase,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/lib/hooks";
+import { apiService } from "@/lib/services";
+import type { ChatRoom, ChatMessage } from "@/lib/types";
 
 interface Chat {
   id: string;
@@ -228,6 +231,7 @@ const mockMessages: Message[] = [
 ];
 
 export default function MessagesPage() {
+  const { user } = useAuth();
   const [selectedChat, setSelectedChat] = useState<string | null>("2");
   const [messageInput, setMessageInput] = useState("");
   const [modalContent, setModalContent] = useState<{
@@ -237,6 +241,113 @@ export default function MessagesPage() {
   } | null>(null);
   const [showPricingDialog, setShowPricingDialog] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  
+  // API Integration States
+  const [rooms, setRooms] = useState<ChatRoom[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+
+  // API Integration Functions
+  useEffect(() => {
+    if (user?.id) {
+      fetchRooms();
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (selectedChat) {
+      fetchMessages(selectedChat);
+      markRoomAsRead(selectedChat);
+    }
+  }, [selectedChat]);
+
+  const fetchRooms = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('Fetching rooms...');
+      const response = await apiService.getUserRooms(50, 0);
+      console.log('Rooms API response:', response);
+      
+      if (response.success && response.data) {
+        // Ensure response.data is an array
+        const roomsArray = Array.isArray(response.data) ? response.data : [];
+        console.log('Rooms array:', roomsArray);
+        setRooms(roomsArray);
+      } else {
+        setError(response.error || 'Failed to fetch conversations');
+        setRooms([]); // Set empty array on error
+      }
+    } catch (err) {
+      setError('An error occurred while fetching conversations');
+      console.error('Error fetching rooms:', err);
+      setRooms([]); // Set empty array on error
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMessages = async (roomId: string) => {
+    try {
+      console.log('Fetching messages for room:', roomId);
+      const response = await apiService.getRoomMessages(roomId, { limit: 50 });
+      console.log('Messages API response:', response);
+      
+      if (response.success && response.data) {
+        // Ensure response.data is an array
+        const messagesArray = Array.isArray(response.data) ? response.data : [];
+        console.log('Messages array:', messagesArray);
+        setMessages(messagesArray);
+      } else {
+        console.error('Failed to fetch messages:', response.error);
+        setMessages([]); // Set empty array on error
+      }
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+      setMessages([]); // Set empty array on error
+    }
+  };
+
+  const markRoomAsRead = async (roomId: string) => {
+    try {
+      await apiService.markRoomAsRead(roomId);
+    } catch (err) {
+      console.error('Error marking room as read:', err);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!messageInput.trim() || !selectedChat || sending) return;
+
+    try {
+      setSending(true);
+      const response = await apiService.sendMessage({
+        content: messageInput.trim(),
+        type: 'text',
+        tempId: `temp_${Date.now()}`,
+      });
+
+      if (response.success && response.data) {
+        setMessages(prev => [...prev, response.data!]);
+        setMessageInput('');
+        
+        // Update room's last message
+        setRooms(prev => prev.map(room => 
+          room.id === selectedChat 
+            ? { ...room, lastMessage: response.data!, unreadCount: 0 }
+            : room
+        ));
+      } else {
+        console.error('Failed to send message:', response.error);
+      }
+    } catch (err) {
+      console.error('Error sending message:', err);
+    } finally {
+      setSending(false);
+    }
+  };
 
   const handleBackClick = () => {
     setSelectedChat(null);
@@ -275,7 +386,55 @@ export default function MessagesPage() {
     }
   };
 
-  const selectedChatData = mockChats.find((chat) => chat.id === selectedChat);
+  const selectedChatData = rooms.find((room) => room.id === selectedChat);
+  
+  // Helper functions for data transformation
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getRoomDisplayName = (room: ChatRoom) => {
+    if (room.type === 'group') {
+      return room.name || 'Group Chat';
+    }
+    return 'Direct Message';
+  };
+
+  const getLastMessagePreview = (room: ChatRoom) => {
+    if (!room.lastMessage) return 'No messages yet';
+    
+    const message = room.lastMessage;
+    if (message.type === 'text') {
+      return message.content.length > 50 
+        ? `${message.content.substring(0, 50)}...` 
+        : message.content;
+    } else if (message.type === 'image') {
+      return '📷 Image';
+    } else if (message.type === 'file') {
+      return '📎 File';
+    } else if (message.type === 'video') {
+      return '🎥 Video';
+    } else if (message.type === 'audio') {
+      return '🎵 Audio';
+    }
+    return 'Message';
+  };
+
+  // Convert API ChatMessage to UI Message format
+  const convertToUIMessage = (apiMessage: ChatMessage): Message => {
+    const isOwn = apiMessage.senderId === user?.id;
+    
+    return {
+      id: apiMessage.id,
+      sender: isOwn ? "me" : "other",
+      type: apiMessage.type as "text" | "audio" | "video" | "image" | "pricing",
+      content: apiMessage.content,
+      timestamp: formatTime(apiMessage.createdAt),
+      duration: apiMessage.metadata?.duration as string | undefined,
+      videoThumbnail: (apiMessage.metadata?.imageUrl as string) || apiMessage.attachments?.[0],
+    };
+  };
 
   const renderMessage = (message: Message) => {
     if (message.type === "pricing" && message.pricing) {
@@ -447,47 +606,73 @@ export default function MessagesPage() {
 
         {/* Chat List - Scrollable */}
         <div className="flex-1 overflow-y-auto scrollbar-hide">
-          {mockChats.map((chat) => (
-            <div
-              key={chat.id}
-              onClick={() => setSelectedChat(chat.id)}
-              className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${
-                selectedChat === chat.id ? "bg-white/10" : ""
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                {/* Avatar */}
-                <div
-                  className={`w-12 h-12 ${chat.avatarBg} rounded-full flex items-center justify-center relative`}
-                >
-                  <span className="text-gray-800 font-semibold text-sm">
-                    {chat.avatar}
-                  </span>
-                  {chat.isOnline && (
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-[#1F1B2C]"></div>
-                  )}
-                </div>
-
-                {/* Chat Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-white font-medium text-sm truncate">
-                      {chat.name}
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-400 text-xs">
-                        {chat.timestamp}
-                      </span>
-                      <Check className="h-3 w-3 text-[#FA266D]" />
-                    </div>
+          {loading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FA266D]"></div>
+            </div>
+          ) : error ? (
+            <div className="p-4 text-center">
+              <p className="text-red-400 mb-2">{error}</p>
+              <button
+                onClick={fetchRooms}
+                className="px-4 py-2 bg-[#FA266D] text-white rounded-lg hover:bg-pink-600"
+              >
+                Retry
+              </button>
+            </div>
+          ) : !Array.isArray(rooms) || rooms.length === 0 ? (
+            <div className="p-4 text-center text-gray-400">
+              <p>No conversations yet</p>
+              <p className="text-sm">Start a new conversation to begin chatting</p>
+            </div>
+          ) : (
+            rooms.map((room) => (
+              <div
+                key={room.id}
+                onClick={() => setSelectedChat(room.id)}
+                className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${
+                  selectedChat === room.id ? "bg-white/10" : ""
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {/* Avatar */}
+                  <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center relative">
+                    <span className="text-gray-600 font-semibold text-sm">
+                      {getRoomDisplayName(room).charAt(0).toUpperCase()}
+                    </span>
+                    {/* Online status could be added here if available */}
                   </div>
-                  <p className="text-gray-400 text-xs truncate">
-                    {chat.lastMessage}
-                  </p>
+
+                  {/* Chat Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-white font-medium text-sm truncate">
+                        {getRoomDisplayName(room)}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        {room.lastMessage && (
+                          <span className="text-gray-400 text-xs">
+                            {formatTime(room.lastMessage.createdAt)}
+                          </span>
+                        )}
+                        <Check className="h-3 w-3 text-[#FA266D]" />
+                      </div>
+                    </div>
+                    <p className="text-gray-400 text-xs truncate">
+                      {getLastMessagePreview(room)}
+                    </p>
+                    {room.unreadCount && room.unreadCount > 0 && (
+                      <div className="flex justify-end mt-1">
+                        <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                          {room.unreadCount > 99 ? '99+' : room.unreadCount}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
@@ -504,22 +689,18 @@ export default function MessagesPage() {
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </button>
-                <div
-                  className={`w-10 h-10 ${selectedChatData?.avatarBg} rounded-full flex items-center justify-center relative`}
-                >
-                  <span className="text-gray-800 font-semibold text-sm">
-                    {selectedChatData?.avatar}
+                <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center relative">
+                  <span className="text-gray-600 font-semibold text-sm">
+                    {selectedChatData ? getRoomDisplayName(selectedChatData).charAt(0).toUpperCase() : '?'}
                   </span>
-                  {selectedChatData?.isOnline && (
-                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-[#1F1B2C]"></div>
-                  )}
+                  {/* Online status could be added here if available */}
                 </div>
                 <div>
                   <h3 className="text-white font-medium">
-                    {selectedChatData?.name}
+                    {selectedChatData ? getRoomDisplayName(selectedChatData) : 'Unknown'}
                   </h3>
                   <p className="text-gray-400 text-sm">
-                    {selectedChatData?.username}
+                    {selectedChatData?.type === 'group' ? 'Group Chat' : 'Direct Message'}
                   </p>
                 </div>
               </div>
@@ -538,16 +719,28 @@ export default function MessagesPage() {
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-4">
-              {mockMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${
-                    message.sender === "me" ? "justify-start" : "justify-end"
-                  }`}
-                >
-                  {renderMessage(message)}
+              {!Array.isArray(messages) || messages.length === 0 ? (
+                <div className="flex items-center justify-center h-64 text-gray-400">
+                  <div className="text-center">
+                    <p className="text-lg mb-2">No messages yet</p>
+                    <p className="text-sm">Start the conversation!</p>
+                  </div>
                 </div>
-              ))}
+              ) : (
+                messages.map((apiMessage) => {
+                  const message = convertToUIMessage(apiMessage);
+                  return (
+                    <div
+                      key={message.id}
+                      className={`flex ${
+                        message.sender === "me" ? "justify-start" : "justify-end"
+                      }`}
+                    >
+                      {renderMessage(message)}
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             {/* Message Input */}
@@ -560,7 +753,14 @@ export default function MessagesPage() {
                   placeholder="Write message..."
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
                   className="bg-transparent text-white placeholder-gray-400 focus:outline-none flex-1 text-base rounded-[32px] border border-white/10 py-[18px] pl-[24px] w-full"
+                  disabled={sending}
                 />
 
                 {/* Bottom Row */}
@@ -579,9 +779,19 @@ export default function MessagesPage() {
                   <button className="w-10 h-10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
                     <Mic className="h-5 w-5 text-white" />
                   </button>
-                  <button className="bg-[#FA266D] text-white px-6 py-2 rounded-full flex items-center gap-2 hover:bg-pink-600 transition-colors">
-                    <span className="text-sm font-medium">Send</span>
-                    <Send className="h-4 w-4" />
+                  <button 
+                    onClick={sendMessage}
+                    disabled={!messageInput.trim() || sending}
+                    className="bg-[#FA266D] text-white px-6 py-2 rounded-full flex items-center gap-2 hover:bg-pink-600 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                  >
+                    {sending ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <span className="text-sm font-medium">Send</span>
+                        <Send className="h-4 w-4" />
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

@@ -13,21 +13,29 @@ function OTPForm() {
     const [showSuccess, setShowSuccess] = useState(false);
     const [userType, setUserType] = useState<string>("");
     const [userId, setUserId] = useState<string>("");
+    const [phoneNumber, setPhoneNumber] = useState<string>("");
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
     const router = useRouter();
     const searchParams = useSearchParams();
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    // Get user type and userId from URL parameters
+    // Get user type, userId, and phone from URL parameters
     useEffect(() => {
         const userTypeParam = searchParams.get('userType');
         const userIdParam = searchParams.get('userId');
+        const phoneParam = searchParams.get('phone');
         console.log('OTP Page - userType from URL:', userTypeParam);
         console.log('OTP Page - userId from URL:', userIdParam);
+        console.log('OTP Page - phone from URL:', phoneParam);
         if (userTypeParam) {
             setUserType(userTypeParam);
         }
         if (userIdParam) {
             setUserId(userIdParam);
+        }
+        if (phoneParam) {
+            setPhoneNumber(phoneParam);
         }
     }, [searchParams]);
 
@@ -51,14 +59,29 @@ function OTPForm() {
         }
     };
 
-    const handleVerify = () => {
+    const handleVerify = async () => {
         const otpString = otp.join("");
         if (otpString.length === 4) {
-            // Simulate verification process
+            setIsLoading(true);
+            setError(null);
+            
+            // Simulate OTP verification (replace with actual API call if needed)
             setTimeout(() => {
                 setShowSuccess(true);
+                setIsLoading(false);
             }, 1000);
         }
+    };
+
+    const handleResendOTP = async () => {
+        setIsLoading(true);
+        setError(null);
+        
+        // Simulate resending OTP (replace with actual API call if needed)
+        setTimeout(() => {
+            console.log('OTP resent successfully');
+            setIsLoading(false);
+        }, 1000);
     };
 
     const handleContinue = () => {
@@ -78,6 +101,12 @@ function OTPForm() {
                     description="We sent a code to the phone number you provided to verify that you're really you."
                 >
                     <div className="space-y-8">
+                        {error && (
+                            <div className="bg-red-500/10 border border-red-500 rounded-lg p-3 text-red-400 text-sm font-urbanist">
+                                {error}
+                            </div>
+                        )}
+
                         {/* OTP Input Fields */}
                         <div className="flex justify-center gap-4">
                             {otp.map((digit, index) => (
@@ -101,18 +130,22 @@ function OTPForm() {
                         {/* Verify Button */}
                         <Button
                             onClick={handleVerify}
-                            disabled={!isOtpComplete}
+                            disabled={!isOtpComplete || isLoading}
                             className="mt-8 bg-pink-600 hover:bg-pink-700 text-white rounded-[40px] px-4 py-3 text-base w-full"
                         >
-                            Verify
+                            {isLoading ? "Verifying..." : "Verify"}
                         </Button>
 
                         {/* Resend Code Option */}
                         <div className="text-center">
                             <p className="text-white/60 text-sm">
                                 Didn&apos;t receive the code?{" "}
-                                <button className="text-pink-500 hover:text-pink-400 font-medium">
-                                    Resend
+                                <button 
+                                    onClick={handleResendOTP}
+                                    disabled={isLoading}
+                                    className="text-pink-500 hover:text-pink-400 font-medium disabled:opacity-50"
+                                >
+                                    {isLoading ? "Sending..." : "Resend"}
                                 </button>
                             </p>
                         </div>

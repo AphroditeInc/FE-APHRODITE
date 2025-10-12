@@ -13,15 +13,9 @@ export default function UserTypePage() {
   const userTypes = [
     {
       id: "diva",
-      title: "Sign Up As Diva",
+      title: "Sign up as Diva/Hunk",
       description:
         "Are you ready to earn on your own terms? Join as a Diva to offer exclusive companionship and premium experiences to verified clients.",
-    },
-    {
-      id: "hunk",
-      title: "Sign Up As Hunk",
-      description:
-        "Are you ready to earn on your own terms? Join as a Hunk to offer exclusive companionship and premium experiences to verified clients.",
     },
     {
       id: "client",

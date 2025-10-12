@@ -13,7 +13,7 @@ export default function Footer() {
             <div>
               <h3 className="text-2xl font-bold mb-2">LOGO HERE</h3>
               <p className="text-white/90 opacity-[80%] text-lg lg:w-[282px]">
-                Experience luxury, and discretion with Aphrodite's exclusive platform.
+                Experience luxury, and discretion with Aphrodite&apos;s exclusive platform.
               </p>
             </div>
           </div>

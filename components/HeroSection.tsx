@@ -49,7 +49,7 @@ export default function HeroSection() {
 
           {/* Call-to-Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-            <Link href="/user-type">
+            <Link href="/login">
               <button 
                 className="flex items-center justify-center w-[173px] h-14 px-8 py-[18px] rounded-[50px] border-2 border-white/20 shadow-[0px_9px_40px_0px_rgba(85,156,255,0.2)] gap-3 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2"
                 style={{

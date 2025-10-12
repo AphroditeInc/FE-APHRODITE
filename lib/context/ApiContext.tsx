@@ -10,6 +10,11 @@ import type {
   BasicDetailsPayload,
   AuthResponse,
   AuthTokens,
+  EmailRegistrationPayload,
+  CompleteUserPayload,
+  SendOTPPayload,
+  ProfilePayload,
+  ProfileUpdatePayload,
 } from '../types';
 
 interface ApiState {
@@ -22,10 +27,16 @@ interface ApiState {
 
 interface ApiContextType extends ApiState {
   registerUser: (payload: AuthPayload) => Promise<ApiResponse<User>>;
-  verifyOTP: (phoneNumber: string, otp: string) => Promise<ApiResponse<User>>;
+  registerWithEmail: (payload: EmailRegistrationPayload) => Promise<ApiResponse<AuthResponse>>;
+  createCompleteUser: (payload: CompleteUserPayload) => Promise<ApiResponse<User>>;
+  sendOTP: (payload: SendOTPPayload) => Promise<ApiResponse<{ message: string }>>;
   loginUser: (phoneNumber: string) => Promise<ApiResponse<User>>;
+  loginWithEmail: (email: string, password: string) => Promise<ApiResponse<AuthResponse>>;
   getUserProfile: (userId: string) => Promise<ApiResponse<User>>;
   completeBasicDetails: (userId: string, payload: BasicDetailsPayload) => Promise<ApiResponse<AuthResponse>>;
+  updateUser: (userId: string, payload: Partial<User>) => Promise<ApiResponse<User>>;
+  createProfile: (payload: ProfilePayload) => Promise<ApiResponse<unknown>>;
+  updateProfile: (payload: ProfileUpdatePayload) => Promise<ApiResponse<User>>;
   setUser: (user: User | null) => void;
   setTokens: (tokens: AuthTokens | null) => void;
   setLoading: (loading: boolean) => void;
@@ -34,7 +45,7 @@ interface ApiContextType extends ApiState {
   logout: () => void;
 }
 
-const ApiContext = createContext<ApiContextType | undefined>(undefined);
+export const ApiContext = createContext<ApiContextType | undefined>(undefined);
 
 export const useApi = (): ApiContextType => {
   const context = useContext(ApiContext);
@@ -82,6 +93,8 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
         isAuthenticated: true,
         isLoading: false,
       }));
+      // Set the auth token in the API service for authenticated requests
+      apiService.setAuthToken(storedTokens.accessToken);
       console.log('[ApiContext] Authentication restored successfully');
     } else if (storedUser) {
       // If we have user but no tokens, still load the user
@@ -116,6 +129,11 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
     }));
     if (tokens) {
       saveAuthTokens(tokens);
+      // Set the auth token in the API service for authenticated requests
+      apiService.setAuthToken(tokens.accessToken);
+    } else {
+      // Clear the auth token from the API service
+      apiService.clearAuthToken();
     }
     console.log('[ApiContext] isAuthenticated set to:', !!tokens);
   }, []);
@@ -166,28 +184,69 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
     }
   }, [setLoading, clearError, setUser, setError]);
 
-  const verifyOTP = useCallback(async (phoneNumber: string, otp: string): Promise<ApiResponse<User>> => {
+  const createCompleteUser = useCallback(async (payload: CompleteUserPayload): Promise<ApiResponse<User>> => {
     setLoading(true);
     clearError();
 
     try {
-      const response = await apiService.verifyOTP(phoneNumber, otp);
+      const response = await apiService.createCompleteUser(payload);
 
       if (response.success && response.data) {
         setUser(response.data);
       } else {
-        setError(response.error || 'OTP verification failed');
+        setError(response.error || 'User creation failed');
       }
 
       return response;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'OTP verification failed';
+      const errorMessage = error instanceof Error ? error.message : 'User creation failed';
       setError(errorMessage);
       return { success: false, error: errorMessage };
     } finally {
       setLoading(false);
     }
   }, [setLoading, clearError, setUser, setError]);
+
+  const registerWithEmail = useCallback(async (payload: EmailRegistrationPayload): Promise<ApiResponse<AuthResponse>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.registerWithEmail(payload);
+
+      if (response.success && response.data) {
+        setUser(response.data.user);
+        setTokens(response.data.tokens);
+      } else {
+        setError(response.error || 'Email registration failed');
+      }
+
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Email registration failed';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setUser, setTokens, setError]);
+
+  const sendOTP = useCallback(async (payload: SendOTPPayload): Promise<ApiResponse<{ message: string }>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.sendOTP(payload);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send OTP';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
 
   const loginUser = useCallback(async (phoneNumber: string): Promise<ApiResponse<User>> => {
     setLoading(true);
@@ -211,6 +270,30 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
       setLoading(false);
     }
   }, [setLoading, clearError, setUser, setError]);
+
+  const loginWithEmail = useCallback(async (email: string, password: string): Promise<ApiResponse<AuthResponse>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.loginWithEmail(email, password);
+
+      if (response.success && response.data) {
+        setUser(response.data.user);
+        setTokens(response.data.tokens);
+      } else {
+        setError(response.error || 'Email login failed');
+      }
+
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Email login failed';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setUser, setTokens, setError]);
 
   const getUserProfile = useCallback(async (userId: string): Promise<ApiResponse<User>> => {
     setLoading(true);
@@ -265,13 +348,82 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
     }
   }, [setLoading, clearError, setUser, setTokens, setError]);
 
+
+  const updateUser = useCallback(async (userId: string, payload: Partial<User>): Promise<ApiResponse<User>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.updateUser(userId, payload);
+      
+      if (response.success && response.data) {
+        setUser(response.data);
+      } else {
+        setError(response.error || 'Failed to update user');
+      }
+
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update user';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setUser, setError]);
+
+  const createProfile = useCallback(async (payload: ProfilePayload): Promise<ApiResponse<unknown>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.createProfile(payload);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create profile';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
+  const updateProfile = useCallback(async (payload: ProfileUpdatePayload): Promise<ApiResponse<User>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.updateProfile(payload);
+
+      if (response.success && response.data) {
+        setUser(response.data); // Update user in context
+      } else {
+        setError(response.error || 'Failed to update profile');
+      }
+
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update profile';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setUser, setError]);
+
   const value: ApiContextType = {
     ...state,
     registerUser,
-    verifyOTP,
+    registerWithEmail,
+    createCompleteUser,
+    sendOTP,
     loginUser,
+    loginWithEmail,
     getUserProfile,
     completeBasicDetails,
+    updateUser,
+    createProfile,
+    updateProfile,
     setUser,
     setTokens,
     setLoading,
