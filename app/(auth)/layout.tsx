@@ -25,7 +25,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
   }, []);
 
   return (
-    <div className="relative w-full h-screen flex items-center justify-center overflow-hidden font-urbanist">
+    <div className="relative w-full min-h-screen flex items-center justify-center overflow-hidden font-urbanist py-4 sm:py-0">
       {/* Background slider */}
       <div className="absolute inset-0">
         {images.map((img, index) => (
@@ -46,7 +46,9 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
       <div className="absolute inset-0 bg-black/60" />
 
       {/* Auth container */}
-      <div className="">{children}</div>
+      <div className="relative z-10 w-full max-w-md sm:max-w-lg lg:max-w-2xl px-4 sm:px-6 lg:px-8">
+        {children}
+      </div>
     </div>
   );
 }
