@@ -59,15 +59,15 @@ export default function Sidebar({
   return (
     <div
       className={`${
-        isOpen ? "w-[280px]" : "w-[80px]"
+        isOpen ? "w-[280px]" : "w-[60px] sm:w-[80px]"
       } transition-all duration-300 bg-[#2A243E] backdrop-blur-md flex flex-col h-full`}
     >
       {/* Sidebar Header */}
-      <div className="pt-6 px-6 pb-6">
+      <div className="pt-4 sm:pt-6 px-3 sm:px-6 pb-4 sm:pb-6">
         <div className="flex items-center justify-between">
           {isOpen && (
-            <div className="flex items-center gap-3">
-              <span className="text-[#FA266D] text-[28px] font-bold font-urbanist">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="text-[#FA266D] text-xl sm:text-2xl lg:text-[28px] font-bold font-urbanist">
                 Aphrodite
               </span>
             </div>
@@ -77,9 +77,9 @@ export default function Sidebar({
             className="text-white/60 hover:text-white p-1 rounded transition-colors"
           >
             {isOpen ? (
-              <ChevronLeft className="h-5 w-5" />
+              <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
             ) : (
-              <ChevronRight className="h-5 w-5" />
+              <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
             )}
           </button>
         </div>
@@ -94,16 +94,16 @@ export default function Sidebar({
             <button
               key={item.id}
               onClick={() => handleNavigation(item.href)}
-              className={`w-full h-[58px] flex items-center transition-all duration-200 font-urbanist px-6 ${
+              className={`w-full h-[48px] sm:h-[58px] flex items-center transition-all duration-200 font-urbanist px-3 sm:px-6 ${
                 isActive
                   ? "text-[#FA266D]"
                   : "text-[#999999] hover:text-white hover:bg-white/5"
               }`}
             >
-              <div className="flex items-center gap-4">
-                <Icon className="h-6 w-6 flex-shrink-0" />
+              <div className="flex items-center gap-2 sm:gap-4">
+                <Icon className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
                 {isOpen && (
-                  <span className="text-base font-medium">{item.label}</span>
+                  <span className="text-sm sm:text-base font-medium truncate">{item.label}</span>
                 )}
               </div>
             </button>
@@ -111,21 +111,21 @@ export default function Sidebar({
         })}
 
         {/* complete ur profile setup */}
-        <div className="px-6 pb-6">
+        <div className="px-3 sm:px-6 pb-4 sm:pb-6">
           {isOpen && (
-            <div className="mt-8 p-4 bg-white/6 rounded-[24px] text-white">
-              <p className="text-[18px] font-bold mb-2">
+            <div className="mt-6 sm:mt-8 p-3 sm:p-4 bg-white/6 rounded-[20px] sm:rounded-[24px] text-white">
+              <p className="text-base sm:text-[18px] font-bold mb-2">
                 Complete Your Profile Setup Now!
               </p>
-              <p className="text-[14px] mb-4 text-white/60">
+              <p className="text-xs sm:text-[14px] mb-3 sm:mb-4 text-white/60">
                 Finish setting up your account, add your services and pricing to
                 start getting clients.
               </p>
               <button
                 onClick={() => handleNavigation("/profile")}
-                className="w-full flex items-center justify-center px-[24px] py-[10px] text-white bg-[#FA266D] rounded-[40px] transition-all duration-200 cursor-pointer"
+                className="w-full flex items-center justify-center px-4 sm:px-[24px] py-2 sm:py-[10px] text-white bg-[#FA266D] rounded-[30px] sm:rounded-[40px] transition-all duration-200 cursor-pointer"
               >
-                <span className="text-[16px] font-semibold">Go to Profile</span>
+                <span className="text-sm sm:text-[16px] font-semibold">Go to Profile</span>
               </button>
             </div>
           )}

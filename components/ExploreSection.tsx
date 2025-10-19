@@ -110,11 +110,11 @@ export default function ExploreSection() {
         </div>
 
         {/* Profile Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-12">
           {profiles.map((profile) => (
             <div 
               key={profile.id} 
-              className="relative overflow-hidden group cursor-pointer w-[282px] h-[300px] rounded-[20px]"
+              className="relative overflow-hidden group cursor-pointer w-full max-w-[282px] mx-auto h-[250px] sm:h-[300px] rounded-[20px]"
             >
               {/* Profile Image */}
               <div className="relative w-full h-full">
@@ -125,23 +125,23 @@ export default function ExploreSection() {
                 />
                 
                 {/* Profile Info Overlay */}
-                <div className="absolute text-white w-[250px] h-[93px] top-[191px] left-4 rounded-2xl bg-white/[0.06] backdrop-blur-[40px]">
-                  <div className="p-4 h-full flex flex-col justify-center">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-lg font-bold flex items-center">
+                <div className="absolute text-white w-[calc(100%-2rem)] sm:w-[250px] h-[80px] sm:h-[93px] top-[calc(100%-100px)] sm:top-[191px] left-2 sm:left-4 rounded-2xl bg-white/[0.06] backdrop-blur-[40px]">
+                  <div className="p-3 sm:p-4 h-full flex flex-col justify-center">
+                    <div className="flex items-center justify-between mb-1 sm:mb-2">
+                      <h3 className="text-sm sm:text-lg font-bold flex items-center">
                         {profile.name}
-                        <span className="w-2 h-2 bg-green-500 rounded-full ml-2"></span>
+                        <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full ml-1 sm:ml-2"></span>
                       </h3>
-                      <Heart className="w-6 h-6 text-gray-400" />
+                      <Heart className="w-4 h-4 sm:w-6 sm:h-6 text-gray-400" />
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
-                        <span className="text-pink-500 mr-1">📍</span>
-                        <p className="text-sm text-gray-200">{profile.location}</p>
+                        <span className="text-pink-500 mr-1 text-xs sm:text-sm">📍</span>
+                        <p className="text-xs sm:text-sm text-gray-200 truncate">{profile.location}</p>
                       </div>
                       <div className="flex items-center">
-                        <span className="text-yellow-400 mr-1">★</span>
-                        <span className="text-sm font-medium text-gray-200">{profile.rating}</span>
+                        <span className="text-yellow-400 mr-1 text-xs sm:text-sm">★</span>
+                        <span className="text-xs sm:text-sm font-medium text-gray-200">{profile.rating}</span>
                       </div>
                     </div>
                   </div>
