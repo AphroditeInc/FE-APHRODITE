@@ -49,43 +49,42 @@ export default function DriveSection() {
         </div>
 
         {/* Content Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 items-center mb-8 sm:mb-12">
           {/* Left Column - Feature Boxes */}
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             {features.map((feature) => {
               const IconComponent = feature.icon;
               return (
                 <div 
                   key={feature.id} 
-                  className="bg-white p-6  border border-gray-100 hover:shadow-xl transition-shadow"
+                  className="bg-white p-4 sm:p-6 border border-gray-100 hover:shadow-xl transition-shadow w-full max-w-[282px] mx-auto sm:mx-0"
                   style={{
-                    width: '282px',
-                    height: '216px',
+                    minHeight: '180px',
                     borderRadius: '20px',
                     borderWidth: '1px',
                     opacity: 1
                   }}
                 >
                   {/* Feature Icon */}
-                  <div className="w-12 h-12 bg-pink-600 rounded-lg flex items-center justify-center mb-4">
-                    <IconComponent className="w-6 h-6 text-white" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-pink-600 rounded-lg flex items-center justify-center mb-3 sm:mb-4">
+                    <IconComponent className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                   </div>
                   
                   {/* Feature Content */}
-                  <h3 className="text-lg font-bold text-pink-600 mb-3">{feature.title}</h3>
-                  <p className="text-gray-700 text-sm leading-relaxed">{feature.description}</p>
+                  <h3 className="text-base sm:text-lg font-bold text-pink-600 mb-2 sm:mb-3">{feature.title}</h3>
+                  <p className="text-gray-700 text-xs sm:text-sm leading-relaxed">{feature.description}</p>
                 </div>
               );
             })}
           </div>
 
           {/* Right Column - Driver Image */}
-          <div className="relative">
+          <div className="relative order-first lg:order-last">
             <div className="relative rounded-2xl overflow-hidden shadow-lg">
               <img 
                 src="/driver-smartphone.svg" 
                 alt="Driver using smartphone with map navigation"
-                className="w-full h-96 object-cover"
+                className="w-full h-64 sm:h-80 lg:h-96 object-cover"
               />
             </div>
           </div>
