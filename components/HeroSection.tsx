@@ -1,47 +1,47 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import Button from "./button";
 import { useState, useEffect } from "react";
 
 export default function HeroSection() {
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  // Optimized Cloudinary URL with better compression and format
+  const optimizedImageUrl = 'https://res.cloudinary.com/dpynyht1l/image/upload/f_auto,q_auto,w_1920,h_1080,c_fill/v1760294571/image_grid_kib4ze.png';
 
   useEffect(() => {
-    // Preload the hero image from CDN
-    const img = new Image();
+    // Preload the optimized hero image
+    const img = new window.Image();
     img.onload = () => setImageLoaded(true);
-    // Use Cloudinary CDN URL
-    img.src = 'https://res.cloudinary.com/dpynyht1l/image/upload/v1760294571/image_grid_kib4ze.png';
-    // Fallback to local if CDN fails
-    img.onerror = () => {
-      img.src = '/hero.svg';
-    };
+    img.onerror = () => setImageError(true);
+    img.src = optimizedImageUrl;
   }, []);
 
   return (
     <div id="hero-section" className="min-h-screen relative overflow-hidden">
-      {/* Background Image with loading state */}
-      <div 
-        className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-500 ${
-          imageLoaded ? 'opacity-100' : 'opacity-0'
-        }`}
-        style={{
-          backgroundImage: imageLoaded ? "url('https://res.cloudinary.com/dpynyht1l/image/upload/v1760294571/image_grid_kib4ze.png')" : "none"
-        }}
-      ></div>
+      {/* Instant CSS Gradient Fallback */}
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-pink-900 to-red-900"></div>
       
-      {/* Fallback background while loading */}
-      {!imageLoaded && (
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-pink-900 to-red-900">
-          {/* Loading indicator */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-white/60 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-400 mx-auto mb-4"></div>
-              <p className="text-sm">Loading...</p>
-            </div>
-          </div>
+      {/* Optimized Background Image */}
+      {!imageError && (
+        <div className="absolute inset-0">
+          <Image
+            src={optimizedImageUrl}
+            alt="Premium companionship background"
+            fill
+            priority
+            quality={85}
+            className={`object-cover transition-opacity duration-700 ${
+              imageLoaded ? 'opacity-100' : 'opacity-0'
+            }`}
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageError(true)}
+            sizes="100vw"
+          />
         </div>
       )}
 
