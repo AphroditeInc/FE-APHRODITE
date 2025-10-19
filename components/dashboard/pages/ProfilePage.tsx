@@ -2,10 +2,12 @@
 
 import { User, Mail, Phone, MapPin, Calendar, Edit, ArrowLeft, Star, Check, Users, Calendar as CalendarIcon, X } from "lucide-react";
 import { useState } from "react";
-import { useAuthProfile } from "@/lib/hooks";
+import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 export default function ProfilePage() {
-  const { user, loading, error, refetch } = useAuthProfile();
+  const { user: authUser } = useAuth();
+  const { profile, loading, error, refetch } = useEnrichedProfile(authUser?.id || null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentFormStep, setCurrentFormStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -75,8 +77,8 @@ export default function ProfilePage() {
     );
   }
 
-  // No user data
-  if (!user) {
+  // No profile data
+  if (!profile) {
     return (
       <div className="min-h-screen bg-[#1F1B2C] flex items-center justify-center">
         <div className="text-white text-xl">No profile data available</div>
@@ -126,14 +128,17 @@ export default function ProfilePage() {
 
         {/* Profile Details */}
           <div className="lg:w-2/3 space-y-4">
-            {/* Name with verification */}
+            {/* Name */}
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-bold text-white">
-                {user.firstName} {user.lastName}
+                {profile?.user?.firstName} {profile?.user?.lastName}
               </h1>
-              <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                <Check className="w-4 h-4 text-white" />
-              </div>
+            </div>
+            
+            {/* Username and User Type */}
+            <div className="flex items-center gap-2">
+              <span className="text-pink-300">@{profile?.user?.userName}</span>
+              <span className="text-sm text-gray-400 capitalize">• {profile?.user?.userType}</span>
             </div>
 
             {/* Location */}
@@ -148,37 +153,43 @@ export default function ProfilePage() {
                 {[...Array(5)].map((_, i) => (
                   <Star 
                     key={i} 
-                    className={`w-5 h-5 ${i < 4 ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
+                    className={`w-5 h-5 ${i < Math.floor(profile?.reviews?.stats?.averageRating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
                   />
                 ))}
               </div>
-              <span className="text-white font-semibold">4.0</span>
+              <span className="text-white font-semibold">
+                {profile?.reviews?.stats?.averageRating ? profile.reviews.stats.averageRating.toFixed(1) : '0.0'}
+              </span>
+              <span className="text-sm text-gray-400">
+                ({profile?.reviews?.stats?.totalReviews || 0} reviews)
+              </span>
             </div>
 
             {/* Bio */}
             <div className="space-y-3 text-white">
-              <p className="text-lg">Soft Skin, Dirty Thoughts, and a Taste You&apos;ll Never Forget ⚡️⚡️⚡️</p>
-              <p className="text-sm text-pink-300">NB: check my price and Tfare validates our appointment</p>
-              <p className="text-sm">
-                Think silk sheets, whispered cravings, and nights that blur into morning. I don&apos;t offer moments. I offer experiences unforgettable, unfiltered, and all about you. Discretion is guaranteed. Satisfaction is not optional 💋
-              </p>
-              <p className="text-sm">
-                Touch Me with Your Eyes First. Then the Rest. I&apos;m naughty by Nature. Classy by Choice.
-              </p>
-                </div>
+              <p className="text-lg">{profile?.bio || 'No bio available'}</p>
+              {profile?.education && profile.education !== 'Not specified' && (
+                <p className="text-sm text-pink-300">Education: {profile.education}</p>
+              )}
+              {profile?.occupation && profile.occupation !== 'Not specified' && (
+                <p className="text-sm text-pink-300">Occupation: {profile.occupation}</p>
+              )}
+            </div>
 
             {/* Joined Date */}
             <div className="flex items-center gap-2">
               <CalendarIcon className="w-5 h-5 text-pink-500" />
-              <span className="text-white">Joined July 2025</span>
-              </div>
+              <span className="text-white">
+                Joined {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown'}
+              </span>
+            </div>
 
             {/* Followers/Following */}
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-pink-500" />
-              <span className="text-white">387 Following</span>
+              <span className="text-white">{profile?.followersCount || 0} Followers</span>
               <span className="text-white/60">•</span>
-              <span className="text-white">1,000 Followers</span>
+              <span className="text-white">{profile?.reviews?.stats?.totalReviews || 0} Reviews</span>
                 </div>
               </div>
             </div>
@@ -233,19 +244,19 @@ export default function ProfilePage() {
           <div className="space-y-4">
             <div className="flex-col pt-3 justify-between ">
               <p className="text-pink-500 pb-4 font-semibold">Email</p>
-              <p className="text-white">{user.email}</p>
+              <p className="text-white">{authUser?.email || 'Not provided'}</p>
             </div>
             <div className="flex-col pt-3 justify-between ">
               <p className="text-pink-500 pb-4 font-semibold">User ID</p>
-              <p className="text-white text-sm">{user.id}</p>
+              <p className="text-white text-sm">{authUser?.id || 'Not available'}</p>
             </div>
             <div className="flex-col pt-3 justify-between ">
               <p className="text-pink-500 pb-4 font-semibold">Member Since</p>
-              <p className="text-white">{new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+              <p className="text-white">{profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown'}</p>
             </div>
             <div className="flex-col pt-3 justify-between ">
               <p className="text-pink-500 pb-4 font-semibold">Last Updated</p>
-              <p className="text-white">{new Date(user.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+              <p className="text-white">{profile?.updatedAt ? new Date(profile.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown'}</p>
             </div>
             <div className="flex-col pt-3 justify-between ">
               <p className="text-pink-500 pb-4 font-semibold">Status</p>

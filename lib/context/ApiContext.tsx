@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { apiService } from '../services';
-import { saveAuthTokens, saveUser, getAuthTokens, getUser, clearAuthData } from '../utils';
+import { saveAuthTokens, saveUser, getAuthTokens, getUser, clearAuthData, isAccessTokenExpired } from '../utils';
 import type {
   ApiResponse,
   AuthPayload,
@@ -15,6 +15,7 @@ import type {
   SendOTPPayload,
   ProfilePayload,
   ProfileUpdatePayload,
+  EnrichedProfile,
 } from '../types';
 
 interface ApiState {
@@ -32,7 +33,9 @@ interface ApiContextType extends ApiState {
   sendOTP: (payload: SendOTPPayload) => Promise<ApiResponse<{ message: string }>>;
   loginUser: (phoneNumber: string) => Promise<ApiResponse<User>>;
   loginWithEmail: (email: string, password: string) => Promise<ApiResponse<AuthResponse>>;
+  refreshTokens: () => Promise<ApiResponse<AuthResponse>>;
   getUserProfile: (userId: string) => Promise<ApiResponse<User>>;
+  getEnrichedProfile: (userId: string) => Promise<ApiResponse<EnrichedProfile>>;
   completeBasicDetails: (userId: string, payload: BasicDetailsPayload) => Promise<ApiResponse<AuthResponse>>;
   updateUser: (userId: string, payload: Partial<User>) => Promise<ApiResponse<User>>;
   createProfile: (payload: ProfilePayload) => Promise<ApiResponse<unknown>>;
@@ -129,11 +132,11 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
     }));
     if (tokens) {
       saveAuthTokens(tokens);
-      // Set the auth token in the API service for authenticated requests
-      apiService.setAuthToken(tokens.accessToken);
+      // Set both access and refresh tokens in the API service
+      apiService.setTokens(tokens.accessToken, tokens.refreshToken);
     } else {
-      // Clear the auth token from the API service
-      apiService.clearAuthToken();
+      // Clear all tokens from the API service
+      apiService.clearTokens();
     }
     console.log('[ApiContext] isAuthenticated set to:', !!tokens);
   }, []);
@@ -151,6 +154,7 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
   }, []);
 
   const logout = useCallback(() => {
+    console.log('[ApiContext] Logging out user');
     setState({
       user: null,
       tokens: null,
@@ -159,6 +163,8 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
       error: null
     });
     clearAuthData();
+    // Reset API service authentication state
+    apiService.resetAuth();
   }, []);
 
   const registerUser = useCallback(async (payload: AuthPayload): Promise<ApiResponse<User>> => {
@@ -295,6 +301,41 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
     }
   }, [setLoading, clearError, setUser, setTokens, setError]);
 
+  const refreshTokens = useCallback(async (): Promise<ApiResponse<AuthResponse>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      if (!state.tokens?.refreshToken) {
+        const errorMessage = 'No refresh token available';
+        setError(errorMessage);
+        return { success: false, error: errorMessage };
+      }
+
+      const response = await apiService.refreshAccessToken(state.tokens.refreshToken);
+
+      if (response.success && response.data) {
+        setUser(response.data.user);
+        setTokens(response.data.tokens);
+        console.log('[ApiContext] Tokens refreshed successfully');
+      } else {
+        setError(response.error || 'Token refresh failed');
+        // If refresh fails, logout the user
+        logout();
+      }
+
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Token refresh failed';
+      setError(errorMessage);
+      // If refresh fails, logout the user
+      logout();
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setUser, setTokens, setError, state.tokens?.refreshToken, logout]);
+
   const getUserProfile = useCallback(async (userId: string): Promise<ApiResponse<User>> => {
     setLoading(true);
     clearError();
@@ -317,6 +358,22 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
       setLoading(false);
     }
   }, [setLoading, clearError, setUser, setError]);
+
+  const getEnrichedProfile = useCallback(async (userId: string): Promise<ApiResponse<EnrichedProfile>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.getEnrichedProfile(userId);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch enriched profile';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
 
   const completeBasicDetails = useCallback(async (userId: string, payload: BasicDetailsPayload): Promise<ApiResponse<AuthResponse>> => {
     setLoading(true);
@@ -419,7 +476,9 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
     sendOTP,
     loginUser,
     loginWithEmail,
+    refreshTokens,
     getUserProfile,
+    getEnrichedProfile,
     completeBasicDetails,
     updateUser,
     createProfile,

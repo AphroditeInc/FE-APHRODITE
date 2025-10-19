@@ -12,7 +12,7 @@ import { useApi } from "@/lib/context/ApiContext";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { loginWithEmail, loginUser, isLoading, error } = useApi();
+  const { loginWithEmail, loginUser, isLoading, error, logout } = useApi();
   const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
   const [formData, setFormData] = useState({
     email: "",
@@ -30,15 +30,32 @@ export default function LoginPage() {
     e.preventDefault();
     
     try {
+      // Clear any existing tokens before attempting login
+      console.log('[LoginPage] Clearing existing tokens before login attempt');
+      logout();
+      
+      // Small delay to ensure tokens are cleared
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       if (loginMethod === 'email') {
+        console.log('[LoginPage] Attempting email login for:', formData.email);
         const response = await loginWithEmail(formData.email, formData.password);
         if (response.success) {
+          console.log('[LoginPage] Email login successful');
           router.push("/dashboard");
+        } else {
+          console.error('[LoginPage] Email login failed:', response.error);
         }
       } else {
-        const response = await loginUser(formData.phone);
+        // For phone login, we need to send both phone number and country code with password
+        const phoneWithCode = `${formData.countryCode}${formData.phone}`;
+        console.log('[LoginPage] Attempting phone login for:', phoneWithCode);
+        const response = await loginWithEmail(phoneWithCode, formData.password);
         if (response.success) {
+          console.log('[LoginPage] Phone login successful');
           router.push("/dashboard");
+        } else {
+          console.error('[LoginPage] Phone login failed:', response.error);
         }
       }
     } catch (error) {
@@ -148,31 +165,29 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Password input - only show for email login */}
-        {loginMethod === 'email' && (
-          <div className="relative">
-            <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-            <input
-              type={showPassword ? "text" : "password"}
-              placeholder="Password"
-              value={formData.password}
-              onChange={(e) => handleInputChange("password", e.target.value)}
-              className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/10 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white transition-colors"
-            >
-              {showPassword ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
-            </button>
-          </div>
-        )}
+        {/* Password input - show for both email and phone login */}
+        <div className="relative">
+          <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+          <input
+            type={showPassword ? "text" : "password"}
+            placeholder="Password"
+            value={formData.password}
+            onChange={(e) => handleInputChange("password", e.target.value)}
+            className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/10 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
+            required
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white transition-colors"
+          >
+            {showPassword ? (
+              <EyeOff className="h-5 w-5" />
+            ) : (
+              <Eye className="h-5 w-5" />
+            )}
+          </button>
+        </div>
 
         {/* Remember me and Forgot password */}
         <div className="flex items-center justify-between">

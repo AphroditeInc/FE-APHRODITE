@@ -269,3 +269,50 @@ export interface AuthProfileResponse {
     };
   };
 }
+
+/**
+ * Enriched Profile Data
+ */
+export interface EnrichedProfile {
+  id: string;
+  userId: string;
+  user: {
+    id: string;
+    userName: string;
+    userType: string;
+    firstName: string;
+    lastName: string;
+  };
+  bio: string;
+  education: string;
+  occupation: string;
+  maritalStatus: string;
+  smoker: boolean;
+  hasVideoProof: boolean;
+  issuedIdVerified: boolean;
+  media: string[];
+  services: any[];
+  followersCount: number;
+  createdAt: string;
+  updatedAt: string;
+  pricing: any | null;
+  servicesExpanded: any[];
+  reviews: {
+    items: any[];
+    limit: number;
+    hasMore: boolean;
+    stats: {
+      averageRating: number;
+      totalReviews: number;
+      ratingDistribution: Record<string, number>;
+    };
+  };
+}
+
+/**
+ * Enriched Profile API Response
+ */
+export interface EnrichedProfileResponse {
+  success: boolean;
+  data: EnrichedProfile;
+}

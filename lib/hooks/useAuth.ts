@@ -1,5 +1,6 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useEffect } from 'react';
 import { useApi } from '../context/ApiContext';
+import { isAccessTokenExpired } from '../utils';
 import type { User, AuthTokens } from '../types';
 
 /**
@@ -23,6 +24,7 @@ interface UseAuthReturn {
 
   // Methods
   logout: () => void;
+  refreshTokens: () => Promise<void>;
 
   // User info helpers
   userId: string | null;
@@ -34,6 +36,7 @@ interface UseAuthReturn {
   accessToken: string | null;
   refreshToken: string | null;
   hasValidToken: boolean;
+  isTokenExpired: boolean;
 }
 
 /**
@@ -60,7 +63,7 @@ interface UseAuthReturn {
  * ```
  */
 export const useAuth = (): UseAuthReturn => {
-  const { user, tokens, isAuthenticated, isLoading, logout: logoutFn } = useApi();
+  const { user, tokens, isAuthenticated, isLoading, logout: logoutFn, refreshTokens: refreshTokensFn } = useApi();
 
   /**
    * Memoized logout function
@@ -68,6 +71,17 @@ export const useAuth = (): UseAuthReturn => {
   const logout = useCallback(() => {
     logoutFn();
   }, [logoutFn]);
+
+  /**
+   * Memoized refresh tokens function
+   */
+  const refreshTokens = useCallback(async () => {
+    try {
+      await refreshTokensFn();
+    } catch (error) {
+      console.error('[useAuth] Token refresh failed:', error);
+    }
+  }, [refreshTokensFn]);
 
   /**
    * Memoized user role checks
@@ -91,6 +105,18 @@ export const useAuth = (): UseAuthReturn => {
   const accessToken = useMemo(() => tokens?.accessToken || null, [tokens?.accessToken]);
   const refreshToken = useMemo(() => tokens?.refreshToken || null, [tokens?.refreshToken]);
   const hasValidToken = useMemo(() => !!tokens?.accessToken, [tokens?.accessToken]);
+  const isTokenExpired = useMemo(() => isAccessTokenExpired(tokens), [tokens]);
+
+  /**
+   * Auto-refresh token when it's about to expire
+   * Note: Disabled to prevent infinite loops - token refresh is handled by API service
+   */
+  // useEffect(() => {
+  //   if (isAuthenticated && tokens && isTokenExpired) {
+  //     console.log('[useAuth] Token is expired, attempting refresh...');
+  //     refreshTokens();
+  //   }
+  // }, [isAuthenticated, tokens, isTokenExpired, refreshTokens]);
 
   return {
     // User state
@@ -110,6 +136,7 @@ export const useAuth = (): UseAuthReturn => {
 
     // Methods
     logout,
+    refreshTokens,
 
     // User info helpers
     userId,
@@ -121,6 +148,7 @@ export const useAuth = (): UseAuthReturn => {
     accessToken,
     refreshToken,
     hasValidToken,
+    isTokenExpired,
   };
 };
 

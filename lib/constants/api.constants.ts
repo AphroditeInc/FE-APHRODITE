@@ -31,6 +31,7 @@ export const API_ENDPOINTS = {
 
   PROFILE: {
     CREATE: "/profiles",
+    GET_USER_PROFILE: (userId: string) => `/profiles/user/${userId}`,
     PRICING: (userId: string) => `/profiles/${userId}/pricing`,
     SERVICES: (userId: string) => `/profiles/${userId}/services`,
     VIDEO: (userId: string) => `/profiles/${userId}/video-proof`,

@@ -91,3 +91,47 @@ export const clearAuthData = (): void => {
   removeAuthTokens();
   removeUser();
 };
+
+/**
+ * Check if a token is expired
+ */
+export const isTokenExpired = (token: string): boolean => {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const currentTime = Math.floor(Date.now() / 1000);
+    return payload.exp < currentTime;
+  } catch (error) {
+    console.error('[Storage] Failed to parse token:', error);
+    return true; // Consider invalid tokens as expired
+  }
+};
+
+/**
+ * Check if access token is expired or will expire soon (within 5 minutes)
+ */
+export const isAccessTokenExpired = (tokens: AuthTokens | null): boolean => {
+  if (!tokens?.accessToken) return true;
+  
+  try {
+    const payload = JSON.parse(atob(tokens.accessToken.split('.')[1]));
+    const currentTime = Math.floor(Date.now() / 1000);
+    const bufferTime = 5 * 60; // 5 minutes buffer
+    return payload.exp < (currentTime + bufferTime);
+  } catch (error) {
+    console.error('[Storage] Failed to parse access token:', error);
+    return true;
+  }
+};
+
+/**
+ * Get token expiration time in milliseconds
+ */
+export const getTokenExpirationTime = (token: string): number | null => {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp * 1000; // Convert to milliseconds
+  } catch (error) {
+    console.error('[Storage] Failed to parse token expiration:', error);
+    return null;
+  }
+};
