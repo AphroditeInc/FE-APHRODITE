@@ -17,8 +17,14 @@ export const useAuthProfile = (): AuthProfileState => {
     skip: false, // Always fetch when hook is used
   });
 
-  const user = data?.data?.user || (data as any)?.user || null;
-  const errorMessage = error ? ((error as any)?.data?.message || (error as any)?.message || 'Failed to fetch profile') : null;
+  const user = data?.data?.user || (data && typeof data === 'object' && 'user' in data ? (data as { user: AuthProfileResponse['data']['user'] }).user : null) || null;
+  const errorMessage = error 
+    ? ('data' in error && error.data && typeof error.data === 'object' && 'message' in error.data
+        ? String(error.data.message)
+        : 'message' in error
+          ? String(error.message)
+          : 'Failed to fetch profile')
+    : null;
 
   return {
     user,

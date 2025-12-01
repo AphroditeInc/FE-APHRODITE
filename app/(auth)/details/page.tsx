@@ -242,9 +242,14 @@ function DetailsForm() {
               console.log("Profile updated successfully");
               // Profile updated successfully, redirect to dashboard
               router.push("/dashboard");
-            } catch (error: any) {
+            } catch (error: unknown) {
               console.error("Profile update error:", error);
-              setError(error?.data?.message || error?.message || 'Profile update failed');
+              const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+                ? String(error.data.message)
+                : (error && typeof error === 'object' && 'message' in error)
+                  ? String(error.message)
+                  : 'Profile update failed';
+              setError(errorMessage);
             }
           }
         }
@@ -282,9 +287,14 @@ function DetailsForm() {
               try {
                 await updateProfile(personalDetailsPayload).unwrap();
                 console.log("Personal details updated successfully");
-              } catch (error: any) {
+              } catch (error: unknown) {
                 console.error("Personal details update error:", error);
-                setError(error?.data?.message || error?.message || 'Failed to update personal details');
+                const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+                  ? String(error.data.message)
+                  : (error && typeof error === 'object' && 'message' in error)
+                    ? String(error.message)
+                    : 'Failed to update personal details';
+                setError(errorMessage);
               }
             }
             
@@ -293,9 +303,14 @@ function DetailsForm() {
           }
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to complete registration:", error);
-      setError(error?.data?.message || error?.message || 'Registration failed. Please try again.');
+      const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+        ? String(error.data.message)
+        : (error && typeof error === 'object' && 'message' in error)
+          ? String(error.message)
+          : 'Registration failed. Please try again.';
+      setError(errorMessage);
     }
   };
 

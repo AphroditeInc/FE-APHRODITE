@@ -611,7 +611,7 @@ export default function ProfilePage() {
             ) : (
               <div className="text-center py-12">
                 <div className="text-white/60 text-lg mb-4">No media available</div>
-                <div className="text-white/40 text-sm">This user hasn't uploaded any media yet.</div>
+                <div className="text-white/40 text-sm">This user hasn&apos;t uploaded any media yet.</div>
               </div>
             )}
           </div>

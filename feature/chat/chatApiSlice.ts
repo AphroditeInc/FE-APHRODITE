@@ -2,6 +2,7 @@ import { apiSlice } from "../../app/api/apiSlice";
 import endpoints from "../../app/utils/endpoints";
 
 export const chatApiSlice = apiSlice.injectEndpoints({
+  overrideExisting: true,
   endpoints: (builder) => ({
     sendMessage: builder.mutation({
       query: (data) => ({
@@ -9,6 +10,19 @@ export const chatApiSlice = apiSlice.injectEndpoints({
         method: "POST",
         body: data,
       }),
+      transformResponse: (response: any) => {
+        // Handle API response structure: {success: true, data: {...}} or direct message object
+        if (response && typeof response === 'object') {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          // If response is already a message object (has id, senderId, etc.), return it
+          if (response.id || response.senderId) {
+            return response;
+          }
+        }
+        return response;
+      },
       extraOptions: { serviceKey: "us" },
       invalidatesTags: ['Chat', 'Room'],
     }),
@@ -26,6 +40,23 @@ export const chatApiSlice = apiSlice.injectEndpoints({
           method: "GET",
         };
       },
+      transformResponse: (response: any) => {
+        // Handle API response structure: {success: true, data: [...]} or direct array
+        if (response && typeof response === 'object') {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          // If response is already an array, return it
+          if (Array.isArray(response)) {
+            return response;
+          }
+          // If response has data property that's an array
+          if (Array.isArray(response.data)) {
+            return response.data;
+          }
+        }
+        return response;
+      },
       extraOptions: { serviceKey: "us" },
       providesTags: ['Chat'],
       keepUnusedDataFor: 30,
@@ -36,6 +67,15 @@ export const chatApiSlice = apiSlice.injectEndpoints({
         method: "POST",
         body: data,
       }),
+      transformResponse: (response: any) => {
+        // Handle API response structure: {success: true, data: {...}}
+        if (response && typeof response === 'object') {
+          if (response.success && response.data) {
+            return response.data;
+          }
+        }
+        return response;
+      },
       extraOptions: { serviceKey: "us" },
       invalidatesTags: ['Room'],
     }),
@@ -48,6 +88,23 @@ export const chatApiSlice = apiSlice.injectEndpoints({
           url: `${endpoints.CHAT_ROOMS}?${params.toString()}`,
           method: "GET",
         };
+      },
+      transformResponse: (response: any) => {
+        // Handle API response structure: {success: true, data: [...]}
+        if (response && typeof response === 'object') {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          // If response is already an array, return it
+          if (Array.isArray(response)) {
+            return response;
+          }
+          // If response has data property that's an array
+          if (Array.isArray(response.data)) {
+            return response.data;
+          }
+        }
+        return response;
       },
       extraOptions: { serviceKey: "us" },
       providesTags: ['Room'],
@@ -62,6 +119,23 @@ export const chatApiSlice = apiSlice.injectEndpoints({
           url: `${endpoints.CHAT_CONVERSATIONS}?${params.toString()}`,
           method: "GET",
         };
+      },
+      transformResponse: (response: any) => {
+        // Handle API response structure: {success: true, data: [...]}
+        if (response && typeof response === 'object') {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          // If response is already an array, return it
+          if (Array.isArray(response)) {
+            return response;
+          }
+          // If response has data property that's an array
+          if (Array.isArray(response.data)) {
+            return response.data;
+          }
+        }
+        return response;
       },
       extraOptions: { serviceKey: "us" },
       providesTags: ['Room'],

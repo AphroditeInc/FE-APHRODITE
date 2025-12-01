@@ -19,8 +19,14 @@ export const useEnrichedProfile = (userId: string | null): UseEnrichedProfileRet
     skip: !userId, // Skip if no userId provided
   });
 
-  const profile = data?.data || (data as any) || null;
-  const errorMessage = error ? ((error as any)?.data?.message || (error as any)?.message || 'Failed to fetch profile') : null;
+  const profile = data?.data || (data && typeof data === 'object' ? (data as EnrichedProfile) : null) || null;
+  const errorMessage = error 
+    ? ('data' in error && error.data && typeof error.data === 'object' && 'message' in error.data
+        ? String(error.data.message)
+        : 'message' in error
+          ? String(error.message)
+          : 'Failed to fetch profile')
+    : null;
 
   return {
     profile,

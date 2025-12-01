@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import AuthCard from "@/components/auth/AuthCard";
 import Button from "@/components/button";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default function CreateTestUserPage() {
   const { registerWithEmail, registerUser, isLoading, error } = useApi();
   const router = useRouter();
@@ -27,7 +30,7 @@ export default function CreateTestUserPage() {
   const handleCreateUser = async () => {
     try {
       // Try email registration first
-      let response = await registerWithEmail({
+      const emailResponse = await registerWithEmail({
         email: formData.email,
         password: formData.password,
         firstName: formData.firstName,
@@ -38,24 +41,32 @@ export default function CreateTestUserPage() {
       });
 
       // If email registration fails (404 or other error), try phone registration
-      if (!response.success) {
+      if (!emailResponse.success) {
         console.log("Email registration failed, trying phone registration endpoint...");
         // Use phone registration endpoint as fallback
-        response = await registerUser({
+        const phoneResponse = await registerUser({
           userType: formData.userType,
           countryCode: "+1",
           phoneNumber: `1${Date.now().toString().slice(-10)}`, // Generate unique phone number
         });
-      }
 
-      if (response.success && response.data) {
+        if (phoneResponse.success && phoneResponse.data) {
+          setCreatedUser({
+            id: phoneResponse.data.id,
+            email: formData.email,
+          });
+          console.log("Test user created:", phoneResponse.data);
+        } else {
+          console.error("Registration failed:", phoneResponse.error);
+        }
+      } else if (emailResponse.success && emailResponse.data) {
         setCreatedUser({
-          id: response.data.id || response.data.user?.id,
+          id: emailResponse.data.user?.id || '',
           email: formData.email,
         });
-        console.log("Test user created:", response.data);
+        console.log("Test user created:", emailResponse.data);
       } else {
-        console.error("Registration failed:", response.error);
+        console.error("Registration failed:", emailResponse.error);
       }
     } catch (err) {
       console.error("Failed to create test user:", err);
@@ -118,8 +129,8 @@ export default function CreateTestUserPage() {
               <p className="text-blue-400 text-sm font-medium mb-2">How to Test Chat:</p>
               <ol className="text-gray-300 text-xs space-y-1 list-decimal list-inside">
                 <li>Copy the User ID above</li>
-                <li>Go to your main account's chat page</li>
-                <li>Click "New Chat" button</li>
+                <li>Go to your main account&apos;s chat page</li>
+                <li>Click &quot;New Chat&quot; button</li>
                 <li>Paste the User ID and start chatting</li>
               </ol>
             </div>

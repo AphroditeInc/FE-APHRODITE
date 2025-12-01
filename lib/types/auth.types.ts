@@ -272,6 +272,52 @@ export interface AuthProfileResponse {
 }
 
 /**
+ * Service Interface
+ */
+export interface Service {
+  id?: string;
+  name?: string;
+  description?: string;
+  price?: number;
+  duration?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Pricing Interface
+ */
+export interface Pricing {
+  shortTime?: {
+    incall?: string | number;
+    outcall?: string | number;
+  };
+  overnight?: {
+    incall?: string | number;
+    outcall?: string | number;
+  };
+  weekend?: {
+    incall?: string | number;
+    outcall?: string | number;
+  };
+  custom?: {
+    price?: string | number;
+  };
+  [key: string]: unknown;
+}
+
+/**
+ * Review Item Interface
+ */
+export interface ReviewItem {
+  id?: string;
+  userId?: string;
+  rating?: number;
+  comment?: string;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
+/**
  * Enriched Profile Data
  */
 export interface EnrichedProfile {
@@ -292,14 +338,14 @@ export interface EnrichedProfile {
   hasVideoProof: boolean;
   issuedIdVerified: boolean;
   media: string[];
-  services: any[];
+  services: Service[];
   followersCount: number;
   createdAt: string;
   updatedAt: string;
-  pricing: any | null;
-  servicesExpanded: any[];
+  pricing: Pricing | null;
+  servicesExpanded: Service[];
   reviews: {
-    items: any[];
+    items: ReviewItem[];
     limit: number;
     hasMore: boolean;
     stats: {

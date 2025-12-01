@@ -30,6 +30,74 @@ import {
 import { apiService } from "@/lib/services";
 import type { ChatRoom, ChatMessage } from "@/lib/types";
 
+// Type definitions for API responses
+interface ConversationParticipant {
+  _id?: string;
+  id?: string;
+  userId?: string;
+  name?: string;
+  firstName?: string;
+  username?: string;
+}
+
+interface ConversationSender {
+  _id: string;
+  name?: string;
+}
+
+interface ConversationReceiver {
+  _id: string;
+  name?: string;
+}
+
+interface ConversationLastMessage {
+  _id?: string;
+  id?: string;
+  senderId: string;
+  receiverId: string;
+  roomId?: string;
+  content: string;
+  type: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  metadata?: Record<string, unknown>;
+  attachments?: string[];
+  readAt?: string;
+  deliveredAt?: string;
+  replyTo?: string;
+}
+
+interface ConversationResponse {
+  roomId?: string;
+  _id?: string;
+  id?: string;
+  type?: string;
+  sender?: ConversationSender;
+  receiver?: ConversationReceiver;
+  participants?: (string | ConversationParticipant)[];
+  createdAt?: string;
+  updatedAt?: string;
+  lastMessage?: ConversationLastMessage;
+  unreadCount?: number;
+}
+
+interface MessagesResponse {
+  messages?: ChatMessage[];
+  data?: ChatMessage[];
+  items?: ChatMessage[];
+}
+
+interface Participant {
+  id?: string;
+  _id?: string;
+  userId?: string;
+  name?: string;
+  firstName?: string;
+  username?: string;
+  [key: string]: unknown;
+}
+
 interface Message {
   id: string;
   sender: "me" | "other";
@@ -99,59 +167,95 @@ export default function MessagesPage() {
 
   // Convert API data to component state
   const rooms = useMemo(() => {
-    if (!conversationsData) return [];
+    if (!conversationsData) {
+      console.log('[MessagesPage] No conversationsData yet');
+      return [];
+    }
+    
+    console.log('[MessagesPage] conversationsData:', conversationsData);
     
     // Handle different response structures
-    const conversationsArray = Array.isArray(conversationsData) 
+    const conversationsArray: ConversationResponse[] = Array.isArray(conversationsData) 
       ? conversationsData 
-      : (conversationsData as any)?.data || [];
+      : (conversationsData && typeof conversationsData === 'object' && 'data' in conversationsData && Array.isArray((conversationsData as { data: ConversationResponse[] }).data))
+        ? (conversationsData as { data: ConversationResponse[] }).data
+        : [];
     
-    if (!Array.isArray(conversationsArray)) return [];
+    if (!Array.isArray(conversationsArray)) {
+      console.warn('[MessagesPage] conversationsArray is not an array:', conversationsArray);
+      return [];
+    }
+    
+    console.log('[MessagesPage] Processing', conversationsArray.length, 'conversations');
     
     // Transform conversations to ChatRoom format
-    return conversationsArray.map((conv: any) => {
+    // Handle both formats: conversations (with sender/receiver) and rooms (with participants array)
+    const filteredRooms = conversationsArray.map((conv: ConversationResponse) => {
       const roomId = conv.roomId || conv._id || conv.id;
       if (!roomId) return null;
 
       const participants: string[] = [];
+      
+      // Handle conversations format (has sender/receiver)
       if (conv.sender && conv.sender._id) {
         participants.push(conv.sender._id);
       }
       if (conv.receiver && conv.receiver._id) {
         participants.push(conv.receiver._id);
       }
+      
+      // Handle room format (has participants array with userId)
+      if (conv.participants && Array.isArray(conv.participants)) {
+        conv.participants.forEach((p: string | ConversationParticipant) => {
+          const participantId = typeof p === 'string' 
+            ? p 
+            : (p.userId || p._id || p.id);
+          if (participantId && typeof participantId === 'string' && !participants.includes(participantId)) {
+            participants.push(participantId);
+          }
+        });
+      }
 
       let lastMessage: ChatMessage | undefined;
       if (conv.lastMessage) {
-        lastMessage = {
-          id: conv.lastMessage._id || conv.lastMessage.id,
-          senderId: conv.lastMessage.senderId,
-          receiverId: conv.lastMessage.receiverId,
-          roomId: conv.lastMessage.roomId || roomId,
-          content: conv.lastMessage.content,
-          type: conv.lastMessage.type,
-          status: conv.lastMessage.status,
-          createdAt: conv.lastMessage.createdAt,
-          updatedAt: conv.lastMessage.updatedAt,
-          metadata: conv.lastMessage.metadata,
-          attachments: conv.lastMessage.attachments,
-          readAt: conv.lastMessage.readAt,
-          deliveredAt: conv.lastMessage.deliveredAt,
-          replyTo: conv.lastMessage.replyTo,
-        };
+        const messageId = conv.lastMessage._id || conv.lastMessage.id;
+        // Only create lastMessage if we have a valid id
+        if (messageId && typeof messageId === 'string') {
+          lastMessage = {
+            id: messageId,
+            senderId: conv.lastMessage.senderId,
+            receiverId: conv.lastMessage.receiverId,
+            roomId: conv.lastMessage.roomId || roomId,
+            content: conv.lastMessage.content,
+            type: conv.lastMessage.type as ChatMessage['type'],
+            status: conv.lastMessage.status as ChatMessage['status'],
+            createdAt: conv.lastMessage.createdAt,
+            updatedAt: conv.lastMessage.updatedAt,
+            metadata: conv.lastMessage.metadata,
+            attachments: conv.lastMessage.attachments,
+            readAt: conv.lastMessage.readAt,
+            deliveredAt: conv.lastMessage.deliveredAt,
+            replyTo: conv.lastMessage.replyTo,
+          };
+        }
       }
 
-      return {
+      const chatRoom: ChatRoom = {
         id: roomId,
         roomId: roomId,
-        type: conv.type || 'direct',
+        type: (conv.type as ChatRoom['type']) || 'direct',
         participants: participants,
         createdAt: conv.createdAt || new Date().toISOString(),
         updatedAt: conv.updatedAt || new Date().toISOString(),
         lastMessage: lastMessage,
         unreadCount: conv.unreadCount || 0,
-      } as ChatRoom;
+      };
+      
+      return chatRoom;
     }).filter((room): room is ChatRoom => room !== null);
+    
+    console.log('[MessagesPage] Transformed', filteredRooms.length, 'rooms');
+    return filteredRooms;
   }, [conversationsData]);
 
   const messages = useMemo(() => {
@@ -163,17 +267,19 @@ export default function MessagesPage() {
     if (Array.isArray(messagesData)) {
       messagesArray = messagesData;
     } else if (messagesData && typeof messagesData === 'object') {
-      if (Array.isArray((messagesData as any).messages)) {
-        messagesArray = (messagesData as any).messages;
-      } else if (Array.isArray((messagesData as any).data)) {
-        messagesArray = (messagesData as any).data;
-      } else if (Array.isArray((messagesData as any).items)) {
-        messagesArray = (messagesData as any).items;
+      const messagesResponse = messagesData as MessagesResponse;
+      if (Array.isArray(messagesResponse.messages)) {
+        messagesArray = messagesResponse.messages;
+      } else if (Array.isArray(messagesResponse.data)) {
+        messagesArray = messagesResponse.data;
+      } else if (Array.isArray(messagesResponse.items)) {
+        messagesArray = messagesResponse.items;
       }
     }
     
+    // Create a copy of the array before sorting (RTK Query returns frozen arrays)
     // Sort messages by createdAt (oldest first)
-    return messagesArray.sort((a, b) => {
+    return [...messagesArray].sort((a, b) => {
       const dateA = new Date(a.createdAt).getTime();
       const dateB = new Date(b.createdAt).getTime();
       return dateA - dateB;
@@ -182,7 +288,13 @@ export default function MessagesPage() {
 
   const loading = loadingRooms || loadingMessages;
   const messagesLoading = loadingMessages;
-  const apiError = roomsError ? ((roomsError as any)?.data?.message || (roomsError as any)?.message || 'Failed to fetch conversations') : null;
+  const apiError = roomsError 
+    ? ('data' in roomsError && roomsError.data && typeof roomsError.data === 'object' && 'message' in roomsError.data 
+        ? String(roomsError.data.message)
+        : 'message' in roomsError 
+          ? String(roomsError.message)
+          : 'Failed to fetch conversations')
+    : null;
   
   // Local state for UI
   const [localError, setLocalError] = useState<string | null>(null);
@@ -192,7 +304,7 @@ export default function MessagesPage() {
   const [participantNames, setParticipantNames] = useState<Map<string, string>>(new Map());
   
   // Combined error state
-  const error = apiError || localError;
+  const error: string | null = apiError || localError;
   const setError = setLocalError;
 
   // Validate MongoDB ObjectId format (24 hex characters)
@@ -201,7 +313,7 @@ export default function MessagesPage() {
   };
 
   // Helper to safely extract participant ID (handles both strings and objects)
-  const extractParticipantId = (participant: any): string | null => {
+  const extractParticipantId = (participant: string | Participant | null | undefined): string | null => {
     // Handle null/undefined
     if (participant === null || participant === undefined) {
       return null;
@@ -235,7 +347,8 @@ export default function MessagesPage() {
         }
         // If id is another object, try to extract from it (nested)
         if (typeof id === 'object' && id !== null) {
-          const nestedId = id.id || id._id;
+          const nestedObj = id as { id?: string | number; _id?: string | number };
+          const nestedId = nestedObj.id || nestedObj._id;
           if (nestedId && typeof nestedId === 'string' && nestedId !== '[object Object]') {
             return nestedId;
           }
@@ -318,17 +431,30 @@ export default function MessagesPage() {
       console.log('Room created successfully:', result);
       
       if (result) {
-        const roomData = (result as any).data || result;
-        setSelectedChat(roomData.id);
-        router.replace('/chat');
-        // Refetch rooms to get the new room
-        refetchRooms();
+        const roomData = (result && typeof result === 'object' && 'data' in result) 
+          ? (result as { data: { roomId?: string; id?: string; _id?: string } }).data 
+          : (result as { roomId?: string; id?: string; _id?: string });
+        // Use roomId from the response (API returns roomId, not id)
+        const roomId = roomData.roomId || roomData.id || roomData._id;
+        console.log('Setting selected chat to roomId:', roomId);
+        if (roomId) {
+          setSelectedChat(roomId);
+          router.replace('/chat');
+          // Refetch rooms to get the new room - RTK Query should auto-refetch due to invalidatesTags
+          refetchRooms();
+        } else {
+          console.error('No roomId found in response:', roomData);
+        }
       }
       
       setProcessingUserId(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error creating room:', err);
-      const errorMsg = err?.data?.message || err?.message || 'An error occurred while creating the chat room.';
+      const errorMsg = (err && typeof err === 'object' && 'data' in err && err.data && typeof err.data === 'object' && 'message' in err.data)
+        ? String(err.data.message)
+        : (err && typeof err === 'object' && 'message' in err)
+          ? String(err.message)
+          : 'An error occurred while creating the chat room.';
       
       // Check if error is about invalid MongoDB ObjectId
       if (errorMsg.includes('mongodb id') || errorMsg.includes('ObjectId')) {
@@ -345,12 +471,23 @@ export default function MessagesPage() {
   useEffect(() => {
     if (conversationsData && Array.isArray(conversationsData)) {
       const namesToAdd = new Map<string, string>();
-      conversationsData.forEach((conv: any) => {
+      conversationsData.forEach((conv: ConversationResponse) => {
+        // Handle conversations format (sender/receiver)
         if (conv.sender && conv.sender._id && conv.sender.name) {
           namesToAdd.set(conv.sender._id, conv.sender.name);
         }
         if (conv.receiver && conv.receiver._id && conv.receiver.name) {
           namesToAdd.set(conv.receiver._id, conv.receiver.name);
+        }
+        // Handle room format (participants array)
+        if (conv.participants && Array.isArray(conv.participants)) {
+          conv.participants.forEach((p: string | ConversationParticipant) => {
+            const participantId = typeof p === 'string' ? p : (p.userId || p._id || p.id);
+            const participantName = typeof p === 'object' && p !== null ? (p.name || p.firstName || p.username) : null;
+            if (participantId && typeof participantId === 'string' && participantName && typeof participantName === 'string') {
+              namesToAdd.set(participantId, participantName);
+            }
+          });
         }
       });
       
@@ -437,7 +574,7 @@ export default function MessagesPage() {
   }, [selectedChat, markRoomAsReadMutation]);
 
   // Fetch participant names for a user ID (using apiService for now, can be moved to RTK Query later)
-  const fetchParticipantName = async (participantId: string | any): Promise<string | null> => {
+  const fetchParticipantName = async (participantId: string | Participant): Promise<string | null> => {
     const normalizedId = extractParticipantId(participantId);
 
     if (!normalizedId || typeof normalizedId !== 'string' || normalizedId === '[object Object]') {
@@ -519,21 +656,27 @@ export default function MessagesPage() {
       }).unwrap();
 
       if (result) {
+        // transformResponse already extracted the data, so result is the message object
         const sentMessage = {
-          ...((result as any).data || result),
-          senderId: currentUserId,
+          ...result,
+          senderId: currentUserId, // Ensure senderId is set correctly
         };
         
         console.log('Message sent successfully:', sentMessage);
         setMessageInput('');
         
         // RTK Query will automatically refetch messages and rooms due to invalidatesTags
+        // But we can also manually refetch to ensure immediate update
         refetchMessages();
         refetchRooms();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error sending message:', err);
-      const errorMsg = err?.data?.message || err?.message || 'Failed to send message';
+      const errorMsg = (err && typeof err === 'object' && 'data' in err && err.data && typeof err.data === 'object' && 'message' in err.data)
+        ? String(err.data.message)
+        : (err && typeof err === 'object' && 'message' in err)
+          ? String(err.message)
+          : 'Failed to send message';
       console.error('Failed to send message:', errorMsg);
     }
   };
@@ -720,10 +863,24 @@ export default function MessagesPage() {
   const convertToUIMessage = (apiMessage: ChatMessage): Message => {
     const currentUserId = userId || user?.id || fallbackUserId;
     
-    // Normalize IDs to strings for comparison
-    const senderIdStr = String(apiMessage.senderId || '').trim();
-    const currentUserIdStr = String(currentUserId || '').trim();
-    const isOwn = senderIdStr === currentUserIdStr && senderIdStr !== '';
+    // Normalize IDs to strings for comparison - handle both ObjectId and string formats
+    const normalizeId = (id: string | { _id?: string; id?: string } | null | undefined): string => {
+      if (!id) return '';
+      // If it's already a string, return it trimmed
+      if (typeof id === 'string') return id.trim();
+      // If it's an object with _id or id property, extract it
+      if (typeof id === 'object' && id !== null) {
+        return String(id._id || id.id || '').trim();
+      }
+      // Otherwise convert to string
+      return String(id).trim();
+    };
+    
+    const senderIdStr = normalizeId(apiMessage.senderId);
+    const currentUserIdStr = normalizeId(currentUserId);
+    
+    // Compare normalized IDs
+    const isOwn = senderIdStr !== '' && currentUserIdStr !== '' && senderIdStr === currentUserIdStr;
     
     // Debug logging for message conversion
     console.log('convertToUIMessage:', {
@@ -747,6 +904,8 @@ export default function MessagesPage() {
   };
 
   const renderMessage = (message: Message) => {
+    const isOwnMessage = message.sender === "me";
+    
     if (message.type === "pricing" && message.pricing) {
       return (
         <div className="space-y-3">
@@ -797,28 +956,40 @@ export default function MessagesPage() {
 
     if (message.type === "audio") {
       return (
-        <div className="flex items-center gap-3 bg-white rounded-lg p-3 max-w-xs">
-          <button className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-            <Play className="h-4 w-4 text-gray-600" />
+        <div className={`flex items-center gap-3 rounded-lg p-3 max-w-xs ${
+          isOwnMessage ? "bg-white" : "bg-[#FA266D]"
+        }`}>
+          <button className={`w-8 h-8 rounded-full flex items-center justify-center ${
+            isOwnMessage ? "bg-gray-200" : "bg-white/20"
+          }`}>
+            <Play className={`h-4 w-4 ${isOwnMessage ? "text-gray-600" : "text-white"}`} />
           </button>
           <div className="flex-1">
-            <div className="w-32 h-2 bg-gray-300 rounded-full"></div>
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
+            <div className={`w-32 h-2 rounded-full ${
+              isOwnMessage ? "bg-gray-300" : "bg-white/30"
+            }`}></div>
+            <div className={`flex justify-between text-xs mt-1 ${
+              isOwnMessage ? "text-gray-500" : "text-white/80"
+            }`}>
               <span>{message.duration}</span>
               <span>01:25</span>
             </div>
           </div>
-          <div className="flex items-center gap-1">
-            <CheckCheck className="h-3 w-3 text-blue-500" />
-            <span className="text-xs text-gray-500">Sent</span>
-          </div>
+          {isOwnMessage && (
+            <div className="flex items-center gap-1">
+              <CheckCheck className="h-3 w-3 text-blue-500" />
+              <span className="text-xs text-gray-500">Sent</span>
+            </div>
+          )}
         </div>
       );
     }
 
     if (message.type === "video") {
       return (
-        <div className="bg-white rounded-lg p-2 max-w-xs">
+        <div className={`rounded-lg p-2 max-w-xs ${
+          isOwnMessage ? "bg-white" : "bg-[#FA266D]/10"
+        }`}>
           <div
             className="relative cursor-pointer"
             onClick={() =>
@@ -836,9 +1007,13 @@ export default function MessagesPage() {
               {message.duration}
             </div>
           </div>
-          <div className="flex items-center justify-between mt-2">
-            <span className="text-xs text-gray-500">{message.timestamp}</span>
-            <CheckCheck className="h-3 w-3 text-blue-500" />
+          <div className={`flex items-center justify-between mt-2 ${
+            isOwnMessage ? "justify-end" : "justify-start"
+          }`}>
+            <span className={`text-xs ${
+              isOwnMessage ? "text-gray-500" : "text-white/80"
+            }`}>{message.timestamp}</span>
+            {isOwnMessage && <CheckCheck className="h-3 w-3 text-blue-500" />}
           </div>
         </div>
       );
@@ -846,7 +1021,9 @@ export default function MessagesPage() {
 
     if (message.type === "image") {
       return (
-        <div className="bg-white rounded-lg p-2 max-w-xs">
+        <div className={`rounded-lg p-2 max-w-xs ${
+          isOwnMessage ? "bg-white" : "bg-[#FA266D]/10"
+        }`}>
           <div
             className="relative cursor-pointer"
             onClick={() =>
@@ -859,15 +1036,17 @@ export default function MessagesPage() {
               className="w-48 h-32 object-cover rounded-lg hover:opacity-90 transition-opacity"
             />
           </div>
-          <div className="flex items-center justify-between mt-2">
-            <span className="text-xs text-gray-500">{message.timestamp}</span>
-            <CheckCheck className="h-3 w-3 text-blue-500" />
+          <div className={`flex items-center justify-between mt-2 ${
+            isOwnMessage ? "justify-end" : "justify-start"
+          }`}>
+            <span className={`text-xs ${
+              isOwnMessage ? "text-gray-500" : "text-white/80"
+            }`}>{message.timestamp}</span>
+            {isOwnMessage && <CheckCheck className="h-3 w-3 text-blue-500" />}
           </div>
         </div>
       );
     }
-
-    const isOwnMessage = message.sender === "me";
     
     return (
       <div

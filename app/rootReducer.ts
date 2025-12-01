@@ -1,4 +1,4 @@
-import { combineReducers } from "@reduxjs/toolkit";
+import { combineReducers, AnyAction } from "@reduxjs/toolkit";
 import { apiSlice } from "./api/apiSlice";
 import authReducer from "../feature/authentication/authSlice";
 
@@ -9,7 +9,7 @@ const appReducer = combineReducers({
 });
 
 // Create the root reducer that will handle resetting on sign-out
-const rootReducer = (state: any, action: any) => {
+const rootReducer = (state: ReturnType<typeof appReducer> | undefined, action: AnyAction) => {
   if (action.type === "auth/logOut") {
     // Reset all state on sign-out by setting state to `undefined`
     state = undefined;

@@ -10,7 +10,6 @@ import facebook from "../../../public/icons/facebook.svg";
 import { Phone, Mail } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRegisterUserMutation, useRegisterWithEmailMutation } from "@/feature/authentication/authApiSlice";
-import { useState } from "react";
 
 function SignUpForm() {
   const router = useRouter();
@@ -114,9 +113,14 @@ function SignUpForm() {
           );
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Registration failed:", error);
-      setError(error?.data?.message || error?.message || 'Registration failed. Please try again.');
+      const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+        ? String(error.data.message)
+        : (error && typeof error === 'object' && 'message' in error)
+          ? String(error.message)
+          : 'Registration failed. Please try again.';
+      setError(errorMessage);
     }
   };
 
