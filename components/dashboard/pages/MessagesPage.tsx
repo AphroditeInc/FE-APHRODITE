@@ -17,22 +17,11 @@ import {
   X,
   Briefcase,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks";
 import { apiService } from "@/lib/services";
-import type { ChatRoom, ChatMessage } from "@/lib/types";
-
-interface Chat {
-  id: string;
-  name: string;
-  username: string;
-  lastMessage: string;
-  timestamp: string;
-  avatar: string;
-  avatarBg: string;
-  isRead: boolean;
-  isOnline: boolean;
-}
+import type { ChatRoom, ChatMessage, GetMessagesQuery } from "@/lib/types";
 
 interface Message {
   id: string;
@@ -48,191 +37,32 @@ interface Message {
   };
 }
 
-const mockChats: Chat[] = [
-  {
-    id: "1",
-    name: "Jakob Saris",
-    username: "@jakob01",
-    lastMessage: "You: Sure! let me tell you about w...",
-    timestamp: "01:25",
-    avatar: "J",
-    avatarBg: "bg-orange-500",
-    isRead: true,
-    isOnline: false,
-  },
-  {
-    id: "2",
-    name: "Jared",
-    username: "@jared01",
-    lastMessage: "Check me out 🥰, let me know if you like what you see",
-    timestamp: "12:25",
-    avatar: "J",
-    avatarBg: "bg-white",
-    isRead: true,
-    isOnline: true,
-  },
-  {
-    id: "3",
-    name: "Jared",
-    lastMessage: "You: Sure! let me tell you about w...",
-    timestamp: "01:25",
-    avatar: "J",
-    avatarBg: "bg-white",
-    isRead: true,
-    isOnline: false,
-    username: "@jared01",
-  },
-  {
-    id: "4",
-    name: "Jared",
-    lastMessage: "You: Sure! let me tell you about w...",
-    timestamp: "01:25",
-    avatar: "J",
-    avatarBg: "bg-white",
-    isRead: true,
-    isOnline: false,
-    username: "@jared01",
-  },
-  {
-    id: "5",
-    name: "Jared",
-    lastMessage: "You: Sure! let me tell you about w...",
-    timestamp: "01:25",
-    avatar: "J",
-    avatarBg: "bg-white",
-    isRead: true,
-    isOnline: false,
-    username: "@jared01",
-  },
-  {
-    id: "6",
-    name: "Jared",
-    lastMessage: "You: Sure! let me tell you about w...",
-    timestamp: "01:25",
-    avatar: "J",
-    avatarBg: "bg-white",
-    isRead: true,
-    isOnline: false,
-    username: "@jared01",
-  },
-  {
-    id: "7",
-    name: "Jared",
-    lastMessage: "You: Sure! let me tell you about w...",
-    timestamp: "01:25",
-    avatar: "J",
-    avatarBg: "bg-white",
-    isRead: true,
-    isOnline: false,
-    username: "@jared01",
-  },
-  {
-    id: "8",
-    name: "Jared",
-    lastMessage: "You: Sure! let me tell you about w...",
-    timestamp: "01:25",
-    avatar: "J",
-    avatarBg: "bg-white",
-    isRead: true,
-    isOnline: false,
-    username: "@jared01",
-  },
-  {
-    id: "9",
-    name: "Jared",
-    lastMessage: "You: Sure! let me tell you about w...",
-    timestamp: "01:25",
-    avatar: "J",
-    avatarBg: "bg-white",
-    isRead: true,
-    isOnline: false,
-    username: "@jared01",
-  },
-  {
-    id: "10",
-    name: "Jared",
-    lastMessage: "You: Sure! let me tell you about w...",
-    timestamp: "01:25",
-    avatar: "J",
-    avatarBg: "bg-white",
-    isRead: true,
-    isOnline: false,
-    username: "@jared01",
-  },
-];
-
-const mockMessages: Message[] = [
-  {
-    id: "1",
-    sender: "me",
-    type: "audio",
-    content: "Audio message",
-    timestamp: "12:25",
-    duration: "02:12",
-  },
-  {
-    id: "2",
-    sender: "me",
-    type: "text",
-    content: "I like what I'm seeing already baby 🥰",
-    timestamp: "12:25",
-  },
-  {
-    id: "3",
-    sender: "me",
-    type: "text",
-    content:
-      "Can't wait to hit that coochie 🍆🍑 What's your rate for ST and overnight dear 😉",
-    timestamp: "12:25",
-  },
-  {
-    id: "4",
-    sender: "other",
-    type: "video",
-    content: "Video message",
-    timestamp: "12:25",
-    duration: "00:25",
-    videoThumbnail: "/api/placeholder/200/150",
-  },
-  {
-    id: "5",
-    sender: "other",
-    type: "text",
-    content:
-      "Check me out 🥰, let me know if you like what you see Trust me, I will do you well 😈💋",
-    timestamp: "12:25",
-  },
-  {
-    id: "6",
-    sender: "other",
-    type: "pricing",
-    content: "Pricing options",
-    timestamp: "12:25",
-    pricing: {
-      shortTime: { incall: "50,000.00 APH", outcall: "70,000.00 APH" },
-      overnight: { incall: "70,000.00 APH", outcall: "100,000.00 APH" },
-    },
-  },
-  {
-    id: "7",
-    sender: "other",
-    type: "text",
-    content: "Let me know the one you want before you proceed to pay",
-    timestamp: "12:25",
-  },
-  {
-    id: "8",
-    sender: "me",
-    type: "image",
-    content: "Image message",
-    timestamp: "12:30",
-    videoThumbnail: "/api/placeholder/400/300",
-  },
-];
-
 export default function MessagesPage() {
-  const { user } = useAuth();
-  const [selectedChat, setSelectedChat] = useState<string | null>("2");
+  const { user, userId, isLoading: authLoading, isAuthenticated, tokens } = useAuth();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  // Fallback: Try to get user ID from localStorage if not in context
+  const [fallbackUserId, setFallbackUserId] = useState<string | null>(null);
+  
+  useEffect(() => {
+    if (!userId && !user?.id && isAuthenticated) {
+      // Try to get user from localStorage as fallback
+      try {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          if (parsedUser?.id) {
+            console.log('Found user ID in localStorage:', parsedUser.id);
+            setFallbackUserId(parsedUser.id);
+          }
+        }
+      } catch (err) {
+        console.error('Error reading user from localStorage:', err);
+      }
+    }
+  }, [userId, user?.id, isAuthenticated]);
+  const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [modalContent, setModalContent] = useState<{
     type: "video" | "image";
@@ -241,41 +71,449 @@ export default function MessagesPage() {
   } | null>(null);
   const [showPricingDialog, setShowPricingDialog] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [showNewChatDialog, setShowNewChatDialog] = useState(false);
+  const [newChatUserId, setNewChatUserId] = useState("");
   
   // API Integration States
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [profileName, setProfileName] = useState<string | null>(null);
+  const [processingUserId, setProcessingUserId] = useState<string | null>(null);
+  const [invalidUserIds, setInvalidUserIds] = useState<Set<string>>(new Set());
+  const [participantNames, setParticipantNames] = useState<Map<string, string>>(new Map());
+
+  // Validate MongoDB ObjectId format (24 hex characters)
+  const isValidMongoObjectId = (id: string): boolean => {
+    return /^[0-9a-fA-F]{24}$/.test(id);
+  };
+
+  // Helper to safely extract participant ID (handles both strings and objects)
+  const extractParticipantId = (participant: any): string | null => {
+    // Handle null/undefined
+    if (participant === null || participant === undefined) {
+      return null;
+    }
+
+    // Handle string directly
+    if (typeof participant === 'string') {
+      // Validate it's not the object string representation
+      if (participant === '[object Object]' || participant.trim() === '') {
+        return null;
+      }
+      return participant;
+    }
+
+    // Handle objects - NEVER convert to string directly as it becomes [object Object]
+    if (participant && typeof participant === 'object') {
+      // Try to get id or _id property
+      const id = participant.id || participant._id;
+      
+      if (id !== null && id !== undefined) {
+        // If id is a string, validate and return
+        if (typeof id === 'string') {
+          if (id === '[object Object]' || id.trim() === '') {
+            return null;
+          }
+          return id;
+        }
+        // If id is a number, convert to string
+        if (typeof id === 'number' && !isNaN(id)) {
+          return String(id);
+        }
+        // If id is another object, try to extract from it (nested)
+        if (typeof id === 'object' && id !== null) {
+          const nestedId = id.id || id._id;
+          if (nestedId && typeof nestedId === 'string' && nestedId !== '[object Object]') {
+            return nestedId;
+          }
+          if (nestedId && typeof nestedId === 'number' && !isNaN(nestedId)) {
+            return String(nestedId);
+          }
+        }
+      }
+      
+      // If we can't extract a valid ID from the object, return null
+      // DO NOT convert object to string as it becomes [object Object]
+      return null;
+    }
+
+    // Handle numbers
+    if (typeof participant === 'number' && !isNaN(participant)) {
+      return String(participant);
+    }
+
+    // Handle booleans
+    if (typeof participant === 'boolean') {
+      return null; // Booleans don't make sense as IDs
+    }
+
+    // Last resort: try to convert to string, but validate it's not [object Object]
+    // This should only happen for primitives
+    try {
+      // Only convert if it's not an object
+      if (typeof participant !== 'object') {
+        const str = String(participant);
+        if (str === '[object Object]' || str.trim() === '') {
+          return null;
+        }
+        return str;
+      }
+      // If it's an object and we got here, we couldn't extract an ID
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Create room function
+  const createRoomWithUser = useCallback(async (targetUserId: string) => {
+    const currentUserId = userId || user?.id || fallbackUserId;
+    
+    if (!currentUserId) {
+      console.error('Cannot create room: user not loaded');
+      throw new Error('User not loaded. Please log in.');
+    }
+
+    // Validate MongoDB ObjectId format
+    if (!isValidMongoObjectId(targetUserId)) {
+      const errorMsg = `Invalid user ID format. The user ID "${targetUserId}" is not a valid MongoDB ObjectId. Please use a valid user ID (24-character hex string).`;
+      console.error(errorMsg);
+      setError(errorMsg);
+      setInvalidUserIds(prev => new Set(prev).add(targetUserId));
+      // Clear query params to prevent retries
+      router.replace('/chat');
+      throw new Error(errorMsg);
+    }
+
+    // Check if this ID was already marked as invalid
+    if (invalidUserIds.has(targetUserId)) {
+      console.log('Skipping invalid userId:', targetUserId);
+      router.replace('/chat');
+      return;
+    }
+
+    if (processingUserId === targetUserId) {
+      console.log('Already processing this userId, skipping...');
+      return; // Prevent duplicate calls
+    }
+
+    setProcessingUserId(targetUserId);
+    console.log('Creating room with targetUserId:', targetUserId, 'current user:', currentUserId);
+
+    try {
+      const response = await apiService.createRoom({
+        type: 'direct',
+        participants: [currentUserId, targetUserId],
+      });
+
+      console.log('Create room API response:', response);
+
+      if (response.success && response.data) {
+        console.log('Room created successfully:', response.data);
+        // Add the new room to the list
+        setRooms(prev => {
+          // Check if room already exists to avoid duplicates
+          const exists = prev.some(r => r.id === response.data!.id);
+          if (exists) {
+            console.log('Room already in list, updating...');
+            return prev.map(r => r.id === response.data!.id ? response.data! : r);
+          }
+          return [...prev, response.data!];
+        });
+        setSelectedChat(response.data.id);
+        // Remove query parameter from URL
+        router.replace('/chat');
+        setProcessingUserId(null);
+      } else {
+        console.error('Failed to create room:', response.error);
+        const errorMsg = response.error || 'Failed to create chat room. Please try again.';
+        
+        // Check if error is about invalid MongoDB ObjectId
+        const errorString = Array.isArray(response.error) 
+          ? response.error.join(', ') 
+          : String(response.error);
+        
+        if (errorString.includes('mongodb id') || errorString.includes('ObjectId')) {
+          setInvalidUserIds(prev => new Set(prev).add(targetUserId));
+          setError(`Invalid user ID: "${targetUserId}" is not a valid MongoDB ObjectId. Please use a valid user ID.`);
+          // Clear query params to prevent retries
+          router.replace('/chat');
+        } else {
+          setError(errorMsg);
+        }
+        
+        setProcessingUserId(null);
+        throw new Error(errorMsg);
+      }
+    } catch (err) {
+      console.error('Error creating room:', err);
+      const errorMsg = err instanceof Error ? err.message : 'An error occurred while creating the chat room.';
+      
+      // Check if error is about invalid MongoDB ObjectId
+      if (errorMsg.includes('mongodb id') || errorMsg.includes('ObjectId')) {
+        setInvalidUserIds(prev => new Set(prev).add(targetUserId));
+        setError(`Invalid user ID: "${targetUserId}" is not a valid MongoDB ObjectId. Please use a valid user ID.`);
+        // Clear query params to prevent retries
+        router.replace('/chat');
+      } else {
+        setError(errorMsg);
+      }
+      
+      setProcessingUserId(null);
+      throw err;
+    }
+  }, [userId, user?.id, fallbackUserId, processingUserId, invalidUserIds, router]);
 
   // API Integration Functions
   useEffect(() => {
-    if (user?.id) {
+    const currentUserId = userId || user?.id || fallbackUserId;
+    if (currentUserId && !authLoading) {
       fetchRooms();
     }
-  }, [user?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, user?.id, fallbackUserId, authLoading]);
+
+  // Handle userId query parameter - find or create room with that user
+  useEffect(() => {
+    const targetUserId = searchParams.get('userId');
+    const name = searchParams.get('name');
+    const currentUserId = userId || user?.id || fallbackUserId;
+    
+    console.log('Query params check - targetUserId:', targetUserId, 'name:', name, 'loading:', loading, 'rooms.length:', rooms.length, 'currentUserId:', currentUserId, 'authLoading:', authLoading, 'processingUserId:', processingUserId);
+    
+    if (name) {
+      setProfileName(name);
+    }
+
+    // Skip if this userId was already marked as invalid
+    if (targetUserId && invalidUserIds.has(targetUserId)) {
+      console.log('Skipping invalid userId:', targetUserId);
+      router.replace('/chat');
+      return;
+    }
+
+    // Only process if we have userId, user is loaded, rooms are loaded, and not already processing
+    if (targetUserId && currentUserId && !loading && !authLoading && !processingUserId) {
+      console.log('Processing userId:', targetUserId, 'Current rooms:', rooms);
+      
+      // Validate MongoDB ObjectId format before processing
+      if (!isValidMongoObjectId(targetUserId)) {
+        console.error('Invalid MongoDB ObjectId format:', targetUserId);
+        setInvalidUserIds(prev => new Set(prev).add(targetUserId));
+        setError(`Invalid user ID format. The user ID "${targetUserId}" is not a valid MongoDB ObjectId. Please use a valid user ID (24-character hex string).`);
+        // Clear query params to prevent retries
+        router.replace('/chat');
+        return;
+      }
+      
+      // Find existing direct message room with this user
+      const existingRoom = rooms.find(room => {
+        if (!room.participants || room.type !== 'direct') return false;
+        
+        // Extract participant IDs safely
+        const participantIds = room.participants
+          .map(p => extractParticipantId(p))
+          .filter((id): id is string => id !== null);
+        const hasBothParticipants = participantIds.includes(targetUserId) && participantIds.includes(currentUserId);
+        console.log('Checking room:', room.id, 'type:', room.type, 'participants:', room.participants, 'participantIds:', participantIds, 'hasBoth:', hasBothParticipants);
+        return hasBothParticipants;
+      });
+
+      if (existingRoom) {
+        console.log('Found existing room:', existingRoom.id);
+        setSelectedChat(existingRoom.id);
+        // Remove query parameter from URL
+        router.replace('/chat');
+      } else {
+        console.log('No existing room found, creating new one...');
+        // If no existing room, create one
+        createRoomWithUser(targetUserId);
+      }
+    } else {
+      console.log('Skipping processing - targetUserId:', targetUserId, 'currentUserId:', currentUserId, 'loading:', loading, 'authLoading:', authLoading, 'processingUserId:', processingUserId);
+    }
+  }, [rooms, searchParams, userId, user?.id, fallbackUserId, router, loading, authLoading, processingUserId, invalidUserIds, createRoomWithUser]);
 
   useEffect(() => {
     if (selectedChat) {
-      fetchMessages(selectedChat);
+      console.log('Selected chat changed, fetching messages for:', selectedChat);
+      // Find the room to get the correct roomId (some APIs use roomId instead of id)
+      const room = rooms.find(r => r.id === selectedChat || (r as any).roomId === selectedChat);
+      const roomIdToUse = room ? ((room as any).roomId || room.id) : selectedChat;
+      console.log('Room found:', room, 'Using roomId for messages:', roomIdToUse);
+      fetchMessages(roomIdToUse);
       markRoomAsRead(selectedChat);
     }
-  }, [selectedChat]);
+  }, [selectedChat, rooms]);
 
-  const fetchRooms = async () => {
+  // Fetch participant names for a user ID
+  const fetchParticipantName = async (participantId: string | any): Promise<string | null> => {
+    // Use the helper function to safely extract the ID
+    const normalizedId = extractParticipantId(participantId);
+
+    // Validate it's a valid string
+    if (!normalizedId || typeof normalizedId !== 'string' || normalizedId === '[object Object]') {
+      console.error('Invalid participant ID:', participantId, 'type:', typeof participantId, 'normalized:', normalizedId);
+      return null;
+    }
+
+    // Skip if already cached
+    if (participantNames.has(normalizedId)) {
+      return participantNames.get(normalizedId) || null;
+    }
+
+    // Skip if it's the current user
+    const currentUserId = userId || user?.id || fallbackUserId;
+    if (normalizedId === currentUserId) {
+      return null; // We'll use "You" or current user's name
+    }
+
+    try {
+      const response = await apiService.getUserProfile(normalizedId);
+      if (response.success && response.data) {
+        const name = response.data.firstName && response.data.lastName
+          ? `${response.data.firstName} ${response.data.lastName}`
+          : response.data.firstName || response.data.username || response.data.email || null;
+        
+        if (name) {
+          // Create a new Map to ensure React detects the change
+          setParticipantNames(prev => {
+            const newMap = new Map(prev);
+            newMap.set(normalizedId, name);
+            return newMap;
+          });
+          return name;
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching participant name:', err);
+    }
+    return null;
+  };
+
+  const fetchRooms = async (options?: { limit?: number; offset?: number }) => {
     try {
       setLoading(true);
       setError(null);
-      console.log('Fetching rooms...');
-      const response = await apiService.getUserRooms(50, 0);
-      console.log('Rooms API response:', response);
+      
+      // Default to fetching 50 rooms, but allow customization
+      const limit = options?.limit || 50;
+      const offset = options?.offset || 0;
+      
+      console.log('Fetching conversations...', { limit, offset });
+      // Use getConversations instead of getUserRooms for better data (includes sender/receiver info)
+      const response = await apiService.getConversations(limit, offset);
+      console.log('Conversations API response:', response);
       
       if (response.success && response.data) {
         // Ensure response.data is an array
-        const roomsArray = Array.isArray(response.data) ? response.data : [];
-        console.log('Rooms array:', roomsArray);
-        setRooms(roomsArray);
+        const conversationsArray = Array.isArray(response.data) ? response.data : [];
+        console.log('Conversations array:', conversationsArray, 'count:', conversationsArray.length);
+        console.log('First conversation structure:', conversationsArray[0]);
+        
+        // Validate and normalize conversation data to ChatRoom format
+        const currentUserId = userId || user?.id || fallbackUserId;
+        
+        // First, collect all participant names to set them in one batch
+        const namesToAdd = new Map<string, string>();
+        
+        const validRooms: ChatRoom[] = conversationsArray.map((conv: any) => {
+          // Extract room ID (conversations use _id or roomId)
+          const roomId = conv.roomId || conv._id;
+          if (!roomId) {
+            console.warn('Conversation missing roomId/_id:', conv);
+            return null;
+          }
+
+          // Build participants array from sender and receiver
+          const participants: string[] = [];
+          if (conv.sender && conv.sender._id) {
+            participants.push(conv.sender._id);
+            // Collect sender name
+            if (conv.sender.name) {
+              namesToAdd.set(conv.sender._id, conv.sender.name);
+            }
+          }
+          if (conv.receiver && conv.receiver._id) {
+            participants.push(conv.receiver._id);
+            // Collect receiver name
+            if (conv.receiver.name) {
+              namesToAdd.set(conv.receiver._id, conv.receiver.name);
+            }
+          }
+
+          // Normalize lastMessage if it exists
+          let lastMessage: ChatMessage | undefined;
+          if (conv.lastMessage) {
+            lastMessage = {
+              id: conv.lastMessage._id || conv.lastMessage.id,
+              senderId: conv.lastMessage.senderId,
+              receiverId: conv.lastMessage.receiverId,
+              roomId: conv.lastMessage.roomId || roomId,
+              content: conv.lastMessage.content,
+              type: conv.lastMessage.type,
+              status: conv.lastMessage.status,
+              createdAt: conv.lastMessage.createdAt,
+              updatedAt: conv.lastMessage.updatedAt,
+              metadata: conv.lastMessage.metadata,
+              attachments: conv.lastMessage.attachments,
+              readAt: conv.lastMessage.readAt,
+              deliveredAt: conv.lastMessage.deliveredAt,
+              replyTo: conv.lastMessage.replyTo,
+            };
+          }
+
+          // Build ChatRoom object
+          const chatRoom: ChatRoom = {
+            id: roomId,
+            roomId: roomId, // Store roomId separately for API calls
+            type: conv.type || 'direct',
+            participants: participants,
+            createdAt: conv.createdAt || new Date().toISOString(),
+            updatedAt: conv.updatedAt || new Date().toISOString(),
+            lastMessage: lastMessage,
+            unreadCount: conv.unreadCount || 0,
+          };
+
+          return chatRoom;
+        }).filter((room): room is ChatRoom => room !== null); // Only keep valid rooms
+        
+        // Set all participant names in one batch
+        if (namesToAdd.size > 0) {
+          setParticipantNames(prev => {
+            const newMap = new Map(prev);
+            namesToAdd.forEach((name, id) => {
+              newMap.set(id, name);
+            });
+            return newMap;
+          });
+          console.log('Extracted participant names:', Array.from(namesToAdd.entries()));
+        }
+        
+        console.log('Valid rooms:', validRooms, 'count:', validRooms.length);
+        
+        // If offset is 0, replace rooms; otherwise append (for pagination)
+        if (offset > 0) {
+          setRooms(prev => {
+            // Combine and deduplicate by room ID
+            const roomMap = new Map<string, ChatRoom>();
+            [...prev, ...validRooms].forEach(room => {
+              if (room.id) {
+                roomMap.set(room.id, room);
+              }
+            });
+            return Array.from(roomMap.values());
+          });
+        } else {
+          setRooms(validRooms);
+        }
+        
+        // Note: Participant names are already extracted from sender/receiver objects above
+        // No need to fetch them separately
       } else {
         setError(response.error || 'Failed to fetch conversations');
         setRooms([]); // Set empty array on error
@@ -289,24 +527,98 @@ export default function MessagesPage() {
     }
   };
 
-  const fetchMessages = async (roomId: string) => {
+  const fetchMessages = async (roomId: string, options?: { limit?: number; offset?: number; before?: string; after?: string }) => {
+    if (!roomId) {
+      console.error('Cannot fetch messages: roomId is required');
+      return;
+    }
+
     try {
-      console.log('Fetching messages for room:', roomId);
-      const response = await apiService.getRoomMessages(roomId, { limit: 50 });
+      setMessagesLoading(true);
+      setError(null);
+      console.log('Fetching messages for room:', roomId, 'options:', options);
+      
+      // Default to fetching 50 messages, but allow customization
+      const queryParams: GetMessagesQuery = {
+        limit: options?.limit || 50,
+        offset: options?.offset || 0,
+        ...(options?.before && { before: options.before }),
+        ...(options?.after && { after: options.after }),
+      };
+      
+      const response = await apiService.getRoomMessages(roomId, queryParams);
       console.log('Messages API response:', response);
+      console.log('Response data type:', typeof response.data, 'isArray:', Array.isArray(response.data));
+      console.log('Response data structure:', JSON.stringify(response.data, null, 2));
       
       if (response.success && response.data) {
-        // Ensure response.data is an array
-        const messagesArray = Array.isArray(response.data) ? response.data : [];
-        console.log('Messages array:', messagesArray);
-        setMessages(messagesArray);
+        // Handle different response structures
+        let messagesArray: ChatMessage[] = [];
+        
+        if (Array.isArray(response.data)) {
+          // Direct array
+          messagesArray = response.data;
+        } else if (response.data && typeof response.data === 'object') {
+          // Check if messages are nested in the object
+          if (Array.isArray((response.data as any).messages)) {
+            messagesArray = (response.data as any).messages;
+          } else if (Array.isArray((response.data as any).data)) {
+            messagesArray = (response.data as any).data;
+          } else if (Array.isArray((response.data as any).items)) {
+            messagesArray = (response.data as any).items;
+          } else {
+            // Try to find any array property
+            const keys = Object.keys(response.data);
+            for (const key of keys) {
+              if (Array.isArray((response.data as any)[key])) {
+                messagesArray = (response.data as any)[key];
+                console.log('Found messages array in property:', key);
+                break;
+              }
+            }
+          }
+        }
+        
+        console.log('Messages array:', messagesArray, 'count:', messagesArray.length);
+        
+        if (messagesArray.length === 0) {
+          console.warn('No messages found in response. Response structure:', response.data);
+          console.warn('Response data keys:', response.data ? Object.keys(response.data) : 'no data');
+        }
+        
+        // Sort messages by createdAt (oldest first) to ensure proper display order
+        const sortedMessages = messagesArray.sort((a, b) => {
+          const dateA = new Date(a.createdAt).getTime();
+          const dateB = new Date(b.createdAt).getTime();
+          return dateA - dateB;
+        });
+        
+        // If offset is 0, replace messages; otherwise prepend older messages (for pagination)
+        if (options?.offset && options.offset > 0) {
+          setMessages(prev => {
+            // Combine and sort all messages
+            const combined = [...sortedMessages, ...prev];
+            return combined.sort((a, b) => {
+              const dateA = new Date(a.createdAt).getTime();
+              const dateB = new Date(b.createdAt).getTime();
+              return dateA - dateB;
+            });
+          });
+        } else {
+          setMessages(sortedMessages);
+        }
       } else {
         console.error('Failed to fetch messages:', response.error);
+        setError(response.error || 'Failed to load messages');
         setMessages([]); // Set empty array on error
       }
     } catch (err) {
       console.error('Error fetching messages:', err);
+      const errorMsg = err instanceof Error ? err.message : 'An error occurred while fetching messages';
+      setError(errorMsg);
       setMessages([]); // Set empty array on error
+    } finally {
+      setMessagesLoading(false);
     }
   };
 
@@ -318,29 +630,68 @@ export default function MessagesPage() {
     }
   };
 
-  const sendMessage = async () => {
-    if (!messageInput.trim() || !selectedChat || sending) return;
+  const sendMessage = async (e?: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent) => {
+    // Prevent form submission and page refresh
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    const currentUserId = userId || user?.id || fallbackUserId;
+    if (!messageInput.trim() || !selectedChat || sending || !currentUserId) return;
+
+    // Get the selected room to find the receiver ID
+    const room = rooms.find(r => r.id === selectedChat);
+    if (!room) {
+      console.error('Room not found');
+      return;
+    }
+
+    // For direct messages, find the other participant (not the current user)
+    // For group messages, we might need to handle differently based on API requirements
+    let receiverId: string | undefined;
+    if (room.type === 'direct' && room.participants) {
+      const otherParticipant = room.participants.find(p => {
+        const pId = extractParticipantId(p);
+        return pId && pId !== currentUserId;
+      });
+      receiverId = otherParticipant ? extractParticipantId(otherParticipant) || undefined : undefined;
+    }
+
+    if (!receiverId && room.type === 'direct') {
+      console.error('Receiver ID not found for direct message');
+      return;
+    }
 
     try {
       setSending(true);
       const response = await apiService.sendMessage({
+        receiverId: receiverId,
         content: messageInput.trim(),
         type: 'text',
         tempId: `temp_${Date.now()}`,
       });
 
       if (response.success && response.data) {
-        setMessages(prev => [...prev, response.data!]);
+        // Ensure the sent message has the correct senderId
+        const sentMessage = {
+          ...response.data,
+          senderId: currentUserId, // Ensure senderId is set correctly
+        };
+        
+        console.log('Message sent successfully:', sentMessage, 'currentUserId:', currentUserId);
+        setMessages(prev => [...prev, sentMessage]);
         setMessageInput('');
         
         // Update room's last message
-        setRooms(prev => prev.map(room => 
-          room.id === selectedChat 
-            ? { ...room, lastMessage: response.data!, unreadCount: 0 }
-            : room
+        setRooms(prev => prev.map(r => 
+          r.id === selectedChat 
+            ? { ...r, lastMessage: sentMessage, unreadCount: 0 }
+            : r
         ));
       } else {
         console.error('Failed to send message:', response.error);
+        setError(response.error || 'Failed to send message');
       }
     } catch (err) {
       console.error('Error sending message:', err);
@@ -386,6 +737,50 @@ export default function MessagesPage() {
     }
   };
 
+  const handleStartNewChat = async () => {
+    const targetUserId = newChatUserId.trim();
+    const currentUserId = userId || user?.id || fallbackUserId;
+    
+    console.log('handleStartNewChat called with userId:', targetUserId, 'currentUserId:', currentUserId, 'authLoading:', authLoading, 'isAuthenticated:', isAuthenticated, 'fallbackUserId:', fallbackUserId);
+    
+    if (!targetUserId) {
+      console.error('No userId provided');
+      setError('Please enter a user ID');
+      return;
+    }
+
+    if (authLoading) {
+      console.log('Auth still loading, waiting...');
+      setError('Please wait for authentication to complete');
+      return;
+    }
+
+    if (!isAuthenticated || !currentUserId) {
+      console.error('User not authenticated or not loaded');
+      setError('Please log in to start a chat');
+      return;
+    }
+
+    if (processingUserId === targetUserId) {
+      console.log('Already processing this userId');
+      return;
+    }
+
+    console.log('Starting new chat with userId:', targetUserId, 'current user:', currentUserId);
+    setShowNewChatDialog(false);
+    setError(null); // Clear any previous errors
+    
+    // Use the existing createRoomWithUser function
+    try {
+      await createRoomWithUser(targetUserId);
+      setNewChatUserId("");
+    } catch (err) {
+      console.error('Error in handleStartNewChat:', err);
+      setError('Failed to start chat. Please try again.');
+      setShowNewChatDialog(true); // Reopen dialog on error
+    }
+  };
+
   const selectedChatData = rooms.find((room) => room.id === selectedChat);
   
   // Helper functions for data transformation
@@ -398,6 +793,68 @@ export default function MessagesPage() {
     if (room.type === 'group') {
       return room.name || 'Group Chat';
     }
+    
+    // For direct messages, find the other participant's name
+    const currentUserId = userId || user?.id || fallbackUserId;
+    if (room.participants && room.participants.length === 2 && currentUserId) {
+      // Find the other participant (not the current user)
+      const otherParticipant = room.participants.find(p => {
+        const pId = extractParticipantId(p);
+        return pId && pId !== currentUserId;
+      });
+      
+      // Debug logging
+      if (otherParticipant && typeof otherParticipant === 'object') {
+        console.log('Found otherParticipant object:', otherParticipant, 'keys:', Object.keys(otherParticipant));
+      }
+      
+      const otherParticipantId = otherParticipant ? extractParticipantId(otherParticipant) : null;
+      
+      // Debug logging
+      if (otherParticipantId === '[object Object]' || (otherParticipantId && typeof otherParticipantId !== 'string')) {
+        console.error('Invalid otherParticipantId extracted:', {
+          otherParticipant,
+          otherParticipantId,
+          type: typeof otherParticipantId,
+          roomParticipants: room.participants
+        });
+      }
+      
+      // Validate otherParticipantId is a valid string before using it
+      if (otherParticipantId && typeof otherParticipantId === 'string' && otherParticipantId !== '[object Object]' && otherParticipantId.trim() !== '') {
+        // Check if we have the name cached
+        const cachedName = participantNames.get(otherParticipantId);
+        if (cachedName) {
+          return cachedName;
+        }
+        
+        // If we have profileName from query params (for newly created rooms), use it
+        if (profileName) {
+          // Also cache it for future use
+          setParticipantNames(prev => {
+            const newMap = new Map(prev);
+            newMap.set(otherParticipantId, profileName);
+            return newMap;
+          });
+          return profileName;
+        }
+        
+        // Try to fetch the name if not cached (async, will update later)
+        if (!participantNames.has(otherParticipantId)) {
+          // Double-check before calling API
+          const safeId = extractParticipantId(otherParticipantId);
+          if (safeId && typeof safeId === 'string' && safeId !== '[object Object]') {
+            fetchParticipantName(safeId).catch(err => {
+              console.error('Error fetching participant name:', err);
+            });
+          }
+        }
+      } else if (otherParticipantId) {
+        // Log warning if we got an invalid ID
+        console.warn('Invalid otherParticipantId extracted:', otherParticipantId, 'type:', typeof otherParticipantId, 'from participant:', otherParticipant);
+      }
+    }
+    
     return 'Direct Message';
   };
 
@@ -423,7 +880,22 @@ export default function MessagesPage() {
 
   // Convert API ChatMessage to UI Message format
   const convertToUIMessage = (apiMessage: ChatMessage): Message => {
-    const isOwn = apiMessage.senderId === user?.id;
+    const currentUserId = userId || user?.id || fallbackUserId;
+    
+    // Normalize IDs to strings for comparison
+    const senderIdStr = String(apiMessage.senderId || '').trim();
+    const currentUserIdStr = String(currentUserId || '').trim();
+    const isOwn = senderIdStr === currentUserIdStr && senderIdStr !== '';
+    
+    // Debug logging for message conversion
+    console.log('convertToUIMessage:', {
+      apiMessageSenderId: apiMessage.senderId,
+      senderIdStr,
+      currentUserId,
+      currentUserIdStr,
+      isOwn,
+      messageContent: apiMessage.content?.substring(0, 20)
+    });
     
     return {
       id: apiMessage.id,
@@ -557,10 +1029,12 @@ export default function MessagesPage() {
       );
     }
 
+    const isOwnMessage = message.sender === "me";
+    
     return (
       <div
         className={`rounded-lg p-3 max-w-xs ${
-          message.sender === "me"
+          isOwnMessage
             ? "bg-white text-gray-800"
             : "bg-[#FA266D] text-white"
         }`}
@@ -568,11 +1042,11 @@ export default function MessagesPage() {
         <p className="text-sm">{message.content}</p>
         <div
           className={`flex items-center justify-end gap-1 mt-1 ${
-            message.sender === "me" ? "text-gray-500" : "text-pink-100"
+            isOwnMessage ? "text-gray-500" : "text-pink-100"
           }`}
         >
           <span className="text-xs">{message.timestamp}</span>
-          {message.sender === "me" && <CheckCheck className="h-3 w-3" />}
+          {isOwnMessage && <CheckCheck className="h-3 w-3" />}
         </div>
       </div>
     );
@@ -586,9 +1060,17 @@ export default function MessagesPage() {
         <div className="p-6 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-white text-xl font-semibold">Messages</h1>
-            <button className="text-[#FA266D] hover:text-pink-400 transition-colors">
-              <Menu className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowNewChatDialog(true)}
+                className="bg-[#FA266D] hover:bg-pink-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                New Chat
+              </button>
+              <button className="text-[#FA266D] hover:text-pink-400 transition-colors">
+                <Menu className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Search Bar */}
@@ -606,7 +1088,7 @@ export default function MessagesPage() {
 
         {/* Chat List - Scrollable */}
         <div className="flex-1 overflow-y-auto scrollbar-hide">
-          {loading ? (
+          {loading && (!Array.isArray(rooms) || rooms.length > 0) ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FA266D]"></div>
             </div>
@@ -626,10 +1108,17 @@ export default function MessagesPage() {
               <p className="text-sm">Start a new conversation to begin chatting</p>
             </div>
           ) : (
-            rooms.map((room) => (
+            rooms.filter(room => room.id).map((room) => (
               <div
                 key={room.id}
-                onClick={() => setSelectedChat(room.id)}
+                onClick={() => {
+                  console.log('Chat clicked, room ID:', room.id, 'full room:', room);
+                  if (room.id) {
+                    setSelectedChat(room.id);
+                  } else {
+                    console.error('Room has no ID:', room);
+                  }
+                }}
                 className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${
                   selectedChat === room.id ? "bg-white/10" : ""
                 }`}
@@ -718,8 +1207,12 @@ export default function MessagesPage() {
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-4">
-              {!Array.isArray(messages) || messages.length === 0 ? (
+            <div className="flex-1 overflow-y-auto scrollbar-hide p-4">
+              {messagesLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FA266D]"></div>
+                </div>
+              ) : !Array.isArray(messages) || messages.length === 0 ? (
                 <div className="flex items-center justify-center h-64 text-gray-400">
                   <div className="text-center">
                     <p className="text-lg mb-2">No messages yet</p>
@@ -727,16 +1220,34 @@ export default function MessagesPage() {
                   </div>
                 </div>
               ) : (
-                messages.map((apiMessage) => {
+                messages.map((apiMessage, index) => {
                   const message = convertToUIMessage(apiMessage);
+                  const isOwnMessage = message.sender === "me";
+                  
+                  // Use a unique key: prefer message.id, fallback to index + timestamp
+                  const uniqueKey = apiMessage.id || message.id || `msg-${index}-${apiMessage.createdAt || Date.now()}`;
+                  
+                  // Debug: Log message alignment
+                  console.log('Rendering message:', {
+                    id: message.id,
+                    apiMessageId: apiMessage.id,
+                    uniqueKey,
+                    sender: message.sender,
+                    isOwnMessage,
+                    content: message.content?.substring(0, 20),
+                    alignment: isOwnMessage ? 'right' : 'left'
+                  });
+                  
                   return (
                     <div
-                      key={message.id}
-                      className={`flex ${
-                        message.sender === "me" ? "justify-start" : "justify-end"
+                      key={uniqueKey}
+                      className={`flex w-full mb-3 ${
+                        isOwnMessage ? "justify-end" : "justify-start"
                       }`}
                     >
-                      {renderMessage(message)}
+                      <div className={`max-w-[70%] ${isOwnMessage ? "ml-auto" : "mr-auto"}`}>
+                        {renderMessage(message)}
+                      </div>
                     </div>
                   );
                 })
@@ -753,10 +1264,11 @@ export default function MessagesPage() {
                   placeholder="Write message..."
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
-                  onKeyPress={(e) => {
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
-                      sendMessage();
+                      e.stopPropagation();
+                      sendMessage(e);
                     }
                   }}
                   className="bg-transparent text-white placeholder-gray-400 focus:outline-none flex-1 text-base rounded-[32px] border border-white/10 py-[18px] pl-[24px] w-full"
@@ -780,7 +1292,12 @@ export default function MessagesPage() {
                     <Mic className="h-5 w-5 text-white" />
                   </button>
                   <button 
-                    onClick={sendMessage}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      sendMessage(e);
+                    }}
                     disabled={!messageInput.trim() || sending}
                     className="bg-[#FA266D] text-white px-6 py-2 rounded-full flex items-center gap-2 hover:bg-pink-600 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
                   >
@@ -1069,6 +1586,100 @@ export default function MessagesPage() {
                   }`}
                 >
                   Send Pricing
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Chat Dialog */}
+      {showNewChatDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[#1F1B2C] rounded-lg p-6 w-full max-w-md mx-4 border border-white/10">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-white text-xl font-semibold">Start New Conversation</h2>
+              <button
+                onClick={() => {
+                  setShowNewChatDialog(false);
+                  setNewChatUserId("");
+                }}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {authLoading && (
+              <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-3 mb-4">
+                <p className="text-blue-400 text-sm">Loading user information...</p>
+              </div>
+            )}
+
+            {!authLoading && !isAuthenticated && (
+              <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-3 mb-4">
+                <p className="text-yellow-400 text-sm">Please log in to start a chat</p>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 mb-4">
+                <p className="text-red-400 text-sm">{error}</p>
+              </div>
+            )}
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-gray-300 text-sm mb-2">
+                  User ID
+                </label>
+                <input
+                  type="text"
+                  value={newChatUserId}
+                  onChange={(e) => {
+                    setNewChatUserId(e.target.value);
+                    setError(null); // Clear error when typing
+                  }}
+                  placeholder="Enter user ID to start chatting"
+                  className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FA266D]"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && newChatUserId.trim() && !processingUserId) {
+                      e.preventDefault();
+                      handleStartNewChat();
+                    }
+                  }}
+                  autoFocus
+                />
+                <p className="text-gray-400 text-xs mt-2">
+                  Enter the user ID of the person you want to chat with
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowNewChatDialog(false);
+                    setNewChatUserId("");
+                  }}
+                  className="flex-1 bg-white/10 text-white py-2 rounded-lg hover:bg-white/20 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Start Chat button clicked, userId:', newChatUserId.trim());
+                    handleStartNewChat();
+                  }}
+                  disabled={!newChatUserId.trim() || processingUserId === newChatUserId.trim() || authLoading || !isAuthenticated}
+                  className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
+                    newChatUserId.trim() && processingUserId !== newChatUserId.trim() && !authLoading && isAuthenticated
+                      ? "bg-[#FA266D] text-white hover:bg-pink-600 cursor-pointer"
+                      : "bg-gray-700 text-gray-500 cursor-not-allowed"
+                  }`}
+                >
+                  {authLoading ? "Loading..." : processingUserId === newChatUserId.trim() ? "Starting..." : "Start Chat"}
                 </button>
               </div>
             </div>
