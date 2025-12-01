@@ -184,6 +184,7 @@ export interface ChatMessage {
  */
 export interface ChatRoom {
   id: string;
+  roomId?: string; // Some APIs use roomId separately from id
   name?: string;
   description?: string;
   type: RoomType;

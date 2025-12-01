@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { apiService } from '../services';
-import { saveAuthTokens, saveUser, getAuthTokens, getUser, clearAuthData, isAccessTokenExpired } from '../utils';
+import { saveAuthTokens, saveUser, getAuthTokens, getUser, clearAuthData, removeUser } from '../utils';
 import type {
   ApiResponse,
   AuthPayload,
@@ -16,6 +16,13 @@ import type {
   ProfilePayload,
   ProfileUpdatePayload,
   EnrichedProfile,
+  SendMessagePayload,
+  ChatMessage,
+  ChatRoom,
+  CreateRoomPayload,
+  GetMessagesQuery,
+  UpdateMessageStatusPayload,
+  RoomStats,
 } from '../types';
 
 interface ApiState {
@@ -40,6 +47,18 @@ interface ApiContextType extends ApiState {
   updateUser: (userId: string, payload: Partial<User>) => Promise<ApiResponse<User>>;
   createProfile: (payload: ProfilePayload) => Promise<ApiResponse<unknown>>;
   updateProfile: (payload: ProfileUpdatePayload) => Promise<ApiResponse<User>>;
+  // Chat methods
+  sendMessage: (payload: SendMessagePayload) => Promise<ApiResponse<ChatMessage>>;
+  getRoomMessages: (roomId: string, query?: GetMessagesQuery) => Promise<ApiResponse<ChatMessage[]>>;
+  createRoom: (payload: CreateRoomPayload) => Promise<ApiResponse<ChatRoom>>;
+  getUserRooms: (limit?: number, offset?: number) => Promise<ApiResponse<ChatRoom[]>>;
+  getConversations: (limit?: number, offset?: number) => Promise<ApiResponse<ChatRoom[]>>;
+  updateMessageStatus: (messageId: string, payload: UpdateMessageStatusPayload) => Promise<ApiResponse<ChatMessage>>;
+  markRoomAsRead: (roomId: string) => Promise<ApiResponse<{ success: boolean }>>;
+  getRoomUnreadCount: (roomId: string) => Promise<ApiResponse<{ count: number }>>;
+  getRoomStats: (roomId: string) => Promise<ApiResponse<RoomStats>>;
+  editMessage: (messageId: string, content: string) => Promise<ApiResponse<ChatMessage>>;
+  deleteMessage: (messageId: string, hard?: boolean) => Promise<ApiResponse<{ success: boolean }>>;
   setUser: (user: User | null) => void;
   setTokens: (tokens: AuthTokens | null) => void;
   setLoading: (loading: boolean) => void;
@@ -84,21 +103,57 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
 
     console.log('[ApiContext] Loading auth state from localStorage...');
     const storedTokens = getAuthTokens();
-    const storedUser = getUser();
+    let storedUser = getUser();
 
     // Authentication is based on having valid tokens
     if (storedTokens) {
       console.log('[ApiContext] Found tokens, setting authenticated state');
+      
+      // If user exists but is invalid, clear it
+      if (storedUser && !storedUser.id) {
+        console.log('[ApiContext] Invalid user data found, clearing...');
+        removeUser();
+        storedUser = null;
+      }
+      
+      // Check if user has valid ID, if not we'll fetch it
+      const needsUserFetch = !storedUser || !storedUser.id;
+      
       setState(prev => ({
         ...prev,
         tokens: storedTokens,
-        user: storedUser, // User might be null initially, that's ok
+        user: storedUser && storedUser.id ? storedUser : null, // Only set if valid
         isAuthenticated: true,
-        isLoading: false,
+        isLoading: needsUserFetch, // Keep loading if we need to fetch user
       }));
       // Set the auth token in the API service for authenticated requests
       apiService.setAuthToken(storedTokens.accessToken);
       console.log('[ApiContext] Authentication restored successfully');
+      
+      // If user is missing or doesn't have ID, fetch it
+      if (needsUserFetch) {
+        console.log('[ApiContext] User missing or invalid, fetching profile...');
+        apiService.getAuthenticatedProfile()
+          .then(response => {
+            if (response.success && response.data) {
+              console.log('[ApiContext] Profile fetched:', response.data);
+              const userData = response.data.user;
+              setState(prev => ({
+                ...prev,
+                user: userData,
+                isLoading: false,
+              }));
+              saveUser(userData);
+            } else {
+              console.error('[ApiContext] Failed to fetch profile:', response.error);
+              setState(prev => ({ ...prev, isLoading: false }));
+            }
+          })
+          .catch(error => {
+            console.error('[ApiContext] Error fetching profile:', error);
+            setState(prev => ({ ...prev, isLoading: false }));
+          });
+      }
     } else if (storedUser) {
       // If we have user but no tokens, still load the user
       console.log('[ApiContext] Found user but no tokens, not authenticated');
@@ -115,6 +170,7 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
       }));
     }
   }, [isHydrated]);
+
 
   const setUser = useCallback((user: User | null) => {
     setState(prev => ({ ...prev, user }));
@@ -468,6 +524,184 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
     }
   }, [setLoading, clearError, setUser, setError]);
 
+  // ==================== CHAT METHODS ====================
+
+  const sendMessage = useCallback(async (payload: SendMessagePayload): Promise<ApiResponse<ChatMessage>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.sendMessage(payload);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
+  const getRoomMessages = useCallback(async (roomId: string, query: GetMessagesQuery = {}): Promise<ApiResponse<ChatMessage[]>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.getRoomMessages(roomId, query);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch messages';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
+  const createRoom = useCallback(async (payload: CreateRoomPayload): Promise<ApiResponse<ChatRoom>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.createRoom(payload);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create room';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
+  const getUserRooms = useCallback(async (limit: number = 10, offset: number = 0): Promise<ApiResponse<ChatRoom[]>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.getUserRooms(limit, offset);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch rooms';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
+  const getConversations = useCallback(async (limit: number = 10, offset: number = 0): Promise<ApiResponse<ChatRoom[]>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.getConversations(limit, offset);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch conversations';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
+  const updateMessageStatus = useCallback(async (messageId: string, payload: UpdateMessageStatusPayload): Promise<ApiResponse<ChatMessage>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.updateMessageStatus(messageId, payload);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update message status';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
+  const markRoomAsRead = useCallback(async (roomId: string): Promise<ApiResponse<{ success: boolean }>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.markRoomAsRead(roomId);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to mark room as read';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
+  const getRoomUnreadCount = useCallback(async (roomId: string): Promise<ApiResponse<{ count: number }>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.getRoomUnreadCount(roomId);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch unread count';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
+  const getRoomStats = useCallback(async (roomId: string): Promise<ApiResponse<RoomStats>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.getRoomStats(roomId);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch room stats';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
+  const editMessage = useCallback(async (messageId: string, content: string): Promise<ApiResponse<ChatMessage>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.editMessage(messageId, content);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to edit message';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
+  const deleteMessage = useCallback(async (messageId: string, hard: boolean = false): Promise<ApiResponse<{ success: boolean }>> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      const response = await apiService.deleteMessage(messageId, hard);
+      return response;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete message';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading, clearError, setError]);
+
   const value: ApiContextType = {
     ...state,
     registerUser,
@@ -483,6 +717,18 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
     updateUser,
     createProfile,
     updateProfile,
+    // Chat methods
+    sendMessage,
+    getRoomMessages,
+    createRoom,
+    getUserRooms,
+    getConversations,
+    updateMessageStatus,
+    markRoomAsRead,
+    getRoomUnreadCount,
+    getRoomStats,
+    editMessage,
+    deleteMessage,
     setUser,
     setTokens,
     setLoading,

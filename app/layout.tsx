@@ -21,6 +21,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link
+          rel="preload"
+          as="image"
+          href="https://res.cloudinary.com/dpynyht1l/image/upload/f_auto,q_auto,w_1920,h_1080,c_fill/v1760294571/image_grid_kib4ze.png"
+        />
+      </head>
       <body
         className={`${urbanist.variable} antialiased`}
       >

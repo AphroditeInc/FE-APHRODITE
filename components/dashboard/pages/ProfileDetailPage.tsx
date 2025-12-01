@@ -215,7 +215,17 @@ export default function ProfileDetailPage() {
               
               {/* Chat and Follow Buttons */}
               <div className="flex gap-3">
-                <button className="flex-1 bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                <button 
+                  onClick={() => {
+                    // Pass userId and profile name for better chat experience
+                    const queryParams = new URLSearchParams({
+                      userId: params.id as string,
+                      name: profile.name || 'User'
+                    });
+                    router.push(`/chat?${queryParams.toString()}`);
+                  }}
+                  className="flex-1 bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                >
                   <MessageCircle className="w-5 h-5" />
                   Chat
                 </button>
