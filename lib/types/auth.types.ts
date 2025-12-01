@@ -184,6 +184,7 @@ export interface ChatMessage {
  */
 export interface ChatRoom {
   id: string;
+  roomId?: string; // Some APIs use roomId separately from id
   name?: string;
   description?: string;
   type: RoomType;
@@ -268,4 +269,97 @@ export interface AuthProfileResponse {
       updatedAt: string;
     };
   };
+}
+
+/**
+ * Service Interface
+ */
+export interface Service {
+  id?: string;
+  name?: string;
+  description?: string;
+  price?: number;
+  duration?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Pricing Interface
+ */
+export interface Pricing {
+  shortTime?: {
+    incall?: string | number;
+    outcall?: string | number;
+  };
+  overnight?: {
+    incall?: string | number;
+    outcall?: string | number;
+  };
+  weekend?: {
+    incall?: string | number;
+    outcall?: string | number;
+  };
+  custom?: {
+    price?: string | number;
+  };
+  [key: string]: unknown;
+}
+
+/**
+ * Review Item Interface
+ */
+export interface ReviewItem {
+  id?: string;
+  userId?: string;
+  rating?: number;
+  comment?: string;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Enriched Profile Data
+ */
+export interface EnrichedProfile {
+  id: string;
+  userId: string;
+  user: {
+    id: string;
+    userName: string;
+    userType: string;
+    firstName: string;
+    lastName: string;
+  };
+  bio: string;
+  education: string;
+  occupation: string;
+  maritalStatus: string;
+  smoker: boolean;
+  hasVideoProof: boolean;
+  issuedIdVerified: boolean;
+  media: string[];
+  services: Service[];
+  followersCount: number;
+  createdAt: string;
+  updatedAt: string;
+  pricing: Pricing | null;
+  servicesExpanded: Service[];
+  reviews: {
+    items: ReviewItem[];
+    limit: number;
+    hasMore: boolean;
+    stats: {
+      averageRating: number;
+      totalReviews: number;
+      ratingDistribution: Record<string, number>;
+    };
+  };
+}
+
+/**
+ * Enriched Profile API Response
+ */
+export interface EnrichedProfileResponse {
+  success: boolean;
+  data: EnrichedProfile;
 }

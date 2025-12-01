@@ -1,5 +1,12 @@
 import { useCallback, useMemo } from 'react';
-import { useApi } from '../context/ApiContext';
+import { useAppDispatch, useAppSelector } from '@/app/hooks';
+import { 
+  selectCurrentUser, 
+  selectIsAuthenticated, 
+  logOut 
+} from '@/feature/authentication/authSlice';
+import { getAuthTokens } from '../utils/storage.utils';
+import { isAccessTokenExpired } from '../utils';
 import type { User, AuthTokens } from '../types';
 
 /**
@@ -23,6 +30,7 @@ interface UseAuthReturn {
 
   // Methods
   logout: () => void;
+  refreshTokens: () => Promise<void>;
 
   // User info helpers
   userId: string | null;
@@ -34,6 +42,7 @@ interface UseAuthReturn {
   accessToken: string | null;
   refreshToken: string | null;
   hasValidToken: boolean;
+  isTokenExpired: boolean;
 }
 
 /**
@@ -60,14 +69,27 @@ interface UseAuthReturn {
  * ```
  */
 export const useAuth = (): UseAuthReturn => {
-  const { user, tokens, isAuthenticated, isLoading, logout: logoutFn } = useApi();
+  const dispatch = useAppDispatch();
+  const user = useAppSelector(selectCurrentUser);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const tokens = useMemo(() => getAuthTokens(), []); // Get from localStorage
+  const isLoading = false; // RTK Query handles loading states separately
 
   /**
    * Memoized logout function
    */
   const logout = useCallback(() => {
-    logoutFn();
-  }, [logoutFn]);
+    dispatch(logOut());
+  }, [dispatch]);
+
+  /**
+   * Memoized refresh tokens function
+   * Note: Token refresh is handled automatically by RTK Query base query
+   */
+  const refreshTokens = useCallback(async () => {
+    // Token refresh is handled automatically by the API slice
+    console.log('[useAuth] Token refresh is handled automatically by RTK Query');
+  }, []);
 
   /**
    * Memoized user role checks
@@ -91,6 +113,18 @@ export const useAuth = (): UseAuthReturn => {
   const accessToken = useMemo(() => tokens?.accessToken || null, [tokens?.accessToken]);
   const refreshToken = useMemo(() => tokens?.refreshToken || null, [tokens?.refreshToken]);
   const hasValidToken = useMemo(() => !!tokens?.accessToken, [tokens?.accessToken]);
+  const isTokenExpired = useMemo(() => isAccessTokenExpired(tokens), [tokens]);
+
+  /**
+   * Auto-refresh token when it's about to expire
+   * Note: Disabled to prevent infinite loops - token refresh is handled by API service
+   */
+  // useEffect(() => {
+  //   if (isAuthenticated && tokens && isTokenExpired) {
+  //     console.log('[useAuth] Token is expired, attempting refresh...');
+  //     refreshTokens();
+  //   }
+  // }, [isAuthenticated, tokens, isTokenExpired, refreshTokens]);
 
   return {
     // User state
@@ -110,6 +144,7 @@ export const useAuth = (): UseAuthReturn => {
 
     // Methods
     logout,
+    refreshTokens,
 
     // User info helpers
     userId,
@@ -121,6 +156,7 @@ export const useAuth = (): UseAuthReturn => {
     accessToken,
     refreshToken,
     hasValidToken,
+    isTokenExpired,
   };
 };
 

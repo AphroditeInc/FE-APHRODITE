@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useContext } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ApiContext } from '@/lib/context/ApiContext';
+import { useAppSelector } from '@/app/hooks';
+import { selectIsAuthenticated } from '@/feature/authentication/authSlice';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -11,34 +12,20 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
-  
-  // Safely get the context
-  const apiContext = useContext(ApiContext);
-  
-  // If context is not available, treat as unauthenticated
-  const isAuthenticated = apiContext?.isAuthenticated ?? false;
-  const isLoading = apiContext?.isLoading ?? false;
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Handle case where ApiContext is not available
   useEffect(() => {
-    if (!apiContext) {
-      console.warn('ProtectedRoute: ApiContext not available, redirecting to user-type');
+    if (mounted && !isAuthenticated) {
       router.push('/user-type');
     }
-  }, [apiContext, router]);
-
-  useEffect(() => {
-    if (mounted && !isLoading && !isAuthenticated) {
-      router.push('/user-type');
-    }
-  }, [mounted, isAuthenticated, isLoading, router]);
+  }, [mounted, isAuthenticated, router]);
 
   // Prevent hydration mismatch by showing loading on server
-  if (!mounted || isLoading) {
+  if (!mounted) {
     return (
       <div suppressHydrationWarning className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
         <div className="text-white text-center">

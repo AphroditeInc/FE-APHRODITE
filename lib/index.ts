@@ -14,6 +14,3 @@ export * from './services';
 
 // Utils
 export * from './utils';
-
-// Context
-export * from './context/ApiContext';

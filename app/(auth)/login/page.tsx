@@ -8,11 +8,15 @@ import apple from "../../../public/icons/apple.svg";
 import facebook from "../../../public/icons/facebook.svg";
 import { Mail, Lock, Eye, EyeOff, Phone } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useApi } from "@/lib/context/ApiContext";
+import { useLoginMutation } from "@/feature/authentication/authApiSlice";
+import { useAppDispatch } from "@/app/hooks";
+import { setCredentials, logOut } from "@/feature/authentication/authSlice";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { loginWithEmail, loginUser, isLoading, error } = useApi();
+  const dispatch = useAppDispatch();
+  const [login, { isLoading, error: loginError }] = useLoginMutation();
+  const [error, setError] = useState<string | null>(null);
   const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
   const [formData, setFormData] = useState({
     email: "",
@@ -28,21 +32,53 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     
     try {
+      // Clear any existing tokens before attempting login
+      console.log('[LoginPage] Clearing existing tokens before login attempt');
+      dispatch(logOut());
+      
+      // Small delay to ensure tokens are cleared
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      let loginData;
       if (loginMethod === 'email') {
-        const response = await loginWithEmail(formData.email, formData.password);
-        if (response.success) {
-          router.push("/dashboard");
-        }
+        console.log('[LoginPage] Attempting email login for:', formData.email);
+        loginData = { email: formData.email, password: formData.password };
       } else {
-        const response = await loginUser(formData.phone);
-        if (response.success) {
-          router.push("/dashboard");
-        }
+        // For phone login, we need to send both phone number and country code with password
+        const phoneWithCode = `${formData.countryCode}${formData.phone}`;
+        console.log('[LoginPage] Attempting phone login for:', phoneWithCode);
+        loginData = { email: phoneWithCode, password: formData.password };
       }
-    } catch (error) {
+
+      const result = await login(loginData).unwrap();
+      
+      if (result && result.data) {
+        const data = result.data;
+        // Handle different response formats
+        const tokens = data.tokens || data;
+        const user = data.user || data.data?.user;
+        
+        dispatch(setCredentials({
+          access_token: tokens.accessToken || tokens.access_token,
+          refresh_token: tokens.refreshToken || tokens.refresh_token,
+          user: user,
+          uid: user?.id || data.uid || data.userId,
+        }));
+        
+        console.log('[LoginPage] Login successful');
+        router.push("/dashboard");
+      }
+    } catch (error: unknown) {
       console.error("Login failed:", error);
+      const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+        ? String(error.data.message)
+        : (error && typeof error === 'object' && 'message' in error)
+          ? String(error.message)
+          : 'Login failed. Please try again.';
+      setError(errorMessage);
     }
   };
 
@@ -52,9 +88,11 @@ export default function LoginPage() {
       description="Sign in to your account to continue your journey with Aphrodite."
     >
       <form onSubmit={handleSubmit} className="space-y-6">
-        {error && (
+        {(error || loginError) && (
           <div className="bg-red-500/10 border border-red-500 rounded-lg p-3 text-red-400 text-sm font-urbanist">
-            {error}
+            {error || (loginError && typeof loginError === 'object' && 'data' in loginError && loginError.data && typeof loginError.data === 'object' && 'message' in loginError.data
+              ? String(loginError.data.message)
+              : 'Login failed. Please try again.')}
           </div>
         )}
 
@@ -148,31 +186,29 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Password input - only show for email login */}
-        {loginMethod === 'email' && (
-          <div className="relative">
-            <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-            <input
-              type={showPassword ? "text" : "password"}
-              placeholder="Password"
-              value={formData.password}
-              onChange={(e) => handleInputChange("password", e.target.value)}
-              className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/10 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white transition-colors"
-            >
-              {showPassword ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
-            </button>
-          </div>
-        )}
+        {/* Password input - show for both email and phone login */}
+        <div className="relative">
+          <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
+          <input
+            type={showPassword ? "text" : "password"}
+            placeholder="Password"
+            value={formData.password}
+            onChange={(e) => handleInputChange("password", e.target.value)}
+            className="w-full pl-12 pr-12 py-3 bg-transparent border border-white/10 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all duration-200"
+            required
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white transition-colors"
+          >
+            {showPassword ? (
+              <EyeOff className="h-5 w-5" />
+            ) : (
+              <Eye className="h-5 w-5" />
+            )}
+          </button>
+        </div>
 
         {/* Remember me and Forgot password */}
         <div className="flex items-center justify-between">

@@ -1,49 +1,35 @@
-import { useState, useEffect } from 'react';
-import { apiService } from '../services/api.service';
+import { useGetAuthProfileQuery } from '@/feature/authentication/authApiSlice';
 import type { AuthProfileResponse } from '../types';
 
 interface AuthProfileState {
   user: AuthProfileResponse['data']['user'] | null;
   loading: boolean;
   error: string | null;
-  refetch: () => Promise<void>;
+  refetch: () => void;
 }
 
 /**
  * Custom hook for managing authenticated user profile
+ * Uses RTK Query for automatic caching and refetching
  */
 export const useAuthProfile = (): AuthProfileState => {
-  const [user, setUser] = useState<AuthProfileResponse['data']['user'] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error, refetch } = useGetAuthProfileQuery(undefined, {
+    skip: false, // Always fetch when hook is used
+  });
 
-  const fetchProfile = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await apiService.getAuthenticatedProfile();
-      
-      if (response.success && response.data) {
-        setUser(response.data.user);
-      } else {
-        setError(response.message || 'Failed to fetch profile');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  const user = data?.data?.user || (data && typeof data === 'object' && 'user' in data ? (data as { user: AuthProfileResponse['data']['user'] }).user : null) || null;
+  const errorMessage = error 
+    ? ('data' in error && error.data && typeof error.data === 'object' && 'message' in error.data
+        ? String(error.data.message)
+        : 'message' in error
+          ? String(error.message)
+          : 'Failed to fetch profile')
+    : null;
 
   return {
     user,
-    loading,
-    error,
-    refetch: fetchProfile,
+    loading: isLoading,
+    error: errorMessage,
+    refetch: () => refetch(),
   };
 };

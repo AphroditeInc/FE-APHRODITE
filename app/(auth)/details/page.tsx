@@ -6,7 +6,14 @@ import CustomDropdown from "@/components/CustomDropdown";
 import DatePicker from "@/components/DatePicker";
 import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useApi } from "@/lib/context/ApiContext";
+import { 
+  useCompleteBasicDetailsMutation, 
+  useRegisterWithEmailMutation, 
+  useUpdateUserMutation, 
+  useUpdateProfileMutation 
+} from "@/feature/authentication/authApiSlice";
+import { useAppDispatch, useAppSelector } from "@/app/hooks";
+import { setCredentials, selectCurrentUser } from "@/feature/authentication/authSlice";
 import {
   User,
   Lock,
@@ -24,7 +31,14 @@ import {
 function DetailsForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { completeBasicDetails, registerWithEmail, updateUser, updateProfile, user, isLoading, error } = useApi();
+  const dispatch = useAppDispatch();
+  const user = useAppSelector(selectCurrentUser);
+  const [completeBasicDetails, { isLoading: isCompletingBasic }] = useCompleteBasicDetailsMutation();
+  const [registerWithEmail, { isLoading: isRegisteringEmail }] = useRegisterWithEmailMutation();
+  const [updateUser, { isLoading: isUpdatingUser }] = useUpdateUserMutation();
+  const [updateProfile, { isLoading: isUpdatingProfile }] = useUpdateProfileMutation();
+  const [error, setError] = useState<string | null>(null);
+  const isLoading = isCompletingBasic || isRegisteringEmail || isUpdatingUser || isUpdatingProfile;
   const [currentStep, setCurrentStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -173,6 +187,7 @@ function DetailsForm() {
 
   const handleSubmit = async () => {
     const finalUserId = userId || user?.id;
+    setError(null);
 
     try {
       // Check if this is phone registration (has userId) or email registration (no userId)
@@ -190,12 +205,24 @@ function DetailsForm() {
         };
 
         console.log("Sending basic details payload:", basicDetailsPayload);
-        const basicDetailsResponse = await completeBasicDetails(finalUserId, basicDetailsPayload);
-        console.log("Basic details response:", basicDetailsResponse);
+        const result = await completeBasicDetails({ userId: finalUserId, ...basicDetailsPayload }).unwrap();
+        console.log("Basic details response:", result);
 
-        if (basicDetailsResponse.success) {
-          // Basic details completed successfully and returned authentication tokens
-          // The ApiContext should have automatically set the tokens via setTokens()
+        if (result && result.data) {
+          const data = result.data;
+          // Handle different response formats
+          const tokens = data.tokens || data;
+          const userData = data.user || data.data?.user;
+          
+          if (tokens && (tokens.accessToken || tokens.access_token)) {
+            dispatch(setCredentials({
+              access_token: tokens.accessToken || tokens.access_token,
+              refresh_token: tokens.refreshToken || tokens.refresh_token,
+              user: userData,
+              uid: userData?.id || data.uid || data.userId,
+            }));
+          }
+          
           console.log("Basic details completed successfully, user is now authenticated");
           
           if (currentStep === 3) {
@@ -211,22 +238,20 @@ function DetailsForm() {
 
             console.log("Updating profile with:", profileUpdatePayload);
             try {
-              const profileUpdateResponse = await updateProfile(profileUpdatePayload);
-              console.log("Profile update response:", profileUpdateResponse);
-              
-              if (profileUpdateResponse.success) {
-                // Profile updated successfully, redirect to dashboard
-                router.push("/dashboard");
-              } else {
-                console.error("Profile update failed:", profileUpdateResponse.error);
-              }
-            } catch (error) {
+              await updateProfile(profileUpdatePayload).unwrap();
+              console.log("Profile updated successfully");
+              // Profile updated successfully, redirect to dashboard
+              router.push("/dashboard");
+            } catch (error: unknown) {
               console.error("Profile update error:", error);
+              const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+                ? String(error.data.message)
+                : (error && typeof error === 'object' && 'message' in error)
+                  ? String(error.message)
+                  : 'Profile update failed';
+              setError(errorMessage);
             }
           }
-        } else {
-          console.error("Basic details failed:", basicDetailsResponse.error);
-          // The error will be displayed by the ApiContext error handling
         }
       } else {
         // Email Registration Path: Register with email and password
@@ -240,10 +265,10 @@ function DetailsForm() {
           number: "0000000000", // Placeholder number for email registration
         };
 
-        const registrationResponse = await registerWithEmail(emailRegistrationPayload);
+        const result = await registerWithEmail(emailRegistrationPayload).unwrap();
 
-        if (registrationResponse.success && registrationResponse.data) {
-          const newUserId = registrationResponse.data.user.id;
+        if (result && result.data) {
+          const newUserId = result.data.user.id;
 
           if (currentStep === 2) {
             // Move to step 3 (personal details - optional)
@@ -260,10 +285,16 @@ function DetailsForm() {
 
               console.log("Updating personal details:", personalDetailsPayload);
               try {
-                const personalDetailsResponse = await updateProfile(personalDetailsPayload);
-                console.log("Personal details update response:", personalDetailsResponse);
-              } catch (error) {
+                await updateProfile(personalDetailsPayload).unwrap();
+                console.log("Personal details updated successfully");
+              } catch (error: unknown) {
                 console.error("Personal details update error:", error);
+                const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+                  ? String(error.data.message)
+                  : (error && typeof error === 'object' && 'message' in error)
+                    ? String(error.message)
+                    : 'Failed to update personal details';
+                setError(errorMessage);
               }
             }
             
@@ -272,8 +303,14 @@ function DetailsForm() {
           }
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to complete registration:", error);
+      const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+        ? String(error.data.message)
+        : (error && typeof error === 'object' && 'message' in error)
+          ? String(error.message)
+          : 'Registration failed. Please try again.';
+      setError(errorMessage);
     }
   };
 
