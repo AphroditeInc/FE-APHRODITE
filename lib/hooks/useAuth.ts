@@ -1,5 +1,11 @@
-import { useCallback, useMemo, useEffect } from 'react';
-import { useApi } from '../context/ApiContext';
+import { useCallback, useMemo } from 'react';
+import { useAppDispatch, useAppSelector } from '@/app/hooks';
+import { 
+  selectCurrentUser, 
+  selectIsAuthenticated, 
+  logOut 
+} from '@/feature/authentication/authSlice';
+import { getAuthTokens } from '../utils/storage.utils';
 import { isAccessTokenExpired } from '../utils';
 import type { User, AuthTokens } from '../types';
 
@@ -63,25 +69,27 @@ interface UseAuthReturn {
  * ```
  */
 export const useAuth = (): UseAuthReturn => {
-  const { user, tokens, isAuthenticated, isLoading, logout: logoutFn, refreshTokens: refreshTokensFn } = useApi();
+  const dispatch = useAppDispatch();
+  const user = useAppSelector(selectCurrentUser);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const tokens = useMemo(() => getAuthTokens(), []); // Get from localStorage
+  const isLoading = false; // RTK Query handles loading states separately
 
   /**
    * Memoized logout function
    */
   const logout = useCallback(() => {
-    logoutFn();
-  }, [logoutFn]);
+    dispatch(logOut());
+  }, [dispatch]);
 
   /**
    * Memoized refresh tokens function
+   * Note: Token refresh is handled automatically by RTK Query base query
    */
   const refreshTokens = useCallback(async () => {
-    try {
-      await refreshTokensFn();
-    } catch (error) {
-      console.error('[useAuth] Token refresh failed:', error);
-    }
-  }, [refreshTokensFn]);
+    // Token refresh is handled automatically by the API slice
+    console.log('[useAuth] Token refresh is handled automatically by RTK Query');
+  }, []);
 
   /**
    * Memoized user role checks

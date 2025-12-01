@@ -9,12 +9,16 @@ import apple from "../../../public/icons/apple.svg";
 import facebook from "../../../public/icons/facebook.svg";
 import { Phone, Mail } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useApi } from "@/lib/context/ApiContext";
+import { useRegisterUserMutation, useRegisterWithEmailMutation } from "@/feature/authentication/authApiSlice";
+import { useState } from "react";
 
 function SignUpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { registerUser, registerWithEmail, isLoading, error } = useApi();
+  const [registerUser, { isLoading: isRegisteringUser }] = useRegisterUserMutation();
+  const [registerWithEmail, { isLoading: isRegisteringEmail }] = useRegisterWithEmailMutation();
+  const [error, setError] = useState<string | null>(null);
+  const isLoading = isRegisteringUser || isRegisteringEmail;
   const [userType, setUserType] = useState<string>("");
   const [registrationMethod, setRegistrationMethod] = useState<"phone" | "email">("phone");
 
@@ -61,6 +65,8 @@ function SignUpForm() {
     }
 
     try {
+      setError(null);
+      
       if (registrationMethod === "phone") {
         // Phone registration validation
         if (!phoneValid) {
@@ -68,18 +74,18 @@ function SignUpForm() {
         }
 
         // Register the user with phone number
-        const registerResponse = await registerUser({
+        const result = await registerUser({
           userType: userType as "client" | "rider" | "diva" | "hunk",
           countryCode: formData.countryCode,
           phoneNumber: formData.phone,
-        });
+        }).unwrap();
 
-        if (registerResponse.success && registerResponse.data) {
-          console.log('Phone registration successful, user data:', registerResponse.data);
+        if (result && result.data) {
+          console.log('Phone registration successful, user data:', result.data);
           
           // Go directly to details page to complete profile
           router.push(
-            `/details?userType=${userType}&userId=${registerResponse.data.id}`
+            `/details?userType=${userType}&userId=${result.data.id}`
           );
         }
       } else {
@@ -89,7 +95,7 @@ function SignUpForm() {
         }
 
         // Register the user with email using the /auth/register endpoint
-        const registerResponse = await registerWithEmail({
+        const result = await registerWithEmail({
           email: formData.email,
           password: formData.password,
           firstName: formData.firstName,
@@ -97,19 +103,20 @@ function SignUpForm() {
           userType: userType as "client" | "rider" | "diva" | "hunk",
           countryCode: "+1", // Default country code for email registration
           number: "0000000000", // Placeholder number for email registration
-        });
+        }).unwrap();
 
-        if (registerResponse.success && registerResponse.data) {
-          console.log('Email registration successful, user data:', registerResponse.data);
+        if (result && result.data) {
+          console.log('Email registration successful, user data:', result.data);
           
           // Go to details page to complete profile
           router.push(
-            `/details?userType=${userType}&userId=${registerResponse.data.user.id}`
+            `/details?userType=${userType}&userId=${result.data.user.id}`
           );
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Registration failed:", error);
+      setError(error?.data?.message || error?.message || 'Registration failed. Please try again.');
     }
   };
 

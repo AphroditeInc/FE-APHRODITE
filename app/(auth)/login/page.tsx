@@ -8,11 +8,15 @@ import apple from "../../../public/icons/apple.svg";
 import facebook from "../../../public/icons/facebook.svg";
 import { Mail, Lock, Eye, EyeOff, Phone } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useApi } from "@/lib/context/ApiContext";
+import { useLoginMutation } from "@/feature/authentication/authApiSlice";
+import { useAppDispatch } from "@/app/hooks";
+import { setCredentials, logOut } from "@/feature/authentication/authSlice";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { loginWithEmail, loginUser, isLoading, error, logout } = useApi();
+  const dispatch = useAppDispatch();
+  const [login, { isLoading, error: loginError }] = useLoginMutation();
+  const [error, setError] = useState<string | null>(null);
   const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
   const [formData, setFormData] = useState({
     email: "",
@@ -28,38 +32,48 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     
     try {
       // Clear any existing tokens before attempting login
       console.log('[LoginPage] Clearing existing tokens before login attempt');
-      logout();
+      dispatch(logOut());
       
       // Small delay to ensure tokens are cleared
       await new Promise(resolve => setTimeout(resolve, 100));
       
+      let loginData;
       if (loginMethod === 'email') {
         console.log('[LoginPage] Attempting email login for:', formData.email);
-        const response = await loginWithEmail(formData.email, formData.password);
-        if (response.success) {
-          console.log('[LoginPage] Email login successful');
-          router.push("/dashboard");
-        } else {
-          console.error('[LoginPage] Email login failed:', response.error);
-        }
+        loginData = { email: formData.email, password: formData.password };
       } else {
         // For phone login, we need to send both phone number and country code with password
         const phoneWithCode = `${formData.countryCode}${formData.phone}`;
         console.log('[LoginPage] Attempting phone login for:', phoneWithCode);
-        const response = await loginWithEmail(phoneWithCode, formData.password);
-        if (response.success) {
-          console.log('[LoginPage] Phone login successful');
-          router.push("/dashboard");
-        } else {
-          console.error('[LoginPage] Phone login failed:', response.error);
-        }
+        loginData = { email: phoneWithCode, password: formData.password };
       }
-    } catch (error) {
+
+      const result = await login(loginData).unwrap();
+      
+      if (result && result.data) {
+        const data = result.data;
+        // Handle different response formats
+        const tokens = data.tokens || data;
+        const user = data.user || data.data?.user;
+        
+        dispatch(setCredentials({
+          access_token: tokens.accessToken || tokens.access_token,
+          refresh_token: tokens.refreshToken || tokens.refresh_token,
+          user: user,
+          uid: user?.id || data.uid || data.userId,
+        }));
+        
+        console.log('[LoginPage] Login successful');
+        router.push("/dashboard");
+      }
+    } catch (error: any) {
       console.error("Login failed:", error);
+      setError(error?.data?.message || error?.message || 'Login failed. Please try again.');
     }
   };
 
@@ -69,9 +83,9 @@ export default function LoginPage() {
       description="Sign in to your account to continue your journey with Aphrodite."
     >
       <form onSubmit={handleSubmit} className="space-y-6">
-        {error && (
+        {(error || loginError) && (
           <div className="bg-red-500/10 border border-red-500 rounded-lg p-3 text-red-400 text-sm font-urbanist">
-            {error}
+            {error || (loginError as any)?.data?.message || 'Login failed. Please try again.'}
           </div>
         )}
 

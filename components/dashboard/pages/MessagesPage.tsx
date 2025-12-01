@@ -19,7 +19,12 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/hooks";
-import { apiService } from "@/lib/services";
+import { 
+  useGetUserRoomsQuery, 
+  useGetRoomMessagesQuery, 
+  useMarkRoomAsReadMutation, 
+  useSendMessageMutation 
+} from "@/feature/chat/chatApiSlice";
 import type { ChatRoom, ChatMessage } from "@/lib/types";
 
 interface Chat {
@@ -242,110 +247,53 @@ export default function MessagesPage() {
   const [showPricingDialog, setShowPricingDialog] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   
-  // API Integration States
-  const [rooms, setRooms] = useState<ChatRoom[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
+  // RTK Query hooks
+  const { data: roomsData, isLoading: loadingRooms, error: roomsError, refetch: refetchRooms } = useGetUserRoomsQuery(
+    { limit: 50, offset: 0 },
+    { skip: !user?.id }
+  );
+  
+  const { data: messagesData, isLoading: loadingMessages, refetch: refetchMessages } = useGetRoomMessagesQuery(
+    { roomId: selectedChat || '', limit: 50 },
+    { skip: !selectedChat }
+  );
+  
+  const [markRoomAsRead] = useMarkRoomAsReadMutation();
+  const [sendMessageMutation, { isLoading: sending }] = useSendMessageMutation();
+
+  // Convert API data to component state
+  const rooms = roomsData?.data || (Array.isArray(roomsData) ? roomsData : []);
+  const messages = messagesData?.data || (Array.isArray(messagesData) ? messagesData : []);
+  const loading = loadingRooms || loadingMessages;
+  const error = roomsError ? (roomsError as any)?.data?.message || 'Failed to fetch conversations' : null;
 
   // API Integration Functions
   useEffect(() => {
-    if (user?.id) {
-      fetchRooms();
-    }
-  }, [user?.id]);
-
-  useEffect(() => {
     if (selectedChat) {
-      fetchMessages(selectedChat);
       markRoomAsRead(selectedChat);
     }
-  }, [selectedChat]);
-
-  const fetchRooms = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      console.log('Fetching rooms...');
-      const response = await apiService.getUserRooms(50, 0);
-      console.log('Rooms API response:', response);
-      
-      if (response.success && response.data) {
-        // Ensure response.data is an array
-        const roomsArray = Array.isArray(response.data) ? response.data : [];
-        console.log('Rooms array:', roomsArray);
-        setRooms(roomsArray);
-      } else {
-        setError(response.error || 'Failed to fetch conversations');
-        setRooms([]); // Set empty array on error
-      }
-    } catch (err) {
-      setError('An error occurred while fetching conversations');
-      console.error('Error fetching rooms:', err);
-      setRooms([]); // Set empty array on error
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchMessages = async (roomId: string) => {
-    try {
-      console.log('Fetching messages for room:', roomId);
-      const response = await apiService.getRoomMessages(roomId, { limit: 50 });
-      console.log('Messages API response:', response);
-      
-      if (response.success && response.data) {
-        // Ensure response.data is an array
-        const messagesArray = Array.isArray(response.data) ? response.data : [];
-        console.log('Messages array:', messagesArray);
-        setMessages(messagesArray);
-      } else {
-        console.error('Failed to fetch messages:', response.error);
-        setMessages([]); // Set empty array on error
-      }
-    } catch (err) {
-      console.error('Error fetching messages:', err);
-      setMessages([]); // Set empty array on error
-    }
-  };
-
-  const markRoomAsRead = async (roomId: string) => {
-    try {
-      await apiService.markRoomAsRead(roomId);
-    } catch (err) {
-      console.error('Error marking room as read:', err);
-    }
-  };
+  }, [selectedChat, markRoomAsRead]);
 
   const sendMessage = async () => {
     if (!messageInput.trim() || !selectedChat || sending) return;
 
     try {
-      setSending(true);
-      const response = await apiService.sendMessage({
+      const result = await sendMessageMutation({
+        receiverId: selectedChat,
         content: messageInput.trim(),
         type: 'text',
         tempId: `temp_${Date.now()}`,
-      });
+      }).unwrap();
 
-      if (response.success && response.data) {
-        setMessages(prev => [...prev, response.data!]);
+      if (result && result.data) {
         setMessageInput('');
-        
-        // Update room's last message
-        setRooms(prev => prev.map(room => 
-          room.id === selectedChat 
-            ? { ...room, lastMessage: response.data!, unreadCount: 0 }
-            : room
-        ));
-      } else {
-        console.error('Failed to send message:', response.error);
+        // Refetch messages to get updated list
+        refetchMessages();
+        // Refetch rooms to update last message
+        refetchRooms();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error sending message:', err);
-    } finally {
-      setSending(false);
     }
   };
 
@@ -386,7 +334,7 @@ export default function MessagesPage() {
     }
   };
 
-  const selectedChatData = rooms.find((room) => room.id === selectedChat);
+  const selectedChatData = rooms.find((room: ChatRoom) => room.id === selectedChat);
   
   // Helper functions for data transformation
   const formatTime = (dateString: string) => {
@@ -614,7 +562,7 @@ export default function MessagesPage() {
             <div className="p-4 text-center">
               <p className="text-red-400 mb-2">{error}</p>
               <button
-                onClick={fetchRooms}
+                onClick={() => refetchRooms()}
                 className="px-4 py-2 bg-[#FA266D] text-white rounded-lg hover:bg-pink-600"
               >
                 Retry

@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, MapPin, Star, Check, Users, Calendar as CalendarIcon, Heart, BookOpen, MessageCircle, UserPlus, Info, Coins, Play, ThumbsUp, ThumbsDown, ChevronDown } from "lucide-react";
-import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
-import type { EnrichedProfile } from "@/lib/types";
+import { mockProfiles, type Profile } from "@/lib/data/profiles";
 
 // Array of background images
 const backgroundImages = [
@@ -52,12 +51,21 @@ const mockReviews = [
 export default function ProfileDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const profileId = params.id as string;
-  const { profile, loading, error } = useEnrichedProfile(profileId);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("About");
   const [reviewText, setReviewText] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
+
+  useEffect(() => {
+    const profileId = params.id as string;
+    const foundProfile = mockProfiles.find(p => p.id === profileId);
+    if (foundProfile) {
+      setProfile(foundProfile);
+      // Start with the profile's corresponding image
+      setCurrentImageIndex(parseInt(profileId) - 1);
+    }
+  }, [params.id]);
 
   // Cycle through images every 3 seconds
   useEffect(() => {
@@ -73,19 +81,15 @@ export default function ProfileDetailPage() {
   };
 
   const handleLike = () => {
-    // This would need to be implemented with API call
-    console.log('Like functionality not implemented yet');
+    if (profile) {
+      setProfile({
+        ...profile,
+        isLiked: !profile.isLiked
+      });
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="h-full bg-[#1F1B2C] flex items-center justify-center">
-        <div className="text-white text-xl">Loading profile...</div>
-      </div>
-    );
-  }
-
-  if (error || !profile) {
+  if (!profile) {
     return (
       <div className="h-full bg-[#1F1B2C] flex items-center justify-center">
         <div className="text-white text-xl">Profile not found</div>
@@ -139,26 +143,16 @@ export default function ProfileDetailPage() {
             <div className="space-y-3">
               {/* Name with verification */}
               <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold text-white">
-                  {profile.user.firstName} {profile.user.lastName}
-                </h1>
-                {profile.issuedIdVerified && (
-                  <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                    <Check className="w-4 h-4 text-white" />
-                  </div>
-                )}
-              </div>
-              
-              {/* Username and User Type */}
-              <div className="flex items-center gap-2">
-                <span className="text-pink-300">@{profile.user.userName}</span>
-                <span className="text-sm text-gray-400 capitalize">• {profile.user.userType}</span>
+                <h1 className="text-3xl font-bold text-white">{profile.name}</h1>
+                <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                  <Check className="w-4 h-4 text-white" />
+                </div>
               </div>
 
               {/* Location */}
               <div className="flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-pink-500" />
-                <span className="text-white">Location not specified</span>
+                <span className="text-white">{profile.location}</span>
               </div>
 
               {/* Rating */}
@@ -167,48 +161,46 @@ export default function ProfileDetailPage() {
                   {[...Array(5)].map((_, i) => (
                     <Star 
                       key={i} 
-                      className={`w-5 h-5 ${i < Math.floor(profile.reviews?.stats?.averageRating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
+                      className={`w-5 h-5 ${i < Math.floor(profile.rating) ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
                     />
                   ))}
                 </div>
-                <span className="text-white font-semibold">
-                  {profile.reviews?.stats?.averageRating ? profile.reviews.stats.averageRating.toFixed(1) : '0.0'}
-                </span>
-                <span className="text-sm text-gray-400">
-                  ({profile.reviews?.stats?.totalReviews || 0} reviews)
-                </span>
+                <span className="text-white font-semibold">{profile.rating}</span>
                 <button 
                   onClick={handleLike}
                   className="transition-colors ml-2"
                 >
-                  <Heart className="w-6 h-6 text-gray-400" />
+                  <Heart 
+                    className={`w-6 h-6 ${
+                      profile.isLiked ? 'text-[#FA266D] fill-current' : 'text-gray-400'
+                    }`} 
+                  />
                 </button>
               </div>
 
               {/* Bio */}
               <div className="space-y-2 text-white">
-                <p className="text-lg">{profile.bio || 'No bio available'}</p>
-                {profile.education && profile.education !== 'Not specified' && (
-                  <p className="text-sm text-pink-300">Education: {profile.education}</p>
-                )}
-                {profile.occupation && profile.occupation !== 'Not specified' && (
-                  <p className="text-sm text-pink-300">Occupation: {profile.occupation}</p>
-                )}
+                <p className="text-lg">{profile.bio}</p>
+                <p className="text-sm text-pink-300">NB: check my price and Tfare validates our appointment</p>
+                <p className="text-sm">
+                  Think silk sheets, whispered cravings, and nights that blur into morning. I don&apos;t offer moments. I offer experiences unforgettable, unfiltered, and all about you. Discretion is guaranteed. Satisfaction is not optional 💋
+                </p>
+                <p className="text-sm">
+                  Touch Me with Your Eyes First. Then the Rest. I&apos;m naughty by Nature. Classy by Choice.
+                </p>
               </div>
 
               {/* Joined Date and Followers/Following */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <CalendarIcon className="w-5 h-5 text-pink-500" />
-                  <span className="text-white">
-                    Joined {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown'}
-                  </span>
+                  <span className="text-white">Joined {profile.joinedDate}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Users className="w-5 h-5 text-pink-500" />
-                  <span className="text-white">{profile.followersCount || 0} Followers</span>
+                  <span className="text-white">{profile.following} Following</span>
                   <span className="text-white/60">•</span>
-                  <span className="text-white">{profile.reviews?.stats?.totalReviews || 0} Reviews</span>
+                  <span className="text-white">{profile.followers} Followers</span>
                 </div>
               </div>
             </div>
@@ -300,60 +292,68 @@ export default function ProfileDetailPage() {
             {/* Left Column */}
             <div className="space-y-4">
               <div className="flex-col pt-3 justify-between">
+                <p className="text-pink-500 pb-4 font-semibold">Gender</p>
+                <p className="text-white">{profile.gender}</p>
+              </div>
+              <div className="flex-col pt-3 justify-between">
+                <p className="text-pink-500 pb-4 font-semibold">Sexual Orientation</p>
+                <p className="text-white">{profile.sexualOrientation}</p>
+              </div>
+              <div className="flex-col pt-3 justify-between">
+                <p className="text-pink-500 pb-4 font-semibold">Looks</p>
+                <p className="text-white">{profile.looks}</p>
+              </div>
+              <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Education</p>
-                <p className="text-white">{profile.education || 'Not specified'}</p>
+                <p className="text-white">{profile.education}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Occupation</p>
-                <p className="text-white">{profile.occupation || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Marital Status</p>
-                <p className="text-white">{profile.maritalStatus || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Smoker</p>
-                <p className="text-white">{profile.smoker ? 'Yes' : 'No'}</p>
+                <p className="text-pink-500 pb-4 font-semibold">City</p>
+                <p className="text-white">{profile.city}</p>
               </div>
             </div>
 
             {/* Middle Column */}
             <div className="space-y-4">
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Followers</p>
-                <p className="text-white">{profile.followersCount || 0}</p>
+                <p className="text-pink-500 pb-4 font-semibold">Ethnicity</p>
+                <p className="text-white">{profile.ethnicity}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Reviews</p>
-                <p className="text-white">{profile.reviews?.stats?.totalReviews || 0}</p>
+                <p className="text-pink-500 pb-4 font-semibold">Body Build</p>
+                <p className="text-white">{profile.bodyBuild}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Average Rating</p>
-                <p className="text-white">{profile.reviews?.stats?.averageRating ? profile.reviews.stats.averageRating.toFixed(1) : '0.0'}</p>
+                <p className="text-pink-500 pb-4 font-semibold">Smoker</p>
+                <p className="text-white">{profile.smoker}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Media Count</p>
-                <p className="text-white">{profile.media?.length || 0}</p>
+                <p className="text-pink-500 pb-4 font-semibold">Country</p>
+                <p className="text-white">{profile.country}</p>
+              </div>
+              <div className="flex-col pt-3 justify-between">
+                <p className="text-pink-500 pb-4 font-semibold">Last Seen</p>
+                <p className="text-white">{profile.lastSeen}</p>
               </div>
             </div>
 
             {/* Right Column */}
             <div className="space-y-4">
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Video Proof</p>
-                <p className="text-white">{profile.hasVideoProof ? 'Verified' : 'Not verified'}</p>
+                <p className="text-pink-500 pb-4 font-semibold">Nationality</p>
+                <p className="text-white">{profile.nationality}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">ID Verified</p>
-                <p className="text-white">{profile.issuedIdVerified ? 'Verified' : 'Not verified'}</p>
+                <p className="text-pink-500 pb-4 font-semibold">Bust Size</p>
+                <p className="text-white">{profile.bustSize}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">User Type</p>
-                <p className="text-white capitalize">{profile.user.userType}</p>
+                <p className="text-pink-500 pb-4 font-semibold">Occupation</p>
+                <p className="text-white">{profile.occupation}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Username</p>
-                <p className="text-white">@{profile.user.userName}</p>
+                <p className="text-pink-500 pb-4 font-semibold">State</p>
+                <p className="text-white">{profile.state}</p>
               </div>
             </div>
           </div>
@@ -590,7 +590,7 @@ export default function ProfileDetailPage() {
 
               {/* Rating Section */}
               <div className="space-y-3">
-                <h4 className="text-[#FA266D]" style={{ fontFamily: 'Urbanist', fontWeight: 600, fontSize: '18px', lineHeight: '100%', letterSpacing: '0%' }}>Rate {profile?.user?.firstName} {profile?.user?.lastName}</h4>
+                <h4 className="text-[#FA266D]" style={{ fontFamily: 'Urbanist', fontWeight: 600, fontSize: '18px', lineHeight: '100%', letterSpacing: '0%' }}>Rate {profile?.name}</h4>
                 <div className="flex items-center gap-2">
                   <div className="flex">
                     {[...Array(5)].map((_, i) => (
