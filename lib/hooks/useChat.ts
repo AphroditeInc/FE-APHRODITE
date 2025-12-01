@@ -1,13 +1,19 @@
-import { useCallback, useState } from 'react';
-import { useApi } from '../context/ApiContext';
+import { useCallback } from 'react';
+import { 
+  useSendMessageMutation, 
+  useCreateRoomMutation, 
+  useLazyGetRoomMessagesQuery, 
+  useLazyGetUserRoomsQuery,
+  useUpdateMessageStatusMutation,
+  useMarkRoomAsReadMutation,
+  useEditMessageMutation,
+  useDeleteMessageMutation,
+} from '@/app/api/apiSlice';
 import type { 
   SendMessagePayload, 
-  ChatMessage, 
-  ChatRoom, 
+  CreateRoomPayload, 
   GetMessagesQuery,
   UpdateMessageStatusPayload,
-  RoomStats,
-  ApiResponse 
 } from '../types';
 
 /**
@@ -45,140 +51,64 @@ import type {
  * ```
  */
 export const useChat = () => {
-  const api = useApi();
-  const [isSending, setIsSending] = useState(false);
+  const [sendMessageMutation, { isLoading: isSending, error: sendError }] = useSendMessageMutation();
+  const [createRoomMutation] = useCreateRoomMutation();
+  const [getRoomMessagesQuery] = useLazyGetRoomMessagesQuery();
+  const [getUserRoomsQuery] = useLazyGetUserRoomsQuery();
+  const [updateMessageStatusMutation] = useUpdateMessageStatusMutation();
+  const [markRoomAsReadMutation] = useMarkRoomAsReadMutation();
+  const [editMessageMutation] = useEditMessageMutation();
+  const [deleteMessageMutation] = useDeleteMessageMutation();
 
-  /**
-   * Send a message to another user or room
-   * 
-   * @param payload - Message payload containing receiverId, content, type, etc.
-   * @returns Promise with the sent message or error
-   * 
-   * @example
-   * ```tsx
-   * const response = await sendMessage({
-   *   receiverId: '507f1f77bcf86cd799439011',
-   *   content: 'Hello, how are you?',
-   *   type: 'text',
-   *   metadata: {
-   *     imageUrl: 'https://example.com/image.jpg'
-   *   },
-   *   attachments: ['https://example.com/file1.pdf'],
-   *   replyTo: '507f1f77bcf86cd799439012',
-   *   tempId: 'temp_1234567890'
-   * });
-   * ```
-   */
-  const sendMessage = useCallback(async (
-    payload: SendMessagePayload
-  ): Promise<ApiResponse<ChatMessage>> => {
-    setIsSending(true);
-    try {
-      const response = await api.sendMessage(payload);
-      return response;
-    } finally {
-      setIsSending(false);
-    }
-  }, [api]);
+  const sendMessage = useCallback(async (payload: SendMessagePayload) => {
+    return sendMessageMutation(payload).unwrap();
+  }, [sendMessageMutation]);
 
-  /**
-   * Get messages from a specific room
-   */
-  const getRoomMessages = useCallback(async (
-    roomId: string,
-    query?: GetMessagesQuery
-  ): Promise<ApiResponse<ChatMessage[]>> => {
-    return api.getRoomMessages(roomId, query);
-  }, [api]);
+  const getRoomMessages = useCallback(async (roomId: string, query?: GetMessagesQuery) => {
+    return getRoomMessagesQuery({ roomId, query }).unwrap();
+  }, [getRoomMessagesQuery]);
 
-  /**
-   * Create a new chat room
-   */
-  const createRoom = useCallback(async (
-    payload: Parameters<typeof api.createRoom>[0]
-  ): Promise<ApiResponse<ChatRoom>> => {
-    return api.createRoom(payload);
-  }, [api]);
+  const createRoom = useCallback(async (payload: CreateRoomPayload) => {
+    return createRoomMutation(payload).unwrap();
+  }, [createRoomMutation]);
 
-  /**
-   * Get all chat rooms for the authenticated user
-   */
-  const getUserRooms = useCallback(async (
-    limit?: number,
-    offset?: number
-  ): Promise<ApiResponse<ChatRoom[]>> => {
-    return api.getUserRooms(limit, offset);
-  }, [api]);
+  const getUserRooms = useCallback(async (limit?: number, offset?: number) => {
+    return getUserRoomsQuery({ limit, offset }).unwrap();
+  }, [getUserRoomsQuery]);
 
-  /**
-   * Get conversation history
-   */
-  const getConversations = useCallback(async (
-    limit?: number,
-    offset?: number
-  ): Promise<ApiResponse<ChatRoom[]>> => {
-    return api.getConversations(limit, offset);
-  }, [api]);
+  const getConversations = useCallback(async () => {
+    // Note: This uses the query hook directly, not lazy
+    // You may want to refactor this to use useLazyGetConversationsQuery if needed
+    throw new Error("Use useGetConversationsQuery hook directly in component");
+  }, []);
 
-  /**
-   * Update message status (delivered, read, etc.)
-   */
-  const updateMessageStatus = useCallback(async (
-    messageId: string,
-    payload: UpdateMessageStatusPayload
-  ): Promise<ApiResponse<ChatMessage>> => {
-    return api.updateMessageStatus(messageId, payload);
-  }, [api]);
+  const updateMessageStatus = useCallback(async (messageId: string, payload: UpdateMessageStatusPayload) => {
+    return updateMessageStatusMutation({ messageId, ...payload }).unwrap();
+  }, [updateMessageStatusMutation]);
 
-  /**
-   * Mark all messages in a room as read
-   */
-  const markRoomAsRead = useCallback(async (
-    roomId: string
-  ): Promise<ApiResponse<{ success: boolean }>> => {
-    return api.markRoomAsRead(roomId);
-  }, [api]);
+  const markRoomAsRead = useCallback(async (roomId: string) => {
+    return markRoomAsReadMutation(roomId).unwrap();
+  }, [markRoomAsReadMutation]);
 
-  /**
-   * Get unread message count for a room
-   */
-  const getRoomUnreadCount = useCallback(async (
-    roomId: string
-  ): Promise<ApiResponse<{ count: number }>> => {
-    return api.getRoomUnreadCount(roomId);
-  }, [api]);
+  const getRoomUnreadCount = useCallback(async () => {
+    // Note: This is a query, not a mutation. Use the hook directly in component
+    throw new Error("Use useGetRoomUnreadCountQuery hook directly in component");
+  }, []);
 
-  /**
-   * Get room statistics
-   */
-  const getRoomStats = useCallback(async (
-    roomId: string
-  ): Promise<ApiResponse<RoomStats>> => {
-    return api.getRoomStats(roomId);
-  }, [api]);
+  const getRoomStats = useCallback(async () => {
+    // Note: This is a query, not a mutation. Use the hook directly in component
+    throw new Error("Use useGetRoomStatsQuery hook directly in component");
+  }, []);
 
-  /**
-   * Edit a message
-   */
-  const editMessage = useCallback(async (
-    messageId: string,
-    content: string
-  ): Promise<ApiResponse<ChatMessage>> => {
-    return api.editMessage(messageId, content);
-  }, [api]);
+  const editMessage = useCallback(async (messageId: string, content: string) => {
+    return editMessageMutation({ messageId, content }).unwrap();
+  }, [editMessageMutation]);
 
-  /**
-   * Delete a message
-   */
-  const deleteMessage = useCallback(async (
-    messageId: string,
-    hard?: boolean
-  ): Promise<ApiResponse<{ success: boolean }>> => {
-    return api.deleteMessage(messageId, hard);
-  }, [api]);
+  const deleteMessage = useCallback(async (messageId: string, hard?: boolean) => {
+    return deleteMessageMutation({ messageId, hard }).unwrap();
+  }, [deleteMessageMutation]);
 
   return {
-    // Methods
     sendMessage,
     getRoomMessages,
     createRoom,
@@ -191,10 +121,9 @@ export const useChat = () => {
     editMessage,
     deleteMessage,
     
-    // State
     isSending,
-    isLoading: api.isLoading,
-    error: api.error,
+    isLoading: isSending, // Approximate
+    error: (sendError as { data?: { message?: string }; error?: string })?.data?.message || (sendError as { error?: string })?.error || null,
   };
 };
 

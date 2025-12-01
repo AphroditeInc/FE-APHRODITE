@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useApi } from "@/lib/context/ApiContext";
+import { useRegisterUserMutation, useRegisterWithEmailMutation } from "@/app/api/apiSlice";
 import { useRouter } from "next/navigation";
 import AuthCard from "@/components/auth/AuthCard";
 import Button from "@/components/button";
@@ -10,7 +10,11 @@ import Button from "@/components/button";
 export const dynamic = 'force-dynamic';
 
 export default function CreateTestUserPage() {
-  const { registerWithEmail, registerUser, isLoading, error } = useApi();
+  const [registerWithEmail, { isLoading: isEmailLoading, error: emailError }] = useRegisterWithEmailMutation();
+  const [registerUser, { isLoading: isUserLoading, error: userError }] = useRegisterUserMutation();
+  
+  const isLoading = isEmailLoading || isUserLoading;
+  const error = (emailError as any)?.data?.message || (userError as any)?.data?.message || (emailError as any)?.error || (userError as any)?.error || null;
   const router = useRouter();
   const [createdUser, setCreatedUser] = useState<{ id: string; email: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -38,7 +42,7 @@ export default function CreateTestUserPage() {
         userType: formData.userType,
         countryCode: "+1",
         number: "0000000000",
-      });
+      }).unwrap();
 
       // If email registration fails (404 or other error), try phone registration
       if (!emailResponse.success) {
@@ -48,7 +52,7 @@ export default function CreateTestUserPage() {
           userType: formData.userType,
           countryCode: "+1",
           phoneNumber: `1${Date.now().toString().slice(-10)}`, // Generate unique phone number
-        });
+        }).unwrap();
 
         if (phoneResponse.success && phoneResponse.data) {
           setCreatedUser({
@@ -70,6 +74,26 @@ export default function CreateTestUserPage() {
       }
     } catch (err) {
       console.error("Failed to create test user:", err);
+      // Fallback to phone registration on error if it was the email one that failed
+      if (!isUserLoading) {
+         try {
+            console.log("Email registration threw error, trying phone registration endpoint...");
+            const phoneResponse = await registerUser({
+              userType: formData.userType,
+              countryCode: "+1",
+              phoneNumber: `1${Date.now().toString().slice(-10)}`,
+            }).unwrap();
+            
+            if (phoneResponse.success && phoneResponse.data) {
+              setCreatedUser({
+                id: phoneResponse.data.id,
+                email: formData.email,
+              });
+            }
+         } catch (phoneErr) {
+            console.error("Phone registration also failed:", phoneErr);
+         }
+      }
     }
   };
 

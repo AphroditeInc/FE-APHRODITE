@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Urbanist } from "next/font/google";
 import "./globals.css";
 import { ReduxProvider } from "../components/providers/ReduxProvider";
-import { ApiProvider } from "@/lib/context/ApiContext";
 
 const urbanist = Urbanist({
   variable: "--font-urbanist",
@@ -33,9 +32,7 @@ export default function RootLayout({
         className={`${urbanist.variable} antialiased`}
       >
         <ReduxProvider>
-          <ApiProvider>
-            {children}
-          </ApiProvider>
+          {children}
         </ReduxProvider>
       </body>
     </html>

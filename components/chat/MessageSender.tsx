@@ -31,7 +31,7 @@ export default function MessageSender({ receiverId }: { receiverId?: string }) {
 
     // Prepare the message payload exactly as specified
     const payload = {
-      receiverId: receiverId || "507f1f77bcf86cd799439011", // Replace with actual receiver ID
+      receiverId: receiverId || "", // Replace with actual receiver ID
       content: content,
       type: "text" as const,
       metadata: imageUrl

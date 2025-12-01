@@ -26,7 +26,7 @@ import {
   useSendMessageMutation,
   useCreateRoomMutation,
   useGetConversationsQuery
-} from "@/feature/chat/chatApiSlice";
+} from "@/app/api/apiSlice";
 import { apiService } from "@/lib/services";
 import type { ChatRoom, ChatMessage } from "@/lib/types";
 
@@ -157,7 +157,7 @@ export default function MessagesPage() {
   );
   
   const { data: messagesData, isLoading: loadingMessages, refetch: refetchMessages } = useGetRoomMessagesQuery(
-    { roomId: selectedChat || '', limit: 50 },
+    { roomId: selectedChat || '', query: { limit: 50 } },
     { skip: !selectedChat }
   );
   
