@@ -378,3 +378,17 @@ export interface EnrichedProfileResponse {
   success: boolean;
   data: EnrichedProfile;
 }
+
+/**
+ * List Profiles API Response
+ */
+export interface ListProfilesResponse {
+  success: boolean;
+  data: EnrichedProfile[] | {
+    items: EnrichedProfile[];
+    total?: number;
+    page?: number;
+    limit?: number;
+    hasMore?: boolean;
+  };
+}

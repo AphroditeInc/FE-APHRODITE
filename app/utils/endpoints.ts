@@ -23,6 +23,7 @@ const USER_UPDATE_PROFILE = (userId: string) => `/auth/users/${userId}`;
 
 // Profile
 const PROFILE_CREATE = "/profiles";
+const PROFILE_LIST = "/profiles"; // GET /profiles - list profiles with filters
 const PROFILE_UPDATE = (id: string) => `/profiles/${id}`; // PUT /profiles/{id}
 const PROFILE_GET_BY_ID = (id: string) => `/profiles/${id}`; // GET /profiles/{id}
 const PROFILE_GET_USER_PROFILE = (userId: string) => `/profiles/user/${userId}`;
@@ -66,6 +67,7 @@ const endpoints = {
   
   // Profile
   PROFILE_CREATE,
+  PROFILE_LIST,
   PROFILE_UPDATE,
   PROFILE_GET_BY_ID,
   PROFILE_GET_USER_PROFILE,

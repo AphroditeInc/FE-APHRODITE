@@ -193,6 +193,20 @@ export default function ProfilePage() {
       // Convert smoker from "Yes"/"No"/"Occasionally" to boolean
       const smokerValue = formData.smoker === "Yes" ? true : formData.smoker === "No" ? false : undefined;
       
+      // Determine userType based on gender: male → hunk, female → diva
+      const determineUserType = (gender: string | undefined): 'hunk' | 'diva' | undefined => {
+        if (!gender) return undefined;
+        const normalizedGender = gender.toLowerCase().trim();
+        if (normalizedGender === 'male' || normalizedGender === 'm') {
+          return 'hunk';
+        } else if (normalizedGender === 'female' || normalizedGender === 'f') {
+          return 'diva';
+        }
+        return undefined;
+      };
+      
+      const userType = determineUserType(formData.gender);
+      
       // Get media URLs from profile.media if it exists
       const mediaUrls = profile?.media && Array.isArray(profile.media) ? profile.media : [];
       
@@ -207,6 +221,7 @@ export default function ProfilePage() {
       const updatePayload: Record<string, unknown> = {
         // Map form fields to API structure
         gender: formData.gender || undefined,
+        userType: userType, // Set userType based on gender
         sexualOrientation: formData.sexualOrientation || undefined,
         bodyBuild: formData.bodyBuild || undefined,
         bustSize: formData.bustSize || undefined,

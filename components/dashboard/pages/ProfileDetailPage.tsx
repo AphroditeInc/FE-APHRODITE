@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, MapPin, Star, Check, Users, Calendar as CalendarIcon, Heart, BookOpen, MessageCircle, UserPlus, Info, Coins, Play, ThumbsUp, ThumbsDown, ChevronDown } from "lucide-react";
-import { mockProfiles, type Profile } from "@/lib/data/profiles";
+import { type Profile } from "@/lib/data/profiles";
+import { useGetProfileByIdQuery } from "@/feature/profile/profileApiSlice";
+import type { EnrichedProfile } from "@/lib/types/auth.types";
 
 // Array of background images
 const backgroundImages = [
@@ -25,56 +27,142 @@ const backgroundImages = [
   "/home/image16.svg"
 ];
 
-
-// Mock reviews data
-const mockReviews = [
-  {
-    id: 1,
-    name: "Raven Dan",
-    initials: "RD",
-    avatarColor: "bg-[#30B0B0]",
-    rating: 4,
-    timestamp: "2 months ago",
-    text: "This girl is the best escort I've been with on here, she takes her time to make sure you are satisfied. Her blowjob is so sloppy and deep.I really had a nice time with her. I'm definitely going to fuck her big boobs again"
-  },
-  {
-    id: 2,
-    name: "Shegzzy",
-    initials: "SG", 
-    avatarColor: "bg-green-400",
-    rating: 5,
-    timestamp: "2 weeks ago",
-    text: "Beautiful, sweet and naughty. She's the most polite and respectful sexy babe ever. Pussy so clean and tight. I'm definitely coming back for more. She dash me sweet videos sef."
-  }
-];
-
 export default function ProfileDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const profileId = params.id as string;
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("About");
   const [reviewText, setReviewText] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
 
-  useEffect(() => {
-    const profileId = params.id as string;
-    const foundProfile = mockProfiles.find(p => p.id === profileId);
-    if (foundProfile) {
-      setProfile(foundProfile);
-      // Start with the profile's corresponding image
-      setCurrentImageIndex(parseInt(profileId) - 1);
-    }
-  }, [params.id]);
+  // Fetch profile from API
+  const { data: profileResponse, isLoading, error } = useGetProfileByIdQuery(profileId, {
+    skip: !profileId,
+  });
 
-  // Cycle through images every 3 seconds
+  // Extract EnrichedProfile from response
+  const enrichedProfile = useMemo<EnrichedProfile | null>(() => {
+    if (!profileResponse) return null;
+
+    // Handle API response structure: { success: true, data: EnrichedProfile } or direct EnrichedProfile
+    if (profileResponse && typeof profileResponse === 'object') {
+      if ('success' in profileResponse && profileResponse.success && 'data' in profileResponse) {
+        return profileResponse.data as EnrichedProfile;
+      } else if ('id' in profileResponse) {
+        return profileResponse as EnrichedProfile;
+      }
+    }
+
+    return null;
+  }, [profileResponse]);
+
+  // Map EnrichedProfile to Profile type
+  const profile = useMemo<Profile | null>(() => {
+    if (!enrichedProfile) return null;
+
+    // Get first valid media item or use placeholder
+    // Filter out placeholder strings like "string" and empty strings
+    // Only keep valid HTTP/HTTPS URLs
+    const validMedia = enrichedProfile.media 
+      ? enrichedProfile.media.filter(
+          (url) => typeof url === 'string' && 
+                   url.trim() !== '' && 
+                   url !== 'string' && 
+                   (url.startsWith('http://') || url.startsWith('https://'))
+        )
+      : [];
+    const profileImage = validMedia.length > 0 
+      ? validMedia[0] 
+      : '/images/intimate-couple.svg';
+    
+    // Get services as array of strings from services field (NOT servicesExpanded)
+    // Deduplicate services array
+    const servicesArray = enrichedProfile.services 
+      ? (Array.isArray(enrichedProfile.services) 
+          ? enrichedProfile.services.map(s => typeof s === 'string' ? s : (s.name || s.id || ''))
+          : [])
+      : [];
+    
+    // Remove duplicates and filter out empty strings
+    const uniqueServices = Array.from(new Set(servicesArray.filter((s): s is string => s !== '')));
+
+    return {
+      id: enrichedProfile.id,
+      name: enrichedProfile.user?.userName || enrichedProfile.user?.firstName || 'Unknown',
+      location: enrichedProfile.city && enrichedProfile.state 
+        ? `${enrichedProfile.city}, ${enrichedProfile.state}` 
+        : enrichedProfile.city || enrichedProfile.state || 'Location not specified',
+      rating: enrichedProfile.reviews?.stats?.averageRating || 0,
+      image: profileImage,
+      isOnline: false, // API doesn't provide this yet
+      isLiked: false, // Will be handled separately if needed
+      services: uniqueServices,
+      age: undefined, // Calculate from dob if available
+      bio: enrichedProfile.bio || '',
+      gender: enrichedProfile.gender,
+      ethnicity: enrichedProfile.ethnicity,
+      sexualOrientation: enrichedProfile.sexualOrientation,
+      bustSize: enrichedProfile.bustSize,
+      nationality: enrichedProfile.nationality,
+      bodyBuild: enrichedProfile.bodyBuild,
+      looks: enrichedProfile.looks,
+      smoker: enrichedProfile.smoker ? 'Yes' : 'No',
+      education: enrichedProfile.education,
+      state: enrichedProfile.state,
+      occupation: enrichedProfile.occupation,
+      country: enrichedProfile.nationality,
+      city: enrichedProfile.city,
+      joinedDate: enrichedProfile.createdAt ? new Date(enrichedProfile.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : undefined,
+      followers: enrichedProfile.followersCount || 0,
+      following: 0, // API doesn't provide this yet
+      lastSeen: undefined, // API doesn't provide this yet
+    };
+  }, [enrichedProfile]);
+
+  // Get media array for carousel - only use valid URLs, no fallback to background images
+  const profileMedia = useMemo(() => {
+    if (!enrichedProfile?.media || !Array.isArray(enrichedProfile.media)) {
+      return []; // Return empty array if no media
+    }
+
+    // Filter out placeholder strings like "string" and empty strings
+    // Only keep valid HTTP/HTTPS URLs
+    const validMedia = enrichedProfile.media.filter(
+      (url) => typeof url === 'string' && 
+               url.trim() !== '' && 
+               url !== 'string' && 
+               (url.startsWith('http://') || url.startsWith('https://'))
+    );
+
+    return validMedia; // Return empty array if no valid media
+  }, [enrichedProfile]);
+
+  // Get reviews from enriched profile
+  const reviews = useMemo(() => {
+    if (!enrichedProfile?.reviews?.items || !Array.isArray(enrichedProfile.reviews.items)) {
+      return [];
+    }
+    return enrichedProfile.reviews.items;
+  }, [enrichedProfile]);
+
+  // Reset image index when media changes
   useEffect(() => {
+    setCurrentImageIndex(0);
+  }, [profileMedia.length]);
+
+  // Cycle through images every 3 seconds (only if there are multiple images)
+  useEffect(() => {
+    if (profileMedia.length <= 1) {
+      return; // Don't cycle if 0 or 1 images
+    }
+    
     const interval = setInterval(() => {
-      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % backgroundImages.length);
+      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % profileMedia.length);
     }, 3000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [profileMedia.length]);
 
   const handleBack = () => {
     router.back();
@@ -89,6 +177,25 @@ export default function ProfileDetailPage() {
     }
   };
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="h-full bg-[#1F1B2C] flex items-center justify-center">
+        <div className="text-white text-xl">Loading profile...</div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="h-full bg-[#1F1B2C] flex items-center justify-center">
+        <div className="text-white text-xl">Error loading profile. Please try again.</div>
+      </div>
+    );
+  }
+
+  // Profile not found
   if (!profile) {
     return (
       <div className="h-full bg-[#1F1B2C] flex items-center justify-center">
@@ -119,21 +226,28 @@ export default function ProfileDetailPage() {
             <div className="relative min-h-[500px]">
               <div 
                 className="w-full h-full min-h-[500px] rounded-2xl overflow-hidden bg-cover bg-center transition-all duration-1000"
-                style={{ backgroundImage: `url(${backgroundImages[currentImageIndex]})` }}
+                style={{ 
+                  backgroundImage: profileMedia.length > 0 
+                    ? `url(${profileMedia[currentImageIndex]})` 
+                    : `url(/images/intimate-couple.svg)`,
+                  backgroundColor: profileMedia.length === 0 ? '#2D2D2D' : 'transparent'
+                }}
               >
                 <div className="absolute inset-0  "></div>
               </div>
-              {/* Image carousel dots */}
-              <div className="flex justify-center gap-2 mt-4">
-                {backgroundImages.slice(0, 4).map((_, index) => (
-                  <div 
-                    key={index}
-                    className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                      index === (currentImageIndex % 4) ? 'bg-pink-500' : 'bg-white/30'
-                    }`}
-                  ></div>
-                ))}
-              </div>
+              {/* Image carousel dots - only show if there are multiple images */}
+              {profileMedia.length > 1 && (
+                <div className="flex justify-center gap-2 mt-4">
+                  {profileMedia.slice(0, Math.min(profileMedia.length, 10)).map((_, index) => (
+                    <div 
+                      key={index}
+                      className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                        index === (currentImageIndex % profileMedia.length) ? 'bg-pink-500' : 'bg-white/30'
+                      }`}
+                    ></div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -371,175 +485,244 @@ export default function ProfileDetailPage() {
 
         {activeTab === "Services" && (
           <div className="space-y-8">
-            {/* Services Grid */}
-            <div className="flex flex-wrap gap-3">
-              {[
-                "Domination (Receiving)", "Lap Dance", "Belly Dance", "Tango", "Pole Fitness", "Being Filmed",
-                "Salsa", "Bachata", "Girlfriend Experience", "Sex Toys", "Role Play & Fantasies", "Erotic Massage",
-                "Erotic Spanking", "MMF 3somes", "Dinner Dates", "French Kissing", "Smoking Fetish"
-              ].map((service, index) => (
-                <button
-                  key={index}
-                  className="inline-flex px-4 py-2 border border-white/30 text-white text-sm rounded-full hover:border-pink-500 hover:text-pink-500 transition-colors whitespace-nowrap"
-                >
-                  {service}
-                </button>
-              ))}
-            </div>
-
-            {/* Pricing Section */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <h3 className="text-2xl font-bold text-pink-500">Pricing</h3>
-                <Info className="w-5 h-5 text-white/60" />
+            {/* Services Grid - Use services from profile.services array (from API) */}
+            {profile && profile.services && profile.services.length > 0 ? (
+              <div className="flex flex-wrap gap-3">
+                {profile.services.map((service, index) => (
+                  <div
+                    key={`${service}-${index}`}
+                    className="inline-flex px-4 py-2 border border-white/30 text-white text-sm rounded-full whitespace-nowrap"
+                  >
+                    {service}
+                  </div>
+                ))}
               </div>
-              
-              <div className="grid md:grid-cols-3 gap-6">
-                {/* Short Time Card */}
-                <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                    Short Time
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-white">Incall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">50,000.00 APH</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-white">Outcall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">80,000.00 APH</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            ) : (
+              <div className="text-white/60 text-center py-8">
+                No services available.
+              </div>
+            )}
 
-                {/* Overnight Card */}
-                <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                    Overnight
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-white">Incall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">50,000.00 APH</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-white">Outcall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">80,000.00 APH</span>
-                      </div>
-                    </div>
-                  </div>
+            {/* Pricing Section - Use pricing from enrichedProfile.pricing */}
+            {enrichedProfile?.pricing && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-2xl font-bold text-pink-500">Pricing</h3>
+                  <Info className="w-5 h-5 text-white/60" />
                 </div>
-
-                {/* Weekend Card */}
-                <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                    Weekend
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-white">Incall</span>
-                      <span className="text-white/60">---</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-white">Outcall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">80,000.00 APH</span>
+                
+                <div className="grid md:grid-cols-3 gap-6">
+                  {/* Short Time Card */}
+                  {enrichedProfile.pricing.shortTime && (
+                    <div className="bg-white/5 rounded-lg p-6 border border-white/10">
+                      <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
+                        Short Time
+                      </div>
+                      <div className="space-y-3">
+                        {enrichedProfile.pricing.shortTime.incall !== undefined && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">Incall</span>
+                            <div className="flex items-center gap-1">
+                              <Coins className="w-4 h-4 text-yellow-400" />
+                              <span className="text-white font-semibold">
+                                {typeof enrichedProfile.pricing.shortTime.incall === 'number' 
+                                  ? enrichedProfile.pricing.shortTime.incall.toLocaleString() 
+                                  : enrichedProfile.pricing.shortTime.incall} APH
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {enrichedProfile.pricing.shortTime.outcall !== undefined && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">Outcall</span>
+                            <div className="flex items-center gap-1">
+                              <Coins className="w-4 h-4 text-yellow-400" />
+                              <span className="text-white font-semibold">
+                                {typeof enrichedProfile.pricing.shortTime.outcall === 'number' 
+                                  ? enrichedProfile.pricing.shortTime.outcall.toLocaleString() 
+                                  : enrichedProfile.pricing.shortTime.outcall} APH
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Overnight Card */}
+                  {enrichedProfile.pricing.overnight && (
+                    <div className="bg-white/5 rounded-lg p-6 border border-white/10">
+                      <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
+                        Overnight
+                      </div>
+                      <div className="space-y-3">
+                        {enrichedProfile.pricing.overnight.incall !== undefined && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">Incall</span>
+                            <div className="flex items-center gap-1">
+                              <Coins className="w-4 h-4 text-yellow-400" />
+                              <span className="text-white font-semibold">
+                                {typeof enrichedProfile.pricing.overnight.incall === 'number' 
+                                  ? enrichedProfile.pricing.overnight.incall.toLocaleString() 
+                                  : enrichedProfile.pricing.overnight.incall} APH
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {enrichedProfile.pricing.overnight.outcall !== undefined && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">Outcall</span>
+                            <div className="flex items-center gap-1">
+                              <Coins className="w-4 h-4 text-yellow-400" />
+                              <span className="text-white font-semibold">
+                                {typeof enrichedProfile.pricing.overnight.outcall === 'number' 
+                                  ? enrichedProfile.pricing.overnight.outcall.toLocaleString() 
+                                  : enrichedProfile.pricing.overnight.outcall} APH
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Weekend Card */}
+                  {enrichedProfile.pricing.weekend && (
+                    <div className="bg-white/5 rounded-lg p-6 border border-white/10">
+                      <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
+                        Weekend
+                      </div>
+                      <div className="space-y-3">
+                        {enrichedProfile.pricing.weekend.incall !== undefined ? (
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">Incall</span>
+                            <div className="flex items-center gap-1">
+                              <Coins className="w-4 h-4 text-yellow-400" />
+                              <span className="text-white font-semibold">
+                                {typeof enrichedProfile.pricing.weekend.incall === 'number' 
+                                  ? enrichedProfile.pricing.weekend.incall.toLocaleString() 
+                                  : enrichedProfile.pricing.weekend.incall} APH
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">Incall</span>
+                            <span className="text-white/60">---</span>
+                          </div>
+                        )}
+                        {enrichedProfile.pricing.weekend.outcall !== undefined && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">Outcall</span>
+                            <div className="flex items-center gap-1">
+                              <Coins className="w-4 h-4 text-yellow-400" />
+                              <span className="text-white font-semibold">
+                                {typeof enrichedProfile.pricing.weekend.outcall === 'number' 
+                                  ? enrichedProfile.pricing.weekend.outcall.toLocaleString() 
+                                  : enrichedProfile.pricing.weekend.outcall} APH
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
+            {!enrichedProfile?.pricing && (
+              <div className="text-white/60 text-center py-8">
+                No pricing information available.
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === "Media" && (
           <div className="space-y-6">
-            {/* Media Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Image 1 */}
-              <div className="relative group cursor-pointer">
-                <div className="aspect-square rounded-2xl overflow-hidden bg-cover bg-center"
-                     style={{ backgroundImage: `url(/media/media.svg)` }}>
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                </div>
-              </div>
-
-              {/* Image 2 */}
-              <div className="relative group cursor-pointer">
-                <div className="aspect-square rounded-2xl overflow-hidden bg-cover bg-center"
-                     style={{ backgroundImage: `url(/media/media2.svg)` }}>
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                </div>
-              </div>
-
-              {/* Image 3 */}
-              <div className="relative group cursor-pointer">
-                <div className="aspect-square rounded-2xl overflow-hidden bg-cover bg-center"
-                     style={{ backgroundImage: `url(/media/media3.svg)` }}>
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                </div>
-              </div>
-
-              {/* Video 1 */}
-              <div className="relative group cursor-pointer">
-                <div className="aspect-square rounded-2xl overflow-hidden bg-cover bg-center"
-                     style={{ backgroundImage: `url(/media/media.svg)` }}>
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                  {/* Play Button */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-16 h-16 bg-pink-500 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                      <Play className="w-8 h-8 text-white ml-1" fill="currentColor" />
+            {/* Media Grid - Use profileMedia from API */}
+            {profileMedia.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {profileMedia.map((mediaUrl, index) => {
+                  const isVideo = mediaUrl.match(/\.(mp4|webm|ogg|mov)$/i);
+                  return (
+                    <div key={index} className="relative group cursor-pointer">
+                      {isVideo ? (
+                        <div className="aspect-square rounded-2xl overflow-hidden bg-black/20 flex items-center justify-center">
+                          <video 
+                            src={mediaUrl} 
+                            className="w-full h-full object-cover"
+                            controls
+                          />
+                          <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors pointer-events-none"></div>
+                        </div>
+                      ) : (
+                        <div 
+                          className="aspect-square rounded-2xl overflow-hidden bg-cover bg-center"
+                          style={{ backgroundImage: `url(${mediaUrl})` }}
+                        >
+                          <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
-
-              {/* Video 2 */}
-              <div className="relative group cursor-pointer">
-                <div className="aspect-square rounded-2xl overflow-hidden bg-cover bg-center"
-                     style={{ backgroundImage: `url(/media/media2.svg)` }}>
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                  {/* Play Button */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-16 h-16 bg-pink-500 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                      <Play className="w-8 h-8 text-white ml-1" fill="currentColor" />
-                    </div>
-                  </div>
-                </div>
+            ) : (
+              <div className="text-white/60 text-center py-8">
+                No media available.
               </div>
-            </div>
+            )}
           </div>
         )}
 
         {activeTab === "Reviews" && (
           <div className="space-y-8">
             {/* Existing Reviews */}
+            {reviews.length === 0 ? (
+              <div className="text-white/60 text-center py-8">
+                No reviews yet. Be the first to review!
+              </div>
+            ) : (
             <div className="space-y-6">
-              {mockReviews.map((review) => (
-                <div key={review.id} className="p-6">
+              {reviews.map((review) => {
+                // Generate initials from userId or use default
+                const reviewId = review.id || review.userId || '';
+                const initials = reviewId 
+                  ? reviewId.slice(0, 2).toUpperCase()
+                  : 'AN';
+                // Generate avatar color based on userId hash
+                const hashColor = reviewId
+                  ? `#${reviewId.slice(-6).padStart(6, '0').replace(/(.{2})/g, '$1')}`
+                  : '#FA266D';
+                const avatarColor = `bg-[${hashColor}]`;
+                
+                // Format timestamp
+                const timestamp = review.createdAt
+                  ? new Date(review.createdAt).toLocaleDateString('en-US', { 
+                      month: 'short', 
+                      day: 'numeric', 
+                      year: 'numeric' 
+                    })
+                  : 'Recently';
+                
+                // Get reviewer name from userId or use anonymous
+                const reviewerName = review.userId 
+                  ? `User ${review.userId.slice(-4)}`
+                  : 'Anonymous';
+
+                return (
+                <div key={review.id || reviewId} className="p-6">
                   <div className="flex items-start gap-4">
                     {/* Avatar */}
-                    <div className={`w-12 h-12 ${review.avatarColor} rounded-full flex items-center justify-center text-white font-semibold text-lg`}>
-                      {review.initials}
+                    <div className={`w-12 h-12 bg-pink-500 rounded-full flex items-center justify-center text-white font-semibold text-lg`}>
+                      {initials}
                     </div>
                     
                     {/* Review Content */}
                     <div className="flex-1 space-y-3">
                       {/* Name */}
-                      <h4 className="text-[#E05090] font-semibold text-lg">{review.name}</h4>
+                      <h4 className="text-[#E05090] font-semibold text-lg">{reviewerName}</h4>
                       
                       {/* Rating and Timestamp */}
                       <div className="flex items-center gap-3">
@@ -547,15 +730,15 @@ export default function ProfileDetailPage() {
                           {[...Array(5)].map((_, i) => (
                             <Star 
                               key={i} 
-                              className={`w-4 h-4 ${i < review.rating ? 'text-[#FFC000] fill-current' : 'text-gray-400'}`} 
+                              className={`w-4 h-4 ${i < (review.rating || 0) ? 'text-[#FFC000] fill-current' : 'text-gray-400'}`} 
                             />
                           ))}
                         </div>
-                        <span className="text-[#A0A0A0] text-sm">{review.timestamp}</span>
+                        <span className="text-[#A0A0A0] text-sm">{timestamp}</span>
                       </div>
                       
                       {/* Review Text */}
-                      <p className="text-white text-sm leading-relaxed">{review.text}</p>
+                      <p className="text-white text-sm leading-relaxed">{review.comment || 'No comment provided'}</p>
                       
                       {/* Actions */}
                       <div className="flex items-center gap-4">
@@ -572,8 +755,10 @@ export default function ProfileDetailPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
+            )}
 
             {/* Show More Reviews */}
             <div className="text-left">

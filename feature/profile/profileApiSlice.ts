@@ -30,6 +30,11 @@ export const profileApiSlice = apiSlice.injectEndpoints({
         url: endpoints.PROFILE_GET_BY_ID(id),
         method: "GET",
       }),
+      transformResponse: (response: unknown) => {
+        // RTK Query returns the response directly
+        // The response should be: { success: true, data: EnrichedProfile } or direct EnrichedProfile
+        return response;
+      },
       extraOptions: { serviceKey: "us" },
       providesTags: ['Profile'],
       keepUnusedDataFor: 60,
@@ -39,6 +44,34 @@ export const profileApiSlice = apiSlice.injectEndpoints({
         url: endpoints.PROFILE_GET_USER_PROFILE(userId),
         method: "GET",
       }),
+      extraOptions: { serviceKey: "us" },
+      providesTags: ['Profile'],
+      keepUnusedDataFor: 60,
+    }),
+    listProfiles: builder.query<{ success: boolean; data: unknown }, { type?: 'hunk' | 'diva'; page?: number; limit?: number; state?: string; city?: string }>({
+      query: (params?: { type?: 'hunk' | 'diva'; page?: number; limit?: number; state?: string; city?: string }) => {
+        const queryParams = new URLSearchParams();
+        // API requires 'type' parameter, so always include it (default to 'diva' if not provided)
+        const type = params?.type || 'diva';
+        queryParams.append('type', type);
+        
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.state) queryParams.append('state', params.state);
+        if (params?.city) queryParams.append('city', params.city);
+        
+        const queryString = queryParams.toString();
+        return {
+          url: `${endpoints.PROFILE_LIST}?${queryString}`,
+          method: "GET",
+        };
+      },
+      transformResponse: (response: unknown) => {
+        // RTK Query returns the response directly, so we just pass it through
+        // The response should be: { success: true, data: [...] } or { success: true, data: { items: [...] } }
+        console.log('listProfiles transformResponse:', response);
+        return response as { success: boolean; data: unknown };
+      },
       extraOptions: { serviceKey: "us" },
       providesTags: ['Profile'],
       keepUnusedDataFor: 60,
@@ -117,6 +150,7 @@ export const {
   useUpdateProfileMutation,
   useGetProfileByIdQuery,
   useGetEnrichedProfileQuery,
+  useListProfilesQuery,
   useUpdateProfilePricingMutation,
   useUpdateProfileServicesMutation,
   useCreateProfileServiceMutation,
