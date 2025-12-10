@@ -61,6 +61,15 @@ export const profileApiSlice = apiSlice.injectEndpoints({
       extraOptions: { serviceKey: "us" },
       invalidatesTags: ['Profile'],
     }),
+    createProfileService: builder.mutation({
+      query: ({ id, ...data }) => ({
+        url: endpoints.PROFILE_SERVICES(id),
+        method: "POST",
+        body: data,
+      }),
+      extraOptions: { serviceKey: "us" },
+      invalidatesTags: ['Profile'],
+    }),
     updateProfileVideo: builder.mutation({
       query: ({ userId, ...data }) => ({
         url: endpoints.PROFILE_VIDEO(userId),
@@ -71,11 +80,15 @@ export const profileApiSlice = apiSlice.injectEndpoints({
       invalidatesTags: ['Profile'],
     }),
     updateProfileMedia: builder.mutation({
-      query: ({ userId, ...data }) => ({
-        url: endpoints.PROFILE_MEDIA(userId),
-        method: "PUT",
-        body: data,
-      }),
+      query: ({ id, mediaUrls }) => {
+        const url = endpoints.PROFILE_UPDATE(id);
+        console.log("UpdateProfileMedia mutation - URL:", url, "Method: PUT", "Body:", { media: mediaUrls }, "ID:", id);
+        return {
+          url,
+          method: "PUT",
+          body: { media: mediaUrls },
+        };
+      },
       extraOptions: { serviceKey: "us" },
       invalidatesTags: ['Profile'],
     }),
@@ -106,6 +119,7 @@ export const {
   useGetEnrichedProfileQuery,
   useUpdateProfilePricingMutation,
   useUpdateProfileServicesMutation,
+  useCreateProfileServiceMutation,
   useUpdateProfileVideoMutation,
   useUpdateProfileMediaMutation,
   useGetProfileReviewsQuery,
