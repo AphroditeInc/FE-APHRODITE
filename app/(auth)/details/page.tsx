@@ -12,6 +12,7 @@ import {
   useUpdateUserMutation, 
   useUpdateAuthProfileMutation 
 } from "@/feature/authentication/authApiSlice";
+import { useCreateProfileMutation } from "@/feature/profile/profileApiSlice";
 import { useAppDispatch, useAppSelector } from "@/app/hooks";
 import { setCredentials, selectCurrentUser } from "@/feature/authentication/authSlice";
 import {
@@ -37,8 +38,9 @@ function DetailsForm() {
   const [registerWithEmail, { isLoading: isRegisteringEmail }] = useRegisterWithEmailMutation();
   const [updateUser, { isLoading: isUpdatingUser }] = useUpdateUserMutation();
   const [updateProfile, { isLoading: isUpdatingProfile }] = useUpdateAuthProfileMutation();
+  const [createProfile, { isLoading: isCreatingProfile }] = useCreateProfileMutation();
   const [error, setError] = useState<string | null>(null);
-  const isLoading = isCompletingBasic || isRegisteringEmail || isUpdatingUser || isUpdatingProfile;
+  const isLoading = isCompletingBasic || isRegisteringEmail || isUpdatingUser || isUpdatingProfile || isCreatingProfile;
   const [currentStep, setCurrentStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -226,6 +228,34 @@ function DetailsForm() {
           console.log("Basic details completed successfully, user is now authenticated");
           
           if (currentStep === 3) {
+            // Create profile with bio, education, occupation, maritalStatus
+            const currentUserId = userData?.id || data.uid || data.userId || finalUserId;
+            
+            if (currentUserId && (formData.bio || formData.educationLevel || formData.occupation || formData.maritalStatus)) {
+              try {
+                const profilePayload = {
+                  userId: currentUserId,
+                  bio: formData.bio || "",
+                  education: formData.educationLevel || "",
+                  occupation: formData.occupation || "",
+                  maritalStatus: formData.maritalStatus || "",
+                };
+                
+                console.log("Creating profile with:", profilePayload);
+                await createProfile(profilePayload).unwrap();
+                console.log("Profile created successfully");
+              } catch (error: unknown) {
+                console.error("Profile creation error:", error);
+                const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+                  ? String(error.data.message)
+                  : (error && typeof error === 'object' && 'message' in error)
+                    ? String(error.message)
+                    : 'Failed to create profile';
+                setError(errorMessage);
+                return; // Don't proceed if profile creation fails
+              }
+            }
+            
             // Move to step 4 (profile details)
             setCurrentStep(4);
           } else if (currentStep === 4) {
@@ -274,27 +304,29 @@ function DetailsForm() {
             // Move to step 3 (personal details - optional)
             setCurrentStep(3);
           } else if (currentStep === 3) {
-            // Handle personal details update
-            if (formData.educationLevel || formData.occupation || formData.maritalStatus || formData.bio) {
-              const personalDetailsPayload = {
-                bio: formData.bio,
-                education: formData.educationLevel,
-                occupation: formData.occupation,
-                maritalStatus: formData.maritalStatus,
-              };
-
-              console.log("Updating personal details:", personalDetailsPayload);
+            // Create profile with bio, education, occupation, maritalStatus
+            if (newUserId && (formData.educationLevel || formData.occupation || formData.maritalStatus || formData.bio)) {
               try {
-                await updateProfile(personalDetailsPayload).unwrap();
-                console.log("Personal details updated successfully");
+                const profilePayload = {
+                  userId: newUserId,
+                  bio: formData.bio || "",
+                  education: formData.educationLevel || "",
+                  occupation: formData.occupation || "",
+                  maritalStatus: formData.maritalStatus || "",
+                };
+
+                console.log("Creating profile with:", profilePayload);
+                await createProfile(profilePayload).unwrap();
+                console.log("Profile created successfully");
               } catch (error: unknown) {
-                console.error("Personal details update error:", error);
+                console.error("Profile creation error:", error);
                 const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
                   ? String(error.data.message)
                   : (error && typeof error === 'object' && 'message' in error)
                     ? String(error.message)
-                    : 'Failed to update personal details';
+                    : 'Failed to create profile';
                 setError(errorMessage);
+                return; // Don't proceed if profile creation fails
               }
             }
             
