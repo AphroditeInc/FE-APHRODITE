@@ -25,7 +25,7 @@ import {
   useMarkRoomAsReadMutation, 
   useSendMessageMutation,
   useCreateRoomMutation,
-  useGetConversationsQuery
+  useGetUserRoomsQuery
 } from "@/app/api/apiSlice";
 import { apiService } from "@/lib/services";
 import type { ChatRoom, ChatMessage } from "@/lib/types";
@@ -151,10 +151,32 @@ export default function MessagesPage() {
   
   // RTK Query hooks
   const currentUserId = userId || user?.id || fallbackUserId;
-  const { data: conversationsData, isLoading: loadingRooms, error: roomsError, refetch: refetchRooms } = useGetConversationsQuery(
+  const shouldSkipQuery = !currentUserId || authLoading;
+  
+  console.log('[MessagesPage] Query state:', {
+    currentUserId,
+    userId,
+    'user?.id': user?.id,
+    fallbackUserId,
+    authLoading,
+    shouldSkipQuery,
+    isAuthenticated
+  });
+  
+  // Use getUserRooms instead of getConversations to get ALL rooms (including newly created ones without messages)
+  const { data: roomsData, isLoading: loadingRooms, error: roomsError, refetch: refetchRooms } = useGetUserRoomsQuery(
     { limit: 50, offset: 0 },
-    { skip: !currentUserId || authLoading }
+    { skip: shouldSkipQuery }
   );
+  
+  console.log('[MessagesPage] Query result:', {
+    roomsData,
+    loadingRooms,
+    roomsError,
+    hasRoomsData: !!roomsData,
+    roomsDataIsArray: Array.isArray(roomsData),
+    roomsDataLength: Array.isArray(roomsData) ? roomsData.length : 'not array'
+  });
   
   const { data: messagesData, isLoading: loadingMessages, refetch: refetchMessages } = useGetRoomMessagesQuery(
     { roomId: selectedChat || '', query: { limit: 50 } },
@@ -167,46 +189,92 @@ export default function MessagesPage() {
 
   // Convert API data to component state
   const rooms = useMemo(() => {
-    if (!conversationsData) {
-      console.log('[MessagesPage] No conversationsData yet');
+    if (!roomsData) {
+      console.log('[MessagesPage] No roomsData yet');
       return [];
     }
     
-    console.log('[MessagesPage] conversationsData:', conversationsData);
+    console.log('[MessagesPage] roomsData:', roomsData);
     
-    // Handle different response structures
-    const conversationsArray: ConversationResponse[] = Array.isArray(conversationsData) 
-      ? conversationsData 
-      : (conversationsData && typeof conversationsData === 'object' && 'data' in conversationsData && Array.isArray((conversationsData as { data: ConversationResponse[] }).data))
-        ? (conversationsData as { data: ConversationResponse[] }).data
-        : [];
+    // transformResponse should have extracted the data, so roomsData should be an array of ChatRoom[]
+    // But we need to handle it as ConversationResponse for transformation
+    let roomsArray: (ConversationResponse | ChatRoom)[] = [];
     
-    if (!Array.isArray(conversationsArray)) {
-      console.warn('[MessagesPage] conversationsArray is not an array:', conversationsArray);
+    if (Array.isArray(roomsData)) {
+      roomsArray = roomsData;
+    } else if (roomsData && typeof roomsData === 'object') {
+      // Fallback: Check if it's ApiResponse format with 'data' field
+      if ('data' in roomsData && Array.isArray((roomsData as { data: (ConversationResponse | ChatRoom)[] }).data)) {
+        roomsArray = (roomsData as { data: (ConversationResponse | ChatRoom)[] }).data;
+      } else if ('success' in roomsData && 'data' in roomsData && Array.isArray((roomsData as { success: boolean; data: (ConversationResponse | ChatRoom)[] }).data)) {
+        roomsArray = (roomsData as { success: boolean; data: (ConversationResponse | ChatRoom)[] }).data;
+      }
+    }
+    
+    if (!Array.isArray(roomsArray)) {
+      console.warn('[MessagesPage] roomsArray is not an array:', roomsArray);
       return [];
     }
     
-    console.log('[MessagesPage] Processing', conversationsArray.length, 'conversations');
+    console.log('[MessagesPage] Processing', roomsArray.length, 'rooms');
     
-    // Transform conversations to ChatRoom format
+    // Transform rooms to ChatRoom format
     // Handle both formats: conversations (with sender/receiver) and rooms (with participants array)
-    const filteredRooms = conversationsArray.map((conv: ConversationResponse) => {
-      const roomId = conv.roomId || conv._id || conv.id;
-      if (!roomId) return null;
+    const filteredRooms = roomsArray.map((conv: ConversationResponse | ChatRoom) => {
+      console.log('[MessagesPage] Processing room item:', conv);
+      
+      // If it's already a ChatRoom, ensure it has an id property
+      // RTK Query returns frozen objects, so we must create a new object
+      if ('participants' in conv && Array.isArray(conv.participants) && 'type' in conv && (conv.type === 'direct' || conv.type === 'group')) {
+        const room = conv as ChatRoom;
+        // Extract id from various possible fields
+        const roomId = room.id || room.roomId || (room as { _id?: string })._id || '';
+        
+        if (!roomId) {
+          console.warn('[MessagesPage] ChatRoom has no id/roomId/_id, skipping:', room);
+          return null;
+        }
+        
+        // Create a new object (can't modify frozen RTK Query objects)
+        const normalizedRoom: ChatRoom = {
+          ...room,
+          id: roomId,
+          roomId: roomId,
+        };
+        
+        console.log('[MessagesPage] Room already ChatRoom format, normalized:', normalizedRoom);
+        return normalizedRoom;
+      }
+      
+      // Otherwise, treat it as ConversationResponse and transform
+      const convResponse = conv as ConversationResponse;
+      // Try multiple ways to get the room ID
+      const roomId = convResponse.roomId 
+        || (convResponse as { _id?: string })._id 
+        || (convResponse as { id?: string }).id
+        || (conv as { roomId?: string; _id?: string; id?: string }).roomId
+        || (conv as { roomId?: string; _id?: string; id?: string })._id
+        || (conv as { roomId?: string; _id?: string; id?: string }).id;
+      
+      console.log('[MessagesPage] Extracted roomId:', roomId, 'from conv:', conv);
+      if (!roomId) {
+        console.warn('[MessagesPage] No roomId found, skipping room:', conv);
+        return null;
+      }
 
       const participants: string[] = [];
       
       // Handle conversations format (has sender/receiver)
-      if (conv.sender && conv.sender._id) {
-        participants.push(conv.sender._id);
+      if (convResponse.sender && convResponse.sender._id) {
+        participants.push(convResponse.sender._id);
       }
-      if (conv.receiver && conv.receiver._id) {
-        participants.push(conv.receiver._id);
+      if (convResponse.receiver && convResponse.receiver._id) {
+        participants.push(convResponse.receiver._id);
       }
       
       // Handle room format (has participants array with userId)
-      if (conv.participants && Array.isArray(conv.participants)) {
-        conv.participants.forEach((p: string | ConversationParticipant) => {
+      if (convResponse.participants && Array.isArray(convResponse.participants)) {
+        convResponse.participants.forEach((p: string | ConversationParticipant) => {
           const participantId = typeof p === 'string' 
             ? p 
             : (p.userId || p._id || p.id);
@@ -217,25 +285,25 @@ export default function MessagesPage() {
       }
 
       let lastMessage: ChatMessage | undefined;
-      if (conv.lastMessage) {
-        const messageId = conv.lastMessage._id || conv.lastMessage.id;
+      if (convResponse.lastMessage) {
+        const messageId = convResponse.lastMessage._id || convResponse.lastMessage.id;
         // Only create lastMessage if we have a valid id
         if (messageId && typeof messageId === 'string') {
           lastMessage = {
             id: messageId,
-            senderId: conv.lastMessage.senderId,
-            receiverId: conv.lastMessage.receiverId,
-            roomId: conv.lastMessage.roomId || roomId,
-            content: conv.lastMessage.content,
-            type: conv.lastMessage.type as ChatMessage['type'],
-            status: conv.lastMessage.status as ChatMessage['status'],
-            createdAt: conv.lastMessage.createdAt,
-            updatedAt: conv.lastMessage.updatedAt,
-            metadata: conv.lastMessage.metadata,
-            attachments: conv.lastMessage.attachments,
-            readAt: conv.lastMessage.readAt,
-            deliveredAt: conv.lastMessage.deliveredAt,
-            replyTo: conv.lastMessage.replyTo,
+            senderId: convResponse.lastMessage.senderId,
+            receiverId: convResponse.lastMessage.receiverId || '',
+            roomId: convResponse.lastMessage.roomId || roomId,
+            content: convResponse.lastMessage.content,
+            type: convResponse.lastMessage.type as ChatMessage['type'],
+            status: convResponse.lastMessage.status as ChatMessage['status'],
+            createdAt: convResponse.lastMessage.createdAt,
+            updatedAt: convResponse.lastMessage.updatedAt,
+            metadata: convResponse.lastMessage.metadata,
+            attachments: convResponse.lastMessage.attachments,
+            readAt: convResponse.lastMessage.readAt,
+            deliveredAt: convResponse.lastMessage.deliveredAt,
+            replyTo: convResponse.lastMessage.replyTo,
           };
         }
       }
@@ -243,37 +311,57 @@ export default function MessagesPage() {
       const chatRoom: ChatRoom = {
         id: roomId,
         roomId: roomId,
-        type: (conv.type as ChatRoom['type']) || 'direct',
+        type: (convResponse.type as ChatRoom['type']) || 'direct',
         participants: participants,
-        createdAt: conv.createdAt || new Date().toISOString(),
-        updatedAt: conv.updatedAt || new Date().toISOString(),
+        createdAt: convResponse.createdAt || new Date().toISOString(),
+        updatedAt: convResponse.updatedAt || new Date().toISOString(),
         lastMessage: lastMessage,
-        unreadCount: conv.unreadCount || 0,
+        unreadCount: typeof convResponse.unreadCount === 'number' ? convResponse.unreadCount : 0,
       };
       
+      console.log('[MessagesPage] Transformed room:', chatRoom);
       return chatRoom;
-    }).filter((room): room is ChatRoom => room !== null);
+    }).filter((room): room is ChatRoom => {
+      const isValid = Boolean(room !== null && typeof room.id === 'string' && room.id.trim() !== '');
+      if (!isValid) {
+        console.warn('[MessagesPage] Filtered out invalid room:', room);
+      }
+      return isValid;
+    });
     
     console.log('[MessagesPage] Transformed', filteredRooms.length, 'rooms');
+    console.log('[MessagesPage] Final rooms array:', filteredRooms);
+    filteredRooms.forEach((room, index) => {
+      console.log(`[MessagesPage] Room ${index}:`, { id: room.id, roomId: room.roomId, type: room.type, participants: room.participants });
+    });
     return filteredRooms;
-  }, [conversationsData]);
+  }, [roomsData]);
 
   const messages = useMemo(() => {
     if (!messagesData) return [];
     
-    // Handle different response structures
+    // transformResponse should have extracted the data, so messagesData should be an array
+    // But handle both cases for safety
     let messagesArray: ChatMessage[] = [];
     
     if (Array.isArray(messagesData)) {
       messagesArray = messagesData;
     } else if (messagesData && typeof messagesData === 'object') {
-      const messagesResponse = messagesData as MessagesResponse;
-      if (Array.isArray(messagesResponse.messages)) {
-        messagesArray = messagesResponse.messages;
-      } else if (Array.isArray(messagesResponse.data)) {
-        messagesArray = messagesResponse.data;
-      } else if (Array.isArray(messagesResponse.items)) {
-        messagesArray = messagesResponse.items;
+      // Fallback: Check if it's ApiResponse format with 'data' field
+      if ('data' in messagesData && Array.isArray((messagesData as { data: ChatMessage[] }).data)) {
+        messagesArray = (messagesData as { data: ChatMessage[] }).data;
+      } else if ('success' in messagesData && 'data' in messagesData && Array.isArray((messagesData as { success: boolean; data: ChatMessage[] }).data)) {
+        messagesArray = (messagesData as { success: boolean; data: ChatMessage[] }).data;
+      } else {
+        // Fallback to old structure
+        const messagesResponse = messagesData as MessagesResponse;
+        if (Array.isArray(messagesResponse.messages)) {
+          messagesArray = messagesResponse.messages;
+        } else if (Array.isArray(messagesResponse.data)) {
+          messagesArray = messagesResponse.data;
+        } else if (Array.isArray(messagesResponse.items)) {
+          messagesArray = messagesResponse.items;
+        }
       }
     }
     
@@ -431,19 +519,45 @@ export default function MessagesPage() {
       console.log('Room created successfully:', result);
       
       if (result) {
-        const roomData = (result && typeof result === 'object' && 'data' in result) 
-          ? (result as { data: { roomId?: string; id?: string; _id?: string } }).data 
-          : (result as { roomId?: string; id?: string; _id?: string });
-        // Use roomId from the response (API returns roomId, not id)
-        const roomId = roomData.roomId || roomData.id || roomData._id;
-        console.log('Setting selected chat to roomId:', roomId);
-        if (roomId) {
-          setSelectedChat(roomId);
-          router.replace('/chat');
-          // Refetch rooms to get the new room - RTK Query should auto-refetch due to invalidatesTags
-          refetchRooms();
+        // transformResponse should have extracted the data, so result should be the ChatRoom object directly
+        // But handle both cases for safety
+        let roomData: ChatRoom | null = null;
+        
+        if (result && typeof result === 'object') {
+          if ('data' in result && result.data && typeof result.data === 'object') {
+            // Fallback: if still wrapped in ApiResponse
+            roomData = result.data as ChatRoom;
+          } else if ('roomId' in result || 'id' in result || '_id' in result) {
+            // Direct room object (from transformResponse)
+            roomData = result as ChatRoom;
+          }
+        }
+        
+        if (roomData) {
+          // Use roomId from the response (API returns roomId, not id)
+          const roomId = roomData.roomId || roomData.id || (roomData as { _id?: string })._id;
+          console.log('[createRoomWithUser] Room created, roomId:', roomId, 'roomData:', roomData);
+          if (roomId) {
+            setSelectedChat(roomId);
+            router.replace('/chat');
+            // Force immediate refetch - RTK Query should auto-refetch due to invalidatesTags
+            // But we'll also manually refetch multiple times to ensure it updates
+            console.log('[createRoomWithUser] Refetching rooms...');
+            refetchRooms();
+            // Also refetch after a short delay to ensure cache is updated
+            setTimeout(() => {
+              console.log('[createRoomWithUser] Delayed refetch...');
+              refetchRooms();
+            }, 500);
+            setTimeout(() => {
+              console.log('[createRoomWithUser] Final refetch...');
+              refetchRooms();
+            }, 1000);
+          } else {
+            console.error('[createRoomWithUser] No roomId found in response:', roomData);
+          }
         } else {
-          console.error('No roomId found in response:', roomData);
+          console.error('[createRoomWithUser] Invalid room data in response:', result);
         }
       }
       
@@ -467,21 +581,29 @@ export default function MessagesPage() {
     }
   }, [currentUserId, processingUserId, invalidUserIds, router, createRoomMutation, refetchRooms]);
 
-  // Extract participant names from conversations data
+  // Extract participant names from rooms data
   useEffect(() => {
-    if (conversationsData && Array.isArray(conversationsData)) {
+    if (roomsData && Array.isArray(roomsData)) {
       const namesToAdd = new Map<string, string>();
-      conversationsData.forEach((conv: ConversationResponse) => {
-        // Handle conversations format (sender/receiver)
-        if (conv.sender && conv.sender._id && conv.sender.name) {
-          namesToAdd.set(conv.sender._id, conv.sender.name);
+      roomsData.forEach((conv: ConversationResponse | ChatRoom) => {
+        // If it's already a ChatRoom, skip (no sender/receiver info, names should come from participant data)
+        if ('participants' in conv && Array.isArray(conv.participants) && 'type' in conv && (conv.type === 'direct' || conv.type === 'group')) {
+          // For ChatRoom, we can't extract names here - they need to be fetched separately
+          return;
         }
-        if (conv.receiver && conv.receiver._id && conv.receiver.name) {
-          namesToAdd.set(conv.receiver._id, conv.receiver.name);
+        
+        // Otherwise, treat as ConversationResponse
+        const convResponse = conv as ConversationResponse;
+        // Handle conversations format (sender/receiver)
+        if (convResponse.sender && convResponse.sender._id && convResponse.sender.name) {
+          namesToAdd.set(convResponse.sender._id, convResponse.sender.name);
+        }
+        if (convResponse.receiver && convResponse.receiver._id && convResponse.receiver.name) {
+          namesToAdd.set(convResponse.receiver._id, convResponse.receiver.name);
         }
         // Handle room format (participants array)
-        if (conv.participants && Array.isArray(conv.participants)) {
-          conv.participants.forEach((p: string | ConversationParticipant) => {
+        if (convResponse.participants && Array.isArray(convResponse.participants)) {
+          convResponse.participants.forEach((p: string | ConversationParticipant) => {
             const participantId = typeof p === 'string' ? p : (p.userId || p._id || p.id);
             const participantName = typeof p === 'object' && p !== null ? (p.name || p.firstName || p.username) : null;
             if (participantId && typeof participantId === 'string' && participantName && typeof participantName === 'string') {
@@ -501,7 +623,7 @@ export default function MessagesPage() {
         });
       }
     }
-  }, [conversationsData]);
+  }, [roomsData]);
 
   // Handle userId query parameter - find or create room with that user
   useEffect(() => {
@@ -564,14 +686,24 @@ export default function MessagesPage() {
     }
   }, [rooms, searchParams, userId, user?.id, fallbackUserId, router, loading, authLoading, processingUserId, invalidUserIds, createRoomWithUser]);
 
+  // Mark room as read when selected
+  // NOTE: Disabled because the API endpoint expects messageIds in the request body
+  // The endpoint `/chat/rooms/{roomId}/read` requires a body with messageIds array
+  // Uncomment and update if the API is fixed to accept just roomId or if we have messageIds
+  /*
   useEffect(() => {
-    if (selectedChat) {
-      console.log('Selected chat changed, marking room as read:', selectedChat);
-      markRoomAsReadMutation(selectedChat).catch(err => {
-        console.error('Error marking room as read:', err);
-      });
+    if (selectedChat && messages.length > 0) {
+      // If API requires messageIds, we would need to pass them:
+      // const messageIds = messages.map(m => m.id);
+      // markRoomAsReadMutation({ roomId: selectedChat, messageIds }).catch(err => {
+      //   console.error('Error marking room as read:', err);
+      // });
+      
+      // For now, disabled to avoid API errors
+      console.log('Room selected:', selectedChat, '- Mark as read disabled');
     }
-  }, [selectedChat, markRoomAsReadMutation]);
+  }, [selectedChat, markRoomAsReadMutation, messages]);
+  */
 
   // Fetch participant names for a user ID (using apiService for now, can be moved to RTK Query later)
   const fetchParticipantName = async (participantId: string | Participant): Promise<string | null> => {
@@ -656,9 +788,14 @@ export default function MessagesPage() {
       }).unwrap();
 
       if (result) {
-        // transformResponse already extracted the data, so result is the message object
+        // transformResponse should have extracted the data, so result should be the ChatMessage object directly
+        // But handle both cases for safety
+        const messageData = (result && typeof result === 'object' && 'data' in result && result.data)
+          ? result.data as ChatMessage
+          : (result as ChatMessage);
+        
         const sentMessage = {
-          ...result,
+          ...messageData,
           senderId: currentUserId, // Ensure senderId is set correctly
         };
         
@@ -667,8 +804,10 @@ export default function MessagesPage() {
         
         // RTK Query will automatically refetch messages and rooms due to invalidatesTags
         // But we can also manually refetch to ensure immediate update
-        refetchMessages();
-        refetchRooms();
+        setTimeout(() => {
+          refetchMessages();
+          refetchRooms();
+        }, 300);
       }
     } catch (err: unknown) {
       console.error('Error sending message:', err);
@@ -765,8 +904,16 @@ export default function MessagesPage() {
   const selectedChatData = rooms.find((room) => room.id === selectedChat);
   
   // Helper functions for data transformation
-  const formatTime = (dateString: string) => {
+  const formatTime = (dateString: string | undefined | null) => {
+    if (!dateString) {
+      return '';
+    }
     const date = new Date(dateString);
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('[formatTime] Invalid date string:', dateString);
+      return '';
+    }
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -843,20 +990,33 @@ export default function MessagesPage() {
     if (!room.lastMessage) return 'No messages yet';
     
     const message = room.lastMessage;
+    const currentUserId = userId || user?.id || fallbackUserId;
+    const isOwnMessage = message.senderId === currentUserId;
+    const prefix = isOwnMessage ? 'You : ' : '';
+    
     if (message.type === 'text') {
-      return message.content.length > 50 
-        ? `${message.content.substring(0, 50)}...` 
-        : message.content;
+      const content = message.content || '';
+      const preview = content.length > 30 
+        ? `${content.substring(0, 30)}...` 
+        : content;
+      return `${prefix}${preview}`;
     } else if (message.type === 'image') {
-      return '📷 Image';
+      return `${prefix}📷 Image`;
     } else if (message.type === 'file') {
-      return '📎 File';
+      return `${prefix}📎 File`;
     } else if (message.type === 'video') {
-      return '🎥 Video';
+      return `${prefix}🎥 Video`;
     } else if (message.type === 'audio') {
-      return '🎵 Audio';
+      return `${prefix}🎵 Audio`;
     }
-    return 'Message';
+    return `${prefix}Message`;
+  };
+  
+  // Get participant profile image URL (would need to fetch from user profile)
+  const getParticipantImage = (room: ChatRoom): string | null => {
+    // TODO: Fetch actual profile images from user profiles
+    // For now, return null to show initials
+    return null;
   };
 
   // Convert API ChatMessage to UI Message format
@@ -1105,7 +1265,7 @@ export default function MessagesPage() {
 
         {/* Chat List - Scrollable */}
         <div className="flex-1 overflow-y-auto scrollbar-hide">
-          {loading && (!Array.isArray(rooms) || rooms.length > 0) ? (
+          {loadingRooms && (!Array.isArray(rooms) || rooms.length === 0) ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FA266D]"></div>
             </div>
@@ -1113,7 +1273,10 @@ export default function MessagesPage() {
             <div className="p-4 text-center">
               <p className="text-red-400 mb-2">{error}</p>
               <button
-                onClick={() => refetchRooms()}
+                onClick={() => {
+                  console.log('[MessagesPage] Manual refetch triggered');
+                  refetchRooms();
+                }}
                 className="px-4 py-2 bg-[#FA266D] text-white rounded-lg hover:bg-pink-600"
               >
                 Retry
@@ -1123,45 +1286,71 @@ export default function MessagesPage() {
             <div className="p-4 text-center text-gray-400">
               <p>No conversations yet</p>
               <p className="text-sm">Start a new conversation to begin chatting</p>
+              <p className="text-xs mt-2 text-gray-500">
+                Debug: roomsData={roomsData ? JSON.stringify(roomsData).substring(0, 100) : 'null'}, 
+                rooms.length={rooms.length}, 
+                loadingRooms={String(loadingRooms)}
+              </p>
             </div>
           ) : (
-            rooms.filter(room => room.id).map((room) => (
-              <div
-                key={room.id}
-                onClick={() => {
-                  console.log('Chat clicked, room ID:', room.id, 'full room:', room);
-                  if (room.id) {
-                    setSelectedChat(room.id);
-                  } else {
-                    console.error('Room has no ID:', room);
-                  }
-                }}
-                className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${
-                  selectedChat === room.id ? "bg-white/10" : ""
-                }`}
-              >
+            rooms.filter(room => {
+              const hasId = room && room.id && room.id.trim() !== '';
+              if (!hasId) {
+                console.warn('[MessagesPage] Filtering out room without id:', room);
+              }
+              return hasId;
+            }).map((room) => {
+              console.log('[MessagesPage] Rendering room:', room.id, room);
+              return (
+                <div
+                  key={room.id}
+                  onClick={() => {
+                    console.log('Chat clicked, room ID:', room.id, 'full room:', room);
+                    if (room.id) {
+                      setSelectedChat(room.id);
+                    } else {
+                      console.error('Room has no ID:', room);
+                    }
+                  }}
+                  className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${
+                    selectedChat === room.id ? "bg-white/10" : ""
+                  }`}
+                >
                 <div className="flex items-center gap-3">
                   {/* Avatar */}
-                  <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center relative">
-                    <span className="text-gray-600 font-semibold text-sm">
-                      {getRoomDisplayName(room).charAt(0).toUpperCase()}
-                    </span>
-                    {/* Online status could be added here if available */}
-                  </div>
+                  {getParticipantImage(room) ? (
+                    <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
+                      <img
+                        src={getParticipantImage(room)!}
+                        alt={getRoomDisplayName(room)}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-gray-800 font-semibold text-sm">
+                        {getRoomDisplayName(room).charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Chat Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-white font-medium text-sm truncate">
+                  <div className="flex-1 min-w-0 flex flex-col">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <h3 className="text-white font-semibold text-sm truncate">
                         {getRoomDisplayName(room)}
                       </h3>
-                      <div className="flex items-center gap-2">
-                        {room.lastMessage && (
-                          <span className="text-gray-400 text-xs">
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        {room.lastMessage?.createdAt ? (
+                          <span className="text-gray-400 text-xs whitespace-nowrap">
                             {formatTime(room.lastMessage.createdAt)}
                           </span>
-                        )}
-                        <Check className="h-3 w-3 text-[#FA266D]" />
+                        ) : room.createdAt ? (
+                          <span className="text-gray-400 text-xs whitespace-nowrap">
+                            {formatTime(room.createdAt)}
+                          </span>
+                        ) : null}
+                        <CheckCheck className="h-3 w-3 text-gray-400" />
                       </div>
                     </div>
                     <p className="text-gray-400 text-xs truncate">
@@ -1177,7 +1366,8 @@ export default function MessagesPage() {
                   </div>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

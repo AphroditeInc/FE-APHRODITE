@@ -12,6 +12,28 @@ export const profileApiSlice = apiSlice.injectEndpoints({
       extraOptions: { serviceKey: "us" },
       invalidatesTags: ['Profile'],
     }),
+    updateProfile: builder.mutation({
+      query: ({ id, ...data }) => {
+        const url = endpoints.PROFILE_UPDATE(id);
+        console.log("UpdateProfile mutation - URL:", url, "Body:", data, "ID:", id);
+        return {
+          url,
+          method: "PUT",
+          body: data, // id is NOT included in body, only in URL
+        };
+      },
+      extraOptions: { serviceKey: "us" },
+      invalidatesTags: ['Profile'],
+    }),
+    getProfileById: builder.query({
+      query: (id: string) => ({
+        url: endpoints.PROFILE_GET_BY_ID(id),
+        method: "GET",
+      }),
+      extraOptions: { serviceKey: "us" },
+      providesTags: ['Profile'],
+      keepUnusedDataFor: 60,
+    }),
     getEnrichedProfile: builder.query({
       query: (userId: string) => ({
         url: endpoints.PROFILE_GET_USER_PROFILE(userId),
@@ -79,6 +101,8 @@ export const profileApiSlice = apiSlice.injectEndpoints({
 
 export const {
   useCreateProfileMutation,
+  useUpdateProfileMutation,
+  useGetProfileByIdQuery,
   useGetEnrichedProfileQuery,
   useUpdateProfilePricingMutation,
   useUpdateProfileServicesMutation,
@@ -87,4 +111,10 @@ export const {
   useGetProfileReviewsQuery,
   useFollowProfileMutation,
 } = profileApiSlice;
+
+
+
+
+
+
 

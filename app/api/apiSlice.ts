@@ -247,7 +247,7 @@ export const apiSlice = createApi({
     }),
 
     // Chat Endpoints
-    getRoomMessages: builder.query<ApiResponse<ChatMessage[]>, { roomId: string; query?: GetMessagesQuery }>({
+    getRoomMessages: builder.query<ChatMessage[], { roomId: string; query?: GetMessagesQuery }>({
       query: ({ roomId, query }) => {
         const params = new URLSearchParams();
         if (query?.limit) params.append('limit', query.limit.toString());
@@ -256,30 +256,102 @@ export const apiSlice = createApi({
         if (query?.after) params.append('after', query.after);
         return `/chat/rooms/${roomId}/messages?${params.toString()}`;
       },
+      transformResponse: (response: ApiResponse<ChatMessage[]> | ChatMessage[]) => {
+        // API returns array directly: [{...}, {...}]
+        // But handle ApiResponse format if present: { success: true, data: [...] }
+        if (Array.isArray(response)) {
+          return response;
+        }
+        if (response && typeof response === 'object' && 'data' in response && Array.isArray(response.data)) {
+          return response.data;
+        }
+        return [];
+      },
       providesTags: (result, error, { roomId }) => [{ type: 'Chat', id: roomId }],
     }),
-    sendMessage: builder.mutation<ApiResponse<ChatMessage>, SendMessagePayload>({
+    sendMessage: builder.mutation<ChatMessage, SendMessagePayload>({
       query: (body) => ({
         url: "/chat/messages",
         method: "POST",
         body,
       }),
-      invalidatesTags: (result, error, arg) => result?.data?.roomId ? [{ type: 'Chat', id: result.data.roomId }] : ['Chat'],
+      transformResponse: (response: ApiResponse<ChatMessage> | ChatMessage) => {
+        // Extract data from ApiResponse: { success: true, data: {...} }
+        if (response && typeof response === 'object') {
+          if ('data' in response && response.data && typeof response.data === 'object') {
+            return response.data as ChatMessage;
+          }
+          // Fallback: if response is already a message object, return it
+          if ('id' in response || 'senderId' in response) {
+            return response as ChatMessage;
+          }
+        }
+        // Last resort: cast to ChatMessage
+        return response as unknown as ChatMessage;
+      },
+      invalidatesTags: (result, error, arg) => result?.roomId ? [{ type: 'Chat', id: result.roomId }, 'Room'] : ['Chat', 'Room'],
     }),
-    getUserRooms: builder.query<ApiResponse<ChatRoom[]>, { limit?: number; offset?: number }>({
-      query: ({ limit = 10, offset = 0 }) => `/chat/rooms?limit=${limit}&offset=${offset}`,
+    getUserRooms: builder.query<ChatRoom[], { limit?: number; offset?: number }>({
+      query: ({ limit = 10, offset = 0 }) => {
+        console.log('[getUserRooms] Query called with:', { limit, offset });
+        return `/chat/rooms?limit=${limit}&offset=${offset}`;
+      },
+      transformResponse: (response: ApiResponse<ChatRoom[]>) => {
+        console.log('[getUserRooms] Raw response:', response);
+        // Extract data from ApiResponse: { success: true, data: [...] }
+        if (response && typeof response === 'object' && 'data' in response && Array.isArray(response.data)) {
+          console.log('[getUserRooms] Extracted from ApiResponse.data:', response.data);
+          return response.data;
+        }
+        // Fallback: if response is already an array, return it
+        if (Array.isArray(response)) {
+          console.log('[getUserRooms] Response is already array:', response);
+          return response;
+        }
+        console.log('[getUserRooms] Returning empty array');
+        return [];
+      },
       providesTags: ['Room'],
     }),
-    createRoom: builder.mutation<ApiResponse<ChatRoom>, CreateRoomPayload>({
+    createRoom: builder.mutation<ChatRoom, CreateRoomPayload>({
       query: (body) => ({
         url: "/chat/rooms",
         method: "POST",
         body,
       }),
-      invalidatesTags: ['Room'],
+      transformResponse: (response: ApiResponse<ChatRoom> | ChatRoom) => {
+        console.log('[createRoom transformResponse] Raw response:', response);
+        // Extract data from ApiResponse: { success: true, data: {...} }
+        if (response && typeof response === 'object') {
+          if ('data' in response && response.data && typeof response.data === 'object') {
+            console.log('[createRoom transformResponse] Extracted from ApiResponse.data:', response.data);
+            return response.data as ChatRoom;
+          }
+          // Fallback: if response is already a room object, return it
+          if ('roomId' in response || 'id' in response || '_id' in response) {
+            console.log('[createRoom transformResponse] Using direct room object:', response);
+            return response as ChatRoom;
+          }
+        }
+        // Last resort: cast to ChatRoom
+        console.log('[createRoom transformResponse] Using fallback cast');
+        return response as unknown as ChatRoom;
+      },
+      invalidatesTags: ['Room'], // This should trigger getUserRooms to refetch
     }),
-    getConversations: builder.query<ApiResponse<ChatRoom[]>, { limit?: number; offset?: number }>({
+    getConversations: builder.query<ChatRoom[], { limit?: number; offset?: number }>({
       query: ({ limit = 10, offset = 0 }) => `/chat/conversations?limit=${limit}&offset=${offset}`,
+      transformResponse: (response: ApiResponse<ChatRoom[]>) => {
+        // Extract data from ApiResponse: { success: true, data: [...] }
+        if (response && typeof response === 'object' && 'data' in response && Array.isArray(response.data)) {
+          return response.data;
+        }
+        // Fallback: if response is already an array, return it
+        if (Array.isArray(response)) {
+          return response;
+        }
+        return [];
+      },
       providesTags: ['Room'],
     }),
     updateMessageStatus: builder.mutation<ApiResponse<ChatMessage>, { messageId: string } & UpdateMessageStatusPayload>({

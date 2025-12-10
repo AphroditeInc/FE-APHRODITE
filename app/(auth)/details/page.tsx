@@ -10,7 +10,7 @@ import {
   useCompleteBasicDetailsMutation, 
   useRegisterWithEmailMutation, 
   useUpdateUserMutation, 
-  useUpdateProfileMutation 
+  useUpdateAuthProfileMutation 
 } from "@/feature/authentication/authApiSlice";
 import { useAppDispatch, useAppSelector } from "@/app/hooks";
 import { setCredentials, selectCurrentUser } from "@/feature/authentication/authSlice";
@@ -36,7 +36,7 @@ function DetailsForm() {
   const [completeBasicDetails, { isLoading: isCompletingBasic }] = useCompleteBasicDetailsMutation();
   const [registerWithEmail, { isLoading: isRegisteringEmail }] = useRegisterWithEmailMutation();
   const [updateUser, { isLoading: isUpdatingUser }] = useUpdateUserMutation();
-  const [updateProfile, { isLoading: isUpdatingProfile }] = useUpdateProfileMutation();
+  const [updateProfile, { isLoading: isUpdatingProfile }] = useUpdateAuthProfileMutation();
   const [error, setError] = useState<string | null>(null);
   const isLoading = isCompletingBasic || isRegisteringEmail || isUpdatingUser || isUpdatingProfile;
   const [currentStep, setCurrentStep] = useState(1);

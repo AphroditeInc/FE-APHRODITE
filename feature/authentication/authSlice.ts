@@ -94,3 +94,10 @@ export const selectCurrentUser = (state: { auth: AuthState }) => state.auth.user
 export const selectCurrentUid = (state: { auth: AuthState }) => state.auth.uid;
 export const selectIsAuthenticated = (state: { auth: AuthState }) => state.auth.isAuthenticated;
 
+
+
+
+
+
+
+
