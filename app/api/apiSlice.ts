@@ -234,7 +234,8 @@ export const apiSlice = createApi({
       }),
     }),
     getUserProfile: builder.query<ApiResponse<User>, string>({
-      query: (userId) => `/auth/users/${userId}`,
+      query: (userId) => `/profiles/users/${userId}`,
+      // query: (userId) => `/auth/profile`,
       providesTags: (result, error, id) => [{ type: 'User', id }],
     }),
     updateUser: builder.mutation<ApiResponse<User>, { userId: string; data: Partial<User> }>({
