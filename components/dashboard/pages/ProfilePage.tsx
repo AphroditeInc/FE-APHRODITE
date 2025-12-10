@@ -1,9 +1,11 @@
 "use client";
 
 import { User, Mail, Phone, MapPin, Calendar, Edit, ArrowLeft, Star, Check, Users, Calendar as CalendarIcon, X, Heart, BookOpen, MessageCircle, UserPlus, Info, Coins, Play, ThumbsUp, ThumbsDown, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
+import { useUpdateProfileMutation, useUpdateProfileMediaMutation, useCreateProfileServiceMutation } from "@/feature/profile/profileApiSlice";
 
 // Mock reviews data
 const mockReviews = [
@@ -49,6 +51,13 @@ const availableServices = [
 export default function ProfilePage() {
   const { user: authUser } = useAuth();
   const { profile, loading, error, refetch } = useEnrichedProfile(authUser?.id || null);
+  const [updateProfile, { isLoading: isUpdatingProfile }] = useUpdateProfileMutation();
+  const [updateProfileMedia, { isLoading: isUpdatingMedia }] = useUpdateProfileMediaMutation();
+  const [createProfileService, { isLoading: isCreatingService }] = useCreateProfileServiceMutation();
+  const { uploadMultiple, isUploading, progress, error: uploadError } = useCloudinaryUpload({
+    folder: 'aphrodite/profile-media',
+    resourceType: 'auto', // Auto-detect image or video
+  });
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
@@ -59,12 +68,77 @@ export default function ProfilePage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
-  const [selectedServices, setSelectedServices] = useState<string[]>([
-    "Lap Dance", "Belly Dance", "Tango", "Being Filmed", 
-    "Girlfriend Experience", "Role Play & Fantasies", "French Kissing", "Doggy"
-  ]);
-  const [customServices, setCustomServices] = useState<string[]>(["BDSM", "Ride Till You Cum"]);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [customServices, setCustomServices] = useState<string[]>([]);
   const [customServiceInput, setCustomServiceInput] = useState("");
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+
+  // Initialize services from profile.services when profile loads
+  useEffect(() => {
+    if (profile?.services && Array.isArray(profile.services)) {
+      // Extract service names from services array (array of strings - IDs or names)
+      const existingServiceNames = profile.services
+        .map(service => typeof service === 'string' ? service : (service.name || service.id || ''))
+        .filter((s): s is string => s !== '');
+      
+      // Separate into available services and custom services
+      const availableServiceNames = existingServiceNames.filter(name => 
+        availableServices.includes(name)
+      );
+      const customServiceNames = existingServiceNames.filter(name => 
+        !availableServices.includes(name)
+      );
+      
+      setSelectedServices(availableServiceNames);
+      setCustomServices(customServiceNames);
+    }
+  }, [profile?.services]);
+
+  // Initialize formData from profile when profile loads
+  useEffect(() => {
+    if (profile) {
+      setFormData(prev => ({
+        ...prev,
+        ethnicity: profile.ethnicity || prev.ethnicity,
+        sexualOrientation: profile.sexualOrientation || prev.sexualOrientation,
+        bustSize: profile.bustSize || prev.bustSize,
+        gender: profile.gender || prev.gender,
+        nationality: profile.nationality || prev.nationality,
+        bodyBuild: profile.bodyBuild || prev.bodyBuild,
+        looks: profile.looks || prev.looks,
+        smoker: profile.smoker === true ? "Yes" : profile.smoker === false ? "No" : prev.smoker,
+        education: profile.education || prev.education,
+        state: profile.state || authUser?.state || prev.state,
+        occupation: profile.occupation || prev.occupation,
+        country: authUser?.country || prev.country,
+        city: profile.city || authUser?.city || prev.city,
+        bio: profile.bio || prev.bio,
+      }));
+    }
+  }, [profile, authUser]);
+
+  // Auto-rotate media carousel every 5 seconds
+  useEffect(() => {
+    if (profile?.media && Array.isArray(profile.media) && profile.media.length > 1) {
+      const mediaLength = profile.media.length;
+      const interval = setInterval(() => {
+        setCurrentMediaIndex((prevIndex) => {
+          // Cycle to next media item, or back to 0 if at the end
+          return (prevIndex + 1) % mediaLength;
+        });
+      }, 5000); // 5 seconds
+
+      return () => clearInterval(interval);
+    } else {
+      // Reset to 0 if there's only one or no media items
+      setCurrentMediaIndex(0);
+    }
+  }, [profile?.media]);
+
+  // Reset media index when profile changes
+  useEffect(() => {
+    setCurrentMediaIndex(0);
+  }, [profile?.id]);
   const [formData, setFormData] = useState({
     // First form data
     location: "Rumuokoro, Port Harcourt",
@@ -93,11 +167,94 @@ export default function ProfilePage() {
     setCurrentFormStep(2);
   };
 
-  const handleSubmit = () => {
-    // Handle form submission here
-    console.log("Form submitted:", formData);
-    setIsEditModalOpen(false);
-    setCurrentFormStep(1);
+  const handleSubmit = async () => {
+    console.log("=== handleSubmit called ===", {
+      formData,
+      profileId: profile?.id,
+      hasProfile: !!profile,
+    });
+
+    // Get profile ID - use profile.id (the profile's own ID, not userId)
+    const profileId = profile?.id || null;
+
+    if (!profileId) {
+      console.error('Profile ID is missing', {
+        profile,
+        profileId: profile?.id,
+        userId: profile?.userId,
+        authUserId: authUser?.id
+      });
+      alert('Profile ID not found. Please ensure your profile is created first.');
+      return;
+    }
+
+    try {
+      // Map formData to API payload structure
+      // Convert smoker from "Yes"/"No"/"Occasionally" to boolean
+      const smokerValue = formData.smoker === "Yes" ? true : formData.smoker === "No" ? false : undefined;
+      
+      // Get media URLs from profile.media if it exists
+      const mediaUrls = profile?.media && Array.isArray(profile.media) ? profile.media : [];
+      
+      // Get service IDs/names from profile.services if it exists
+      const serviceIds = profile?.services && Array.isArray(profile.services)
+        ? profile.services.map(service => typeof service === 'string' ? service : (service.id || service.name || ''))
+            .filter((s): s is string => s !== '')
+        : [];
+
+      // Map form fields to API structure
+      // The mutation extracts 'id' from the parameters, so we only pass the body fields
+      const updatePayload: Record<string, unknown> = {
+        // Map form fields to API structure
+        gender: formData.gender || undefined,
+        sexualOrientation: formData.sexualOrientation || undefined,
+        bodyBuild: formData.bodyBuild || undefined,
+        bustSize: formData.bustSize || undefined,
+        nationality: formData.nationality || undefined,
+        ethnicity: formData.ethnicity || undefined,
+        state: formData.state || undefined,
+        city: formData.city || undefined,
+        smoker: smokerValue,
+        looks: formData.looks || undefined,
+        bio: formData.bio || undefined,
+        education: formData.education || undefined,
+        occupation: formData.occupation || undefined,
+        maritalStatus: profile?.maritalStatus || undefined, // Keep existing if not in form
+        media: mediaUrls,
+        services: serviceIds,
+      };
+
+      // Remove undefined values to avoid sending them
+      const cleanedPayload = Object.fromEntries(
+        Object.entries(updatePayload).filter(([_, value]) => value !== undefined)
+      );
+
+      console.log('Updating profile with payload:', cleanedPayload);
+      console.log('Profile ID:', profileId);
+      
+      const result = await updateProfile({
+        id: String(profileId),
+        ...cleanedPayload,
+      }).unwrap();
+
+      console.log('Profile update result:', result);
+
+      if (result) {
+        // Refetch profile to get updated data
+        await refetch();
+        setIsEditModalOpen(false);
+        setCurrentFormStep(1);
+        console.log('Profile updated successfully!');
+      }
+    } catch (error: unknown) {
+      console.error('Error updating profile:', error);
+      const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+        ? String(error.data.message)
+        : (error && typeof error === 'object' && 'message' in error)
+          ? String(error.message)
+          : 'Unknown error occurred during profile update.';
+      alert(`Error updating profile: ${errorMessage}`);
+    }
   };
 
   const handleCloseModal = () => {
@@ -119,11 +276,129 @@ export default function ProfilePage() {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleUploadMedia = () => {
-    // Handle media upload here
-    console.log("Uploading media:", selectedFiles);
-    // TODO: Implement actual upload logic
-    handleCloseMediaModal();
+  const handleUploadMedia = async () => {
+    console.log('=== handleUploadMedia called ===', { 
+      selectedFilesCount: selectedFiles.length, 
+      profileId: profile?.id,
+      hasProfile: !!profile,
+      profile: profile 
+    });
+
+    // Check Cloudinary configuration first
+    const cloudinaryConfig = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+    
+    console.log('Cloudinary config check:', { 
+      hasCloudName: !!cloudinaryConfig, 
+      hasUploadPreset: !!uploadPreset 
+    });
+
+    if (selectedFiles.length === 0) {
+      console.warn('No files selected');
+      alert('Please select at least one file to upload');
+      return;
+    }
+
+    // Get profile ID - use profile.id (the profile's own ID, not userId)
+    // The profile response has: { id: "profile-id", userId: "user-id", ... }
+    const profileId = profile?.id || null;
+    
+    console.log('Profile ID resolution:', {
+      'profile?.id': profile?.id,
+      'profile?.userId': profile?.userId,
+      'authUser?.id': authUser?.id,
+      'resolved profileId': profileId,
+      'full profile object': profile
+    });
+    
+    if (!profileId) {
+      console.error('Profile ID is missing', { 
+        profile, 
+        profileId: profile?.id, 
+        userId: profile?.userId, 
+        authUserId: authUser?.id 
+      });
+      alert('Profile ID not found. Please ensure your profile is created first. You may need to complete the basic details form.');
+      return;
+    }
+    
+    console.log('Using profile ID for media upload:', profileId);
+
+    if (!cloudinaryConfig || !uploadPreset) {
+      console.error('Cloudinary configuration missing', { cloudinaryConfig, uploadPreset });
+      alert('Cloudinary is not configured. Please set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET in your .env.local file.\n\nSee CLOUDINARY_SETUP.md for instructions.');
+      return;
+    }
+
+    try {
+      console.log('Starting Cloudinary upload...', selectedFiles.length, 'files');
+      
+      // Upload files to Cloudinary
+      const uploadResults = await uploadMultiple(selectedFiles);
+      console.log('Upload results:', uploadResults);
+
+      // Filter successful uploads and extract URLs
+      const uploadedUrls = uploadResults
+        .filter((result) => result.success && result.data?.secure_url)
+        .map((result) => result.data!.secure_url);
+
+      console.log('Uploaded URLs:', uploadedUrls);
+
+      if (uploadedUrls.length === 0) {
+        const errors = uploadResults
+          .filter((r) => !r.success)
+          .map((r) => r.error)
+          .filter(Boolean);
+        console.error('No files were uploaded successfully. Errors:', errors);
+        alert(`Upload failed: ${errors.join(', ') || 'Unknown error'}`);
+        return;
+      }
+
+      // Double-check we have a valid profile ID before making the API call
+      if (!profileId) {
+        console.error('Profile ID is undefined at API call time', { 
+          profileId, 
+          profile, 
+          authUser 
+        });
+        alert('Profile ID is missing. Please refresh the page and try again.');
+        return;
+      }
+      
+      // Get existing media URLs from profile.media
+      const existingMediaUrls = profile?.media && Array.isArray(profile.media) ? profile.media : [];
+      
+      // Combine existing media with new uploaded media
+      const combinedMediaUrls = [...existingMediaUrls, ...uploadedUrls];
+      
+      console.log('Adding media to profile with ID:', profileId);
+      console.log('Existing media URLs:', existingMediaUrls);
+      console.log('New media URLs to upload:', uploadedUrls);
+      console.log('Combined media URLs:', combinedMediaUrls);
+      console.log('Request payload:', { id: profileId, mediaUrls: combinedMediaUrls });
+      
+      // PUT /profiles/{id} with combined media array in body
+      const updateResult = await updateProfileMedia({
+        id: String(profileId), // Ensure it's a string
+        mediaUrls: combinedMediaUrls, // Send combined array (existing + new)
+      }).unwrap();
+
+      console.log('Profile update result:', updateResult);
+
+      if (updateResult) {
+        // Success - refetch profile to get updated data
+        console.log('Refetching profile...');
+        await refetch();
+        // Clear selected files and close modal
+        setSelectedFiles([]);
+        handleCloseMediaModal();
+        console.log('Upload completed successfully!');
+      }
+    } catch (error) {
+      console.error('Error uploading media:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Error uploading media: ${errorMessage}`);
+    }
   };
 
   const handleReplyToReview = (reviewId: string) => {
@@ -168,11 +443,93 @@ export default function ProfilePage() {
     setCustomServices(prev => prev.filter(s => s !== service));
   };
 
-  const handleSubmitServices = () => {
-    console.log("Selected services:", selectedServices);
-    console.log("Custom services:", customServices);
-    // TODO: Implement actual services submission logic
-    handleCloseServicesModal();
+  const handleSubmitServices = async () => {
+    console.log("=== handleSubmitServices called ===", {
+      selectedServices,
+      customServices,
+      profileId: profile?.id,
+      hasProfile: !!profile,
+    });
+
+    // Get profile ID - use profile.id (the profile's own ID, not userId)
+    const profileId = profile?.id || null;
+
+    if (!profileId) {
+      console.error('Profile ID is missing', {
+        profile,
+        profileId: profile?.id,
+        userId: profile?.userId,
+        authUserId: authUser?.id
+      });
+      alert('Profile ID not found. Please ensure your profile is created first.');
+      return;
+    }
+
+    // Combine selected services and custom services
+    const allServices = [...selectedServices, ...customServices];
+
+    if (allServices.length === 0) {
+      alert('Please select at least one service.');
+      return;
+    }
+
+    try {
+      console.log('Updating services for profile:', profileId);
+      console.log('Services to update:', allServices);
+
+      // Get existing services from profile.services (array of strings - IDs or names)
+      // profile.services can be string[] or Service[], so we extract strings
+      const existingServices: string[] = profile?.services && Array.isArray(profile.services)
+        ? profile.services.map(service => typeof service === 'string' ? service : (service.id || service.name || ''))
+            .filter((s): s is string => s !== '')
+        : [];
+
+      // Combine existing services with new service names
+      // Start with existing services
+      const servicesArray: string[] = [...existingServices];
+      
+      // Add new services that don't already exist
+      allServices.forEach(serviceName => {
+        // Check if service already exists (by exact match or case-insensitive)
+        const exists = servicesArray.some(existing => 
+          existing === serviceName || existing.toLowerCase() === serviceName.toLowerCase()
+        );
+        
+        if (!exists) {
+          // New service, send as name (backend will create it)
+          servicesArray.push(serviceName);
+        }
+      });
+
+      console.log('Existing services from profile.services:', existingServices);
+      console.log('Selected services (names):', allServices);
+      console.log('Services array to send (existing + new):', servicesArray);
+      
+      // Use PUT /profiles/{id} with services array
+      const result = await updateProfile({
+        id: String(profileId),
+        services: servicesArray,
+      }).unwrap();
+
+      console.log('Profile update result:', result);
+
+      if (result) {
+        // Refetch profile to get updated services
+        await refetch();
+        
+        // Close modal and show success
+        handleCloseServicesModal();
+        console.log('Services updated successfully!');
+      }
+    } catch (error: unknown) {
+      console.error('Error updating services:', error);
+      const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+        ? String(error.data.message)
+        : (error && typeof error === 'object' && 'message' in error)
+          ? String(error.message)
+          : 'Unknown error occurred during service update.';
+      alert(`Error updating services: ${errorMessage}`);
+    }
   };
 
   // Loading state
@@ -250,27 +607,71 @@ export default function ProfilePage() {
       {/* Main Profile Section */}
       <div className="px-4 sm:px-8 lg:px-12 pb-6">
         <div className="flex flex-col lg:flex-row gap-6 sm:gap-8">
-          {/* Profile Image */}
+          {/* Profile Image/Media */}
           <div className="lg:w-1/3">
             <div className="relative">
-              <div className="w-full h-64 sm:h-80 lg:h-96 bg-gray-700 rounded-xl sm:rounded-2xl overflow-hidden">
-                <img 
-                  src="/images/intimate-couple.svg" 
-                  alt="Profile" 
-                  className="w-full h-full object-cover"
-                />
+              {/* Display media from profile.media array */}
+              {profile?.media && Array.isArray(profile.media) && profile.media.length > 0 ? (
+                <div className="w-full h-64 sm:h-80 lg:h-96 bg-gray-700 rounded-xl sm:rounded-2xl overflow-hidden relative">
+                  {/* Show current media item based on currentMediaIndex */}
+                  {(() => {
+                    const currentMedia = profile.media[currentMediaIndex] || profile.media[0];
+                    const isVideo = /\.(mp4|webm|ogg|avi|mov|wmv|flv|mkv)$/i.test(currentMedia);
+                    
+                    return isVideo ? (
+                      <video 
+                        src={currentMedia} 
+                        className="w-full h-full object-cover"
+                        controls
+                        key={currentMediaIndex} // Key to force re-render on change
+                      />
+                    ) : (
+                      <img 
+                        src={currentMedia} 
+                        alt={`Profile media ${currentMediaIndex + 1}`}
+                        className="w-full h-full object-cover transition-opacity duration-500"
+                        key={currentMediaIndex} // Key to force re-render on change
+                      />
+                    );
+                  })()}
+                  
+                  {/* Media count badge */}
+                  {profile.media.length > 1 && (
+                    <div className="absolute top-2 right-2 bg-black/60 text-white px-2 py-1 rounded-full text-xs font-medium">
+                      {currentMediaIndex + 1} / {profile.media.length}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="w-full h-64 sm:h-80 lg:h-96 bg-gray-700 rounded-xl sm:rounded-2xl overflow-hidden">
+                  <img 
+                    src="/images/intimate-couple.svg" 
+                    alt="Profile" 
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
             </div>
-              {/* Image carousel dots */}
+            {/* Image carousel dots - show if there are multiple media items */}
+            {profile?.media && Array.isArray(profile.media) && profile.media.length > 1 && (
               <div className="flex justify-center gap-2 mt-3 sm:mt-4">
-                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-pink-500 rounded-full"></div>
-                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white/30 rounded-full"></div>
-                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white/30 rounded-full"></div>
-                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white/30 rounded-full"></div>
-            </div>
+                {profile.media.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setCurrentMediaIndex(index)}
+                    className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-all ${
+                      index === currentMediaIndex 
+                        ? 'bg-pink-500 w-6 sm:w-8' 
+                        : 'bg-white/30 hover:bg-white/50'
+                    }`}
+                    aria-label={`Go to media ${index + 1}`}
+                  ></button>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* Profile Details */}
+          {/* Profile Details */}
           <div className="lg:w-2/3 space-y-3 sm:space-y-4">
             {/* Name with verification */}
             <div className="flex items-center gap-2 sm:gap-3">
@@ -464,20 +865,26 @@ export default function ProfilePage() {
         {activeTab === "Services" && (
           <div className="space-y-8">
             {/* Services Grid */}
-            <div className="flex flex-wrap gap-3">
-              {[
-                "Domination (Receiving)", "Lap Dance", "Belly Dance", "Tango", "Pole Fitness", "Being Filmed",
-                "Salsa", "Bachata", "Girlfriend Experience", "Sex Toys", "Role Play & Fantasies", "Erotic Massage",
-                "Erotic Spanking", "MMF 3somes", "Dinner Dates", "French Kissing", "Smoking Fetish"
-              ].map((service, index) => (
-                <button
-                  key={index}
-                  className="inline-flex px-4 py-2 border border-white/30 text-white text-sm rounded-full hover:border-pink-500 hover:text-pink-500 transition-colors whitespace-nowrap"
-                >
-                  {service}
-                </button>
-              ))}
-            </div>
+            {/* Map services from profile.services array (from API response: data.services) */}
+            {profile && profile.services && Array.isArray(profile.services) && profile.services.length > 0 ? (
+              <div className="flex flex-wrap gap-3">
+                {profile.services
+                  .map(service => typeof service === 'string' ? service : (service.name || service.id || ''))
+                  .filter((s): s is string => s !== '')
+                  .map((serviceName, index) => (
+                    <div
+                      key={`${serviceName}-${index}`}
+                      className="inline-flex px-4 py-2 border border-white/30 text-white text-sm rounded-full hover:border-pink-500 hover:text-pink-500 transition-colors whitespace-nowrap"
+                    >
+                      {serviceName}
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <div className="text-white/60 text-center py-8">
+                No services added yet. Click "Edit Services" to add services.
+              </div>
+            )}
 
             {/* Pricing Section */}
             <div className="space-y-4">
@@ -568,7 +975,8 @@ export default function ProfilePage() {
             </div>
 
             {/* Media Grid */}
-            {profile?.media && profile.media.length > 0 ? (
+            {/* Map media URLs from profile.media array (from API response: data.media) */}
+            {profile && profile.media && Array.isArray(profile.media) && profile.media.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {profile.media.map((mediaUrl, index) => {
                   // Check if media is video based on file extension
@@ -1021,9 +1429,10 @@ export default function ProfilePage() {
                   </button>
                   <button
                     onClick={handleSubmit}
-                    className="px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors"
+                    disabled={isUpdatingProfile}
+                    className="px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
                   >
-                    Submit
+                    {isUpdatingProfile ? 'Updating...' : 'Submit'}
                   </button>
                 </div>
               </div>
@@ -1073,6 +1482,31 @@ export default function ProfilePage() {
                 </label>
               </div>
 
+              {/* Upload Error Display */}
+              {uploadError && (
+                <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4">
+                  <p className="text-red-400 text-sm">Upload Error: {uploadError}</p>
+                </div>
+              )}
+
+              {/* Upload Progress */}
+              {/* {(isUploading || isUpdatingProfile) && (
+                <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-blue-400 text-sm">
+                      {isUploading ? 'Uploading to Cloudinary...' : 'Saving to profile...'}
+                    </p>
+                    <p className="text-blue-400 text-sm font-medium">{Math.round(progress)}%</p>
+                  </div>
+                  <div className="w-full bg-blue-500/20 rounded-full h-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )} */}
+
               {/* Selected Files Preview */}
               {selectedFiles.length > 0 && (
                 <div className="space-y-4">
@@ -1095,7 +1529,8 @@ export default function ProfilePage() {
                         </div>
                         <button
                           onClick={() => handleRemoveFile(index)}
-                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600 transition-colors"
+                          disabled={isUploading || isUpdatingProfile || isUpdatingMedia}
+                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -1110,16 +1545,24 @@ export default function ProfilePage() {
               <div className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 pt-4 sm:pt-6">
                 <button
                   onClick={handleCloseMediaModal}
-                  className="px-4 sm:px-6 py-2 sm:py-3 text-pink-500 font-medium hover:text-pink-600 transition-colors text-sm sm:text-base"
+                  disabled={isUploading || isUpdatingProfile || isUpdatingMedia}
+                  className="px-4 sm:px-6 py-2 sm:py-3 text-pink-500 font-medium hover:text-pink-600 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleUploadMedia}
-                  disabled={selectedFiles.length === 0}
-                  className="px-6 sm:px-8 py-2 sm:py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm sm:text-base disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  disabled={selectedFiles.length === 0 || isUploading || isUpdatingProfile || isUpdatingMedia}
+                  className="px-6 sm:px-8 py-2 sm:py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm sm:text-base disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  Upload {selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''}
+                  {(isUploading || isUpdatingProfile || isUpdatingMedia) ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      {isUploading ? `Uploading... ${Math.round(progress)}%` : 'Saving...'}
+                    </>
+                  ) : (
+                    `Upload ${selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''}`
+                  )}
                 </button>
               </div>
             </div>
@@ -1215,9 +1658,10 @@ export default function ProfilePage() {
               </button>
               <button
                 onClick={handleSubmitServices}
-                className="px-6 sm:px-8 py-2 sm:py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm sm:text-base"
+                disabled={isUpdatingProfile}
+                className="px-6 sm:px-8 py-2 sm:py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm sm:text-base disabled:bg-gray-500 disabled:cursor-not-allowed"
               >
-                Submit
+                {isUpdatingProfile ? 'Updating...' : 'Submit'}
               </button>
             </div>
           </div>
