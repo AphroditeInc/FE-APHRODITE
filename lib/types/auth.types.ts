@@ -276,8 +276,14 @@ export interface AuthProfileResponse {
  */
 export interface Service {
   id?: string;
+  profileId?: string;
   name?: string;
   description?: string;
+  durationMinutes?: number;
+  pricingId?: string;
+  active?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
   price?: number;
   duration?: number;
   [key: string]: unknown;
