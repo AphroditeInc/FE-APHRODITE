@@ -27,9 +27,9 @@ const PROFILE_UPDATE = (id: string) => `/profiles/${id}`; // PUT /profiles/{id}
 const PROFILE_GET_BY_ID = (id: string) => `/profiles/${id}`; // GET /profiles/{id}
 const PROFILE_GET_USER_PROFILE = (userId: string) => `/profiles/user/${userId}`;
 const PROFILE_PRICING = (userId: string) => `/profiles/${userId}/pricing`;
-const PROFILE_SERVICES = (userId: string) => `/profiles/${userId}/services`;
+const PROFILE_SERVICES = (id: string) => `/profiles/${id}/services`;
 const PROFILE_VIDEO = (userId: string) => `/profiles/${userId}/video-proof`;
-const PROFILE_MEDIA = (userId: string) => `/profiles/${userId}/media`;
+const PROFILE_MEDIA = (id: string) => `/profiles/${id}/media`;
 const PROFILE_REVIEWS = (userId: string) => `/profiles/${userId}/reviews`;
 const PROFILE_FOLLOW = (userId: string) => `/profiles/${userId}/follow`;
 
