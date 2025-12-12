@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Star, MapPin, Heart, Check } from "lucide-react";
 import { useListProfilesQuery } from "@/feature/profile/profileApiSlice";
 import type { EnrichedProfile } from "@/lib/types/auth.types";
+import { ProfileListSkeleton } from "@/components/ui/Skeleton";
 
 
 // Array of background images
@@ -207,8 +208,8 @@ export default function OverviewPage() {
 
         {/* Loading State */}
         {isLoading && (
-          <div className="px-8 py-12 text-center">
-            <div className="text-white/60">Loading profiles...</div>
+          <div className="px-8 py-12">
+            <ProfileListSkeleton count={6} />
           </div>
         )}
 

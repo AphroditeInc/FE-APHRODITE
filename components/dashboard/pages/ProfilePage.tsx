@@ -6,6 +6,7 @@ import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
 import { useUpdateProfileMutation, useUpdateProfileMediaMutation, useCreateProfileServiceMutation } from "@/feature/profile/profileApiSlice";
+import { ProfilePageSkeleton } from "@/components/ui/Skeleton";
 
 // Mock reviews data
 const mockReviews = [
@@ -193,20 +194,6 @@ export default function ProfilePage() {
       // Convert smoker from "Yes"/"No"/"Occasionally" to boolean
       const smokerValue = formData.smoker === "Yes" ? true : formData.smoker === "No" ? false : undefined;
       
-      // Determine userType based on gender: male → hunk, female → diva
-      const determineUserType = (gender: string | undefined): 'hunk' | 'diva' | undefined => {
-        if (!gender) return undefined;
-        const normalizedGender = gender.toLowerCase().trim();
-        if (normalizedGender === 'male' || normalizedGender === 'm') {
-          return 'hunk';
-        } else if (normalizedGender === 'female' || normalizedGender === 'f') {
-          return 'diva';
-        }
-        return undefined;
-      };
-      
-      const userType = determineUserType(formData.gender);
-      
       // Get media URLs from profile.media if it exists
       const mediaUrls = profile?.media && Array.isArray(profile.media) ? profile.media : [];
       
@@ -218,10 +205,10 @@ export default function ProfilePage() {
 
       // Map form fields to API structure
       // The mutation extracts 'id' from the parameters, so we only pass the body fields
+      // Note: userType is NOT a profile property - it's a user property, so we don't send it here
       const updatePayload: Record<string, unknown> = {
         // Map form fields to API structure
         gender: formData.gender || undefined,
-        userType: userType, // Set userType based on gender
         sexualOrientation: formData.sexualOrientation || undefined,
         bodyBuild: formData.bodyBuild || undefined,
         bustSize: formData.bustSize || undefined,
@@ -257,8 +244,8 @@ export default function ProfilePage() {
       if (result) {
         // Refetch profile to get updated data
         await refetch();
-        setIsEditModalOpen(false);
-        setCurrentFormStep(1);
+    setIsEditModalOpen(false);
+    setCurrentFormStep(1);
         console.log('Profile updated successfully!');
       }
     } catch (error: unknown) {
@@ -406,7 +393,7 @@ export default function ProfilePage() {
         await refetch();
         // Clear selected files and close modal
         setSelectedFiles([]);
-        handleCloseMediaModal();
+    handleCloseMediaModal();
         console.log('Upload completed successfully!');
       }
     } catch (error) {
@@ -533,7 +520,7 @@ export default function ProfilePage() {
         await refetch();
         
         // Close modal and show success
-        handleCloseServicesModal();
+    handleCloseServicesModal();
         console.log('Services updated successfully!');
       }
     } catch (error: unknown) {
@@ -549,11 +536,7 @@ export default function ProfilePage() {
 
   // Loading state
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#1F1B2C] flex items-center justify-center">
-        <div className="text-white text-xl">Loading profile...</div>
-      </div>
-    );
+    return <ProfilePageSkeleton />;
   }
 
   // Error state
@@ -658,13 +641,13 @@ export default function ProfilePage() {
                   )}
                 </div>
               ) : (
-                <div className="w-full h-64 sm:h-80 lg:h-96 bg-gray-700 rounded-xl sm:rounded-2xl overflow-hidden">
-                  <img 
-                    src="/images/intimate-couple.svg" 
-                    alt="Profile" 
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+              <div className="w-full h-64 sm:h-80 lg:h-96 bg-gray-700 rounded-xl sm:rounded-2xl overflow-hidden">
+                <img 
+                  src="/images/intimate-couple.svg" 
+                  alt="Profile" 
+                  className="w-full h-full object-cover"
+                />
+            </div>
               )}
             </div>
             {/* Image carousel dots - show if there are multiple media items */}
@@ -682,11 +665,11 @@ export default function ProfilePage() {
                     aria-label={`Go to media ${index + 1}`}
                   ></button>
                 ))}
-              </div>
+            </div>
             )}
-          </div>
+        </div>
 
-          {/* Profile Details */}
+        {/* Profile Details */}
           <div className="lg:w-2/3 space-y-3 sm:space-y-4">
             {/* Name with verification */}
             <div className="flex items-center gap-2 sm:gap-3">
@@ -882,19 +865,19 @@ export default function ProfilePage() {
             {/* Services Grid */}
             {/* Map services from profile.services array (from API response: data.services) */}
             {profile && profile.services && Array.isArray(profile.services) && profile.services.length > 0 ? (
-              <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3">
                 {profile.services
                   .map(service => typeof service === 'string' ? service : (service.name || service.id || ''))
                   .filter((s): s is string => s !== '')
                   .map((serviceName, index) => (
                     <div
                       key={`${serviceName}-${index}`}
-                      className="inline-flex px-4 py-2 border border-white/30 text-white text-sm rounded-full hover:border-pink-500 hover:text-pink-500 transition-colors whitespace-nowrap"
-                    >
+                  className="inline-flex px-4 py-2 border border-white/30 text-white text-sm rounded-full hover:border-pink-500 hover:text-pink-500 transition-colors whitespace-nowrap"
+                >
                       {serviceName}
                     </div>
-                  ))}
-              </div>
+              ))}
+            </div>
             ) : (
               <div className="text-white/60 text-center py-8">
                 No services added yet. Click "Edit Services" to add services.

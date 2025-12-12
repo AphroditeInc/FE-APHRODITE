@@ -6,6 +6,7 @@ import { ArrowLeft, MapPin, Star, Check, Users, Calendar as CalendarIcon, Heart,
 import { type Profile } from "@/lib/data/profiles";
 import { useGetProfileByIdQuery } from "@/feature/profile/profileApiSlice";
 import type { EnrichedProfile } from "@/lib/types/auth.types";
+import { ProfileDetailSkeleton } from "@/components/ui/Skeleton";
 
 // Array of background images
 const backgroundImages = [
@@ -179,11 +180,7 @@ export default function ProfileDetailPage() {
 
   // Loading state
   if (isLoading) {
-    return (
-      <div className="h-full bg-[#1F1B2C] flex items-center justify-center">
-        <div className="text-white text-xl">Loading profile...</div>
-      </div>
-    );
+    return <ProfileDetailSkeleton />;
   }
 
   // Error state
@@ -237,16 +234,16 @@ export default function ProfileDetailPage() {
               </div>
               {/* Image carousel dots - only show if there are multiple images */}
               {profileMedia.length > 1 && (
-                <div className="flex justify-center gap-2 mt-4">
+              <div className="flex justify-center gap-2 mt-4">
                   {profileMedia.slice(0, Math.min(profileMedia.length, 10)).map((_, index) => (
-                    <div 
-                      key={index}
-                      className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                  <div 
+                    key={index}
+                    className={`w-2 h-2 rounded-full transition-all duration-300 ${
                         index === (currentImageIndex % profileMedia.length) ? 'bg-pink-500' : 'bg-white/30'
-                      }`}
-                    ></div>
-                  ))}
-                </div>
+                    }`}
+                  ></div>
+                ))}
+              </div>
               )}
             </div>
           </div>
@@ -331,14 +328,23 @@ export default function ProfileDetailPage() {
               <div className="flex gap-3">
                 <button 
                   onClick={() => {
-                    // Pass userId and profile name for better chat experience
+                    // Get the actual user ID from enrichedProfile (not profile ID)
+                    const targetUserId = enrichedProfile?.user?.id;
+                    if (!targetUserId) {
+                      console.error('User ID not available for chat');
+                      alert('Unable to start chat: User information not available');
+                      return;
+                    }
+                    
+                    // Pass userId (actual user ID, not profile ID) and profile name for better chat experience
                     const queryParams = new URLSearchParams({
-                      userId: params.id as string,
-                      name: profile.name || 'User'
+                      userId: targetUserId,
+                      name: profile.name || enrichedProfile?.user?.userName || 'User'
                     });
                     router.push(`/chat?${queryParams.toString()}`);
                   }}
                   className="flex-1 bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                  disabled={!enrichedProfile?.user?.id}
                 >
                   <MessageCircle className="w-5 h-5" />
                   Chat
@@ -487,16 +493,16 @@ export default function ProfileDetailPage() {
           <div className="space-y-8">
             {/* Services Grid - Use services from profile.services array (from API) */}
             {profile && profile.services && profile.services.length > 0 ? (
-              <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3">
                 {profile.services.map((service, index) => (
                   <div
                     key={`${service}-${index}`}
                     className="inline-flex px-4 py-2 border border-white/30 text-white text-sm rounded-full whitespace-nowrap"
-                  >
-                    {service}
+                >
+                  {service}
                   </div>
-                ))}
-              </div>
+              ))}
+            </div>
             ) : (
               <div className="text-white/60 text-center py-8">
                 No services available.
@@ -505,94 +511,94 @@ export default function ProfileDetailPage() {
 
             {/* Pricing Section - Use pricing from enrichedProfile.pricing */}
             {enrichedProfile?.pricing && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-2xl font-bold text-pink-500">Pricing</h3>
-                  <Info className="w-5 h-5 text-white/60" />
-                </div>
-                
-                <div className="grid md:grid-cols-3 gap-6">
-                  {/* Short Time Card */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <h3 className="text-2xl font-bold text-pink-500">Pricing</h3>
+                <Info className="w-5 h-5 text-white/60" />
+              </div>
+              
+              <div className="grid md:grid-cols-3 gap-6">
+                {/* Short Time Card */}
                   {enrichedProfile.pricing.shortTime && (
-                    <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                      <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                        Short Time
-                      </div>
-                      <div className="space-y-3">
+                <div className="bg-white/5 rounded-lg p-6 border border-white/10">
+                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
+                    Short Time
+                  </div>
+                  <div className="space-y-3">
                         {enrichedProfile.pricing.shortTime.incall !== undefined && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-white">Incall</span>
-                            <div className="flex items-center gap-1">
-                              <Coins className="w-4 h-4 text-yellow-400" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-white">Incall</span>
+                      <div className="flex items-center gap-1">
+                        <Coins className="w-4 h-4 text-yellow-400" />
                               <span className="text-white font-semibold">
                                 {typeof enrichedProfile.pricing.shortTime.incall === 'number' 
                                   ? enrichedProfile.pricing.shortTime.incall.toLocaleString() 
                                   : enrichedProfile.pricing.shortTime.incall} APH
                               </span>
-                            </div>
-                          </div>
+                      </div>
+                    </div>
                         )}
                         {enrichedProfile.pricing.shortTime.outcall !== undefined && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-white">Outcall</span>
-                            <div className="flex items-center gap-1">
-                              <Coins className="w-4 h-4 text-yellow-400" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-white">Outcall</span>
+                      <div className="flex items-center gap-1">
+                        <Coins className="w-4 h-4 text-yellow-400" />
                               <span className="text-white font-semibold">
                                 {typeof enrichedProfile.pricing.shortTime.outcall === 'number' 
                                   ? enrichedProfile.pricing.shortTime.outcall.toLocaleString() 
                                   : enrichedProfile.pricing.shortTime.outcall} APH
                               </span>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
+                        )}
+                  </div>
+                </div>
                   )}
 
-                  {/* Overnight Card */}
+                {/* Overnight Card */}
                   {enrichedProfile.pricing.overnight && (
-                    <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                      <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                        Overnight
-                      </div>
-                      <div className="space-y-3">
+                <div className="bg-white/5 rounded-lg p-6 border border-white/10">
+                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
+                    Overnight
+                  </div>
+                  <div className="space-y-3">
                         {enrichedProfile.pricing.overnight.incall !== undefined && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-white">Incall</span>
-                            <div className="flex items-center gap-1">
-                              <Coins className="w-4 h-4 text-yellow-400" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-white">Incall</span>
+                      <div className="flex items-center gap-1">
+                        <Coins className="w-4 h-4 text-yellow-400" />
                               <span className="text-white font-semibold">
                                 {typeof enrichedProfile.pricing.overnight.incall === 'number' 
                                   ? enrichedProfile.pricing.overnight.incall.toLocaleString() 
                                   : enrichedProfile.pricing.overnight.incall} APH
                               </span>
-                            </div>
-                          </div>
+                      </div>
+                    </div>
                         )}
                         {enrichedProfile.pricing.overnight.outcall !== undefined && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-white">Outcall</span>
-                            <div className="flex items-center gap-1">
-                              <Coins className="w-4 h-4 text-yellow-400" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-white">Outcall</span>
+                      <div className="flex items-center gap-1">
+                        <Coins className="w-4 h-4 text-yellow-400" />
                               <span className="text-white font-semibold">
                                 {typeof enrichedProfile.pricing.overnight.outcall === 'number' 
                                   ? enrichedProfile.pricing.overnight.outcall.toLocaleString() 
                                   : enrichedProfile.pricing.overnight.outcall} APH
                               </span>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
+                        )}
+                  </div>
+                </div>
                   )}
 
-                  {/* Weekend Card */}
+                {/* Weekend Card */}
                   {enrichedProfile.pricing.weekend && (
-                    <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                      <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                        Weekend
-                      </div>
-                      <div className="space-y-3">
+                <div className="bg-white/5 rounded-lg p-6 border border-white/10">
+                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
+                    Weekend
+                  </div>
+                  <div className="space-y-3">
                         {enrichedProfile.pricing.weekend.incall !== undefined ? (
                           <div className="flex items-center justify-between">
                             <span className="text-white">Incall</span>
@@ -606,28 +612,28 @@ export default function ProfileDetailPage() {
                             </div>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-between">
-                            <span className="text-white">Incall</span>
-                            <span className="text-white/60">---</span>
-                          </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-white">Incall</span>
+                      <span className="text-white/60">---</span>
+                    </div>
                         )}
                         {enrichedProfile.pricing.weekend.outcall !== undefined && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-white">Outcall</span>
-                            <div className="flex items-center gap-1">
-                              <Coins className="w-4 h-4 text-yellow-400" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-white">Outcall</span>
+                      <div className="flex items-center gap-1">
+                        <Coins className="w-4 h-4 text-yellow-400" />
                               <span className="text-white font-semibold">
                                 {typeof enrichedProfile.pricing.weekend.outcall === 'number' 
                                   ? enrichedProfile.pricing.weekend.outcall.toLocaleString() 
                                   : enrichedProfile.pricing.weekend.outcall} APH
                               </span>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
-                  )}
+                        )}
+                  </div>
                 </div>
+                  )}
+            </div>
               </div>
             )}
             {!enrichedProfile?.pricing && (
@@ -642,7 +648,7 @@ export default function ProfileDetailPage() {
           <div className="space-y-6">
             {/* Media Grid - Use profileMedia from API */}
             {profileMedia.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {profileMedia.map((mediaUrl, index) => {
                   const isVideo = mediaUrl.match(/\.(mp4|webm|ogg|mov)$/i);
                   return (
@@ -655,19 +661,19 @@ export default function ProfileDetailPage() {
                             controls
                           />
                           <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors pointer-events-none"></div>
-                        </div>
+                </div>
                       ) : (
                         <div 
                           className="aspect-square rounded-2xl overflow-hidden bg-cover bg-center"
                           style={{ backgroundImage: `url(${mediaUrl})` }}
                         >
-                          <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                        </div>
+                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
+                </div>
                       )}
-                    </div>
+              </div>
                   );
                 })}
-              </div>
+                </div>
             ) : (
               <div className="text-white/60 text-center py-8">
                 No media available.

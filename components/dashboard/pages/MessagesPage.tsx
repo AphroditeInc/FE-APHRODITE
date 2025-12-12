@@ -17,9 +17,9 @@ import {
   X,
   Briefcase,
 } from "lucide-react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useAuth } from "@/lib/hooks";
+import { useAuth, useChatSocket } from "@/lib/hooks";
 import { 
   useGetRoomMessagesQuery, 
   useMarkRoomAsReadMutation, 
@@ -28,7 +28,11 @@ import {
   useGetUserRoomsQuery
 } from "@/app/api/apiSlice";
 import { apiService } from "@/lib/services";
+import { useGetEnrichedProfileQuery } from "@/feature/profile/profileApiSlice";
+import type { EnrichedProfile } from "@/lib/types";
 import type { ChatRoom, ChatMessage } from "@/lib/types";
+import { ChatListSkeleton, MessagesSkeleton } from "@/components/ui/Skeleton";
+import type { SocketChatMessage, MessageDeliveredData, UserTypingData, MessagesReadData, UserPresenceData } from "@/lib/hooks/useChatSocket";
 
 // Type definitions for API responses
 interface ConversationParticipant {
@@ -117,8 +121,15 @@ export default function MessagesPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
+  // WebSocket connection
+  const { socket, connected, sendMessage: sendSocketMessage, joinRoom, leaveRoom, setTyping, markAsRead: markAsReadSocket } = useChatSocket();
+  
   // Fallback: Try to get user ID from localStorage if not in context
   const [fallbackUserId, setFallbackUserId] = useState<string | null>(null);
+  
+  // Typing indicators
+  const [typingUsers, setTypingUsers] = useState<Map<string, Set<string>>>(new Map()); // roomId -> Set of userIds
+  const typingTimeoutRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   
   useEffect(() => {
     if (!userId && !user?.id && isAuthenticated) {
@@ -139,6 +150,7 @@ export default function MessagesPage() {
   }, [userId, user?.id, isAuthenticated]);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
+  const [hasProcessedQueryParams, setHasProcessedQueryParams] = useState(false);
   const [modalContent, setModalContent] = useState<{
     type: "video" | "image";
     src: string;
@@ -148,6 +160,9 @@ export default function MessagesPage() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
   const [newChatUserId, setNewChatUserId] = useState("");
+  
+  // Store participant profile data (userId -> EnrichedProfile)
+  const [participantProfiles, setParticipantProfiles] = useState<Map<string, EnrichedProfile>>(new Map());
   
   // RTK Query hooks
   const currentUserId = userId || user?.id || fallbackUserId;
@@ -418,8 +433,10 @@ export default function MessagesPage() {
 
     // Handle objects - NEVER convert to string directly as it becomes [object Object]
     if (participant && typeof participant === 'object') {
-      // Try to get id or _id property
-      const id = participant.id || participant._id;
+      // Try to get userId, id, or _id property (userId is most common in participant objects)
+      const id = (participant as { userId?: string | number; id?: string | number; _id?: string | number }).userId 
+               || (participant as { id?: string | number; _id?: string | number }).id 
+               || (participant as { _id?: string | number })._id;
       
       if (id !== null && id !== undefined) {
         // If id is a string, validate and return
@@ -435,8 +452,8 @@ export default function MessagesPage() {
         }
         // If id is another object, try to extract from it (nested)
         if (typeof id === 'object' && id !== null) {
-          const nestedObj = id as { id?: string | number; _id?: string | number };
-          const nestedId = nestedObj.id || nestedObj._id;
+          const nestedObj = id as { id?: string | number; _id?: string | number; userId?: string | number };
+          const nestedId = nestedObj.userId || nestedObj.id || nestedObj._id;
           if (nestedId && typeof nestedId === 'string' && nestedId !== '[object Object]') {
             return nestedId;
           }
@@ -539,7 +556,10 @@ export default function MessagesPage() {
           console.log('[createRoomWithUser] Room created, roomId:', roomId, 'roomData:', roomData);
           if (roomId) {
             setSelectedChat(roomId);
-            router.replace('/chat');
+            // Remove query parameter from URL after a short delay to ensure state is set
+            setTimeout(() => {
+              router.replace('/chat');
+            }, 100);
             // Force immediate refetch - RTK Query should auto-refetch due to invalidatesTags
             // But we'll also manually refetch multiple times to ensure it updates
             console.log('[createRoomWithUser] Refetching rooms...');
@@ -625,13 +645,95 @@ export default function MessagesPage() {
     }
   }, [roomsData]);
 
+  // Fetch enriched profiles for all participants in rooms
+  useEffect(() => {
+    if (!rooms || rooms.length === 0 || !currentUserId) return;
+
+    // Collect all participant IDs (excluding current user)
+    const allParticipantIds = new Set<string>();
+    rooms.forEach(room => {
+      if (room.participants && Array.isArray(room.participants)) {
+        room.participants.forEach(p => {
+          const pId = extractParticipantId(p);
+          if (pId && pId !== currentUserId) {
+            allParticipantIds.add(pId);
+          }
+        });
+      }
+    });
+
+    // Check which profiles we need to fetch
+    setParticipantProfiles(prev => {
+      const idsToFetch: string[] = [];
+      allParticipantIds.forEach(userId => {
+        if (!prev.has(userId)) {
+          idsToFetch.push(userId);
+        }
+      });
+
+      // Fetch profiles for participants we don't have yet
+      idsToFetch.forEach(userId => {
+        apiService.getEnrichedProfile(userId)
+          .then(response => {
+            if (response && response.data) {
+              const profile = response.data as EnrichedProfile;
+              setParticipantProfiles(prevProfiles => {
+                // Double-check we still don't have it (race condition protection)
+                if (prevProfiles.has(userId)) {
+                  return prevProfiles;
+                }
+                const newMap = new Map(prevProfiles);
+                newMap.set(userId, profile);
+                return newMap;
+              });
+            }
+          })
+          .catch(err => {
+            console.error(`Error fetching profile for user ${userId}:`, err);
+          });
+      });
+
+      return prev; // Return unchanged, updates will happen via setState in promises
+    });
+  }, [rooms, currentUserId]);
+
   // Handle userId query parameter - find or create room with that user
   useEffect(() => {
     const targetUserId = searchParams.get('userId');
     const name = searchParams.get('name');
     const currentUserId = userId || user?.id || fallbackUserId;
     
-    console.log('Query params check - targetUserId:', targetUserId, 'name:', name, 'loading:', loading, 'rooms.length:', rooms.length, 'currentUserId:', currentUserId, 'authLoading:', authLoading, 'processingUserId:', processingUserId);
+    console.log('Query params check - targetUserId:', targetUserId, 'name:', name, 'loading:', loading, 'rooms.length:', rooms.length, 'currentUserId:', currentUserId, 'authLoading:', authLoading, 'processingUserId:', processingUserId, 'hasProcessedQueryParams:', hasProcessedQueryParams, 'selectedChat:', selectedChat);
+    
+    // If we have query params, reset the flag to allow processing
+    if (targetUserId && hasProcessedQueryParams) {
+      // Check if the currently selected chat matches the target user
+      if (selectedChat) {
+        const selectedRoom = rooms.find(r => {
+          const roomId = getRoomId(r);
+          return roomId === selectedChat;
+        });
+        if (selectedRoom) {
+          const participantIds = selectedRoom.participants
+            ?.map(p => extractParticipantId(p))
+            .filter((id): id is string => id !== null) || [];
+          // If the selected chat already matches the target user, skip processing
+          if (participantIds.includes(targetUserId)) {
+            console.log('Selected chat already matches target user, skipping...');
+            return;
+          }
+        }
+      }
+      // Reset flag to process new query params
+      console.log('New query params detected, resetting hasProcessedQueryParams');
+      setHasProcessedQueryParams(false);
+    }
+    
+    // If we've already processed query params and have a selected chat, and no new query params, don't process again
+    if (!targetUserId && hasProcessedQueryParams && selectedChat) {
+      console.log('Already processed query params and have selected chat, no new params, skipping...');
+      return;
+    }
     
     if (name) {
       setProfileName(name);
@@ -672,19 +774,176 @@ export default function MessagesPage() {
       });
 
       if (existingRoom) {
-        console.log('Found existing room:', existingRoom.id);
-        setSelectedChat(existingRoom.id);
-        // Remove query parameter from URL
-        router.replace('/chat');
+        // Use roomId if available, otherwise fall back to id or _id
+        const roomIdToSelect = existingRoom.roomId || existingRoom.id || (existingRoom as { _id?: string })._id;
+        console.log('Found existing room:', roomIdToSelect, 'room object:', existingRoom);
+        if (roomIdToSelect) {
+          setSelectedChat(roomIdToSelect);
+          setHasProcessedQueryParams(true);
+          // Remove query parameter from URL after a short delay to ensure state is set
+          setTimeout(() => {
+            router.replace('/chat');
+          }, 100);
+        } else {
+          console.error('Found room but no valid ID:', existingRoom);
+        }
       } else {
         console.log('No existing room found, creating new one...');
         // If no existing room, create one
+        setHasProcessedQueryParams(true);
         createRoomWithUser(targetUserId);
       }
     } else {
-      console.log('Skipping processing - targetUserId:', targetUserId, 'currentUserId:', currentUserId, 'loading:', loading, 'authLoading:', authLoading, 'processingUserId:', processingUserId);
+      console.log('Skipping processing - targetUserId:', targetUserId, 'currentUserId:', currentUserId, 'loading:', loading, 'authLoading:', authLoading, 'processingUserId:', processingUserId, 'hasProcessedQueryParams:', hasProcessedQueryParams);
     }
-  }, [rooms, searchParams, userId, user?.id, fallbackUserId, router, loading, authLoading, processingUserId, invalidUserIds, createRoomWithUser]);
+    
+    // Reset hasProcessedQueryParams when query params are cleared (user navigates away)
+    // But only if we don't have a selected chat (to allow new query params to be processed)
+    if (!targetUserId && hasProcessedQueryParams && !selectedChat) {
+      setHasProcessedQueryParams(false);
+    }
+    
+    // If we have a new targetUserId and we've already processed a different one, reset the flag
+    if (targetUserId && hasProcessedQueryParams && selectedChat) {
+      // Check if the selectedChat matches the targetUserId
+      const selectedRoom = rooms.find(r => r.id === selectedChat);
+      if (selectedRoom) {
+        const participantIds = selectedRoom.participants
+          ?.map(p => extractParticipantId(p))
+          .filter((id): id is string => id !== null) || [];
+        if (!participantIds.includes(targetUserId)) {
+          // Different user, reset flag to process new one
+          setHasProcessedQueryParams(false);
+          setSelectedChat(null);
+        }
+      }
+    }
+  }, [rooms, searchParams, userId, user?.id, fallbackUserId, router, loading, authLoading, processingUserId, invalidUserIds, createRoomWithUser, hasProcessedQueryParams, selectedChat]);
+
+  // WebSocket event listeners
+  useEffect(() => {
+    if (!socket || !connected) {
+      console.log('[MessagesPage] WebSocket not connected, skipping event listeners');
+      return;
+    }
+
+    console.log('[MessagesPage] Setting up WebSocket event listeners');
+
+    // Listen for new messages
+    const handleNewMessage = (data: { message: SocketChatMessage }) => {
+      console.log('[MessagesPage] Received new message via WebSocket:', data.message);
+      // Refetch messages to get updated list
+      if (data.message.roomId === selectedChat) {
+        refetchMessages();
+      }
+      // Refetch rooms to update last message
+      refetchRooms();
+    };
+
+    // Listen for message delivery confirmation
+    const handleMessageDelivered = (data: MessageDeliveredData) => {
+      console.log('[MessagesPage] Message delivered via WebSocket:', data);
+      // Refetch messages to update with server response
+      if (data.message.roomId === selectedChat) {
+        refetchMessages();
+      }
+    };
+
+    // Listen for typing indicators
+    const handleUserTyping = (data: UserTypingData) => {
+      console.log('[MessagesPage] User typing:', data);
+      if (data.roomId === selectedChat) {
+        setTypingUsers(prev => {
+          const newMap = new Map(prev);
+          if (!newMap.has(data.roomId)) {
+            newMap.set(data.roomId, new Set());
+          }
+          const roomTyping = new Set(newMap.get(data.roomId)!);
+          if (data.isTyping) {
+            roomTyping.add(data.userId);
+            // Clear typing indicator after 3 seconds
+            if (typingTimeoutRef.current.has(`${data.roomId}-${data.userId}`)) {
+              clearTimeout(typingTimeoutRef.current.get(`${data.roomId}-${data.userId}`)!);
+            }
+            const timeout = setTimeout(() => {
+              setTypingUsers(prev => {
+                const newMap = new Map(prev);
+                const roomTyping = new Set(newMap.get(data.roomId) || []);
+                roomTyping.delete(data.userId);
+                newMap.set(data.roomId, roomTyping);
+                return newMap;
+              });
+            }, 3000);
+            typingTimeoutRef.current.set(`${data.roomId}-${data.userId}`, timeout);
+          } else {
+            roomTyping.delete(data.userId);
+            if (typingTimeoutRef.current.has(`${data.roomId}-${data.userId}`)) {
+              clearTimeout(typingTimeoutRef.current.get(`${data.roomId}-${data.userId}`)!);
+              typingTimeoutRef.current.delete(`${data.roomId}-${data.userId}`);
+            }
+          }
+          newMap.set(data.roomId, roomTyping);
+          return newMap;
+        });
+      }
+    };
+
+    // Listen for read receipts
+    const handleMessagesRead = (data: MessagesReadData) => {
+      console.log('[MessagesPage] Messages read:', data);
+      // Refetch messages to update read status
+      if (data.roomId === selectedChat) {
+        refetchMessages();
+      }
+    };
+
+    // Listen for user presence changes
+    const handleUserPresence = (data: UserPresenceData) => {
+      console.log('[MessagesPage] User presence changed:', data);
+      // Could update UI to show online/offline status
+    };
+
+    socket.on('newMessage', handleNewMessage);
+    socket.on('roomMessage', handleNewMessage);
+    socket.on('messageDelivered', handleMessageDelivered);
+    socket.on('userTyping', handleUserTyping);
+    socket.on('messagesRead', handleMessagesRead);
+    socket.on('userPresenceChanged', handleUserPresence);
+
+    return () => {
+      console.log('[MessagesPage] Cleaning up WebSocket event listeners');
+      socket.off('newMessage', handleNewMessage);
+      socket.off('roomMessage', handleNewMessage);
+      socket.off('messageDelivered', handleMessageDelivered);
+      socket.off('userTyping', handleUserTyping);
+      socket.off('messagesRead', handleMessagesRead);
+      socket.off('userPresenceChanged', handleUserPresence);
+      // Clear typing timeouts
+      typingTimeoutRef.current.forEach(timeout => clearTimeout(timeout));
+      typingTimeoutRef.current.clear();
+    };
+  }, [socket, connected, selectedChat, refetchMessages, refetchRooms]);
+
+  // Join/leave rooms when chat is selected
+  useEffect(() => {
+    if (!socket || !connected) return;
+
+    // Leave previous room
+    const previousRoom = selectedChat;
+    
+    // Join new room
+    if (selectedChat) {
+      console.log('[MessagesPage] Joining room via WebSocket:', selectedChat);
+      joinRoom(selectedChat);
+    }
+
+    return () => {
+      if (previousRoom) {
+        console.log('[MessagesPage] Leaving room via WebSocket:', previousRoom);
+        leaveRoom(previousRoom);
+      }
+    };
+  }, [socket, connected, selectedChat, joinRoom, leaveRoom]);
 
   // Mark room as read when selected
   // NOTE: Disabled because the API endpoint expects messageIds in the request body
@@ -757,7 +1016,10 @@ export default function MessagesPage() {
     if (!messageInput.trim() || !selectedChat || sending || !currentUserId) return;
 
     // Get the selected room to find the receiver ID
-    const room = rooms.find(r => r.id === selectedChat);
+    const room = rooms.find(r => {
+      const roomId = getRoomId(r);
+      return roomId === selectedChat;
+    });
     if (!room) {
       console.error('Room not found');
       return;
@@ -779,12 +1041,33 @@ export default function MessagesPage() {
       return;
     }
 
+    // Use WebSocket if connected, otherwise fall back to REST API
+    const tempId = `temp_${Date.now()}`;
+    
+    if (connected && sendSocketMessage) {
+      // Send via WebSocket for real-time delivery
+      console.log('[MessagesPage] Sending message via WebSocket');
+      sendSocketMessage({
+        receiverId: receiverId,
+        roomId: selectedChat,
+        content: messageInput.trim(),
+        type: 'text',
+        tempId,
+      });
+      
+      // Optimistically add message to UI (will be updated when messageDelivered event is received)
+      // The message will be refetched via WebSocket events, so we can clear input immediately
+      setMessageInput("");
+      return;
+    }
+
+    // Fallback to REST API if WebSocket is not connected
     try {
       const result = await sendMessageMutation({
         receiverId: receiverId,
         content: messageInput.trim(),
         type: 'text',
-        tempId: `temp_${Date.now()}`,
+        tempId,
       }).unwrap();
 
       if (result) {
@@ -822,6 +1105,7 @@ export default function MessagesPage() {
 
   const handleBackClick = () => {
     setSelectedChat(null);
+    setHasProcessedQueryParams(false);
   };
 
   const handleMediaClick = (
@@ -901,7 +1185,15 @@ export default function MessagesPage() {
     }
   };
 
-  const selectedChatData = rooms.find((room) => room.id === selectedChat);
+  // Helper to get room ID (checks roomId, id, or _id)
+  const getRoomId = (room: ChatRoom): string | undefined => {
+    return room.roomId || room.id || (room as { _id?: string })._id;
+  };
+  
+  const selectedChatData = rooms.find((room) => {
+    const roomId = getRoomId(room);
+    return roomId === selectedChat;
+  });
   
   // Helper functions for data transformation
   const formatTime = (dateString: string | undefined | null) => {
@@ -931,28 +1223,37 @@ export default function MessagesPage() {
         return pId && pId !== currentUserId;
       });
       
-      // Debug logging
-      if (otherParticipant && typeof otherParticipant === 'object') {
-        console.log('Found otherParticipant object:', otherParticipant, 'keys:', Object.keys(otherParticipant));
-      }
-      
       const otherParticipantId = otherParticipant ? extractParticipantId(otherParticipant) : null;
       
-      // Debug logging
-      if (otherParticipantId === '[object Object]' || (otherParticipantId && typeof otherParticipantId !== 'string')) {
-        console.error('Invalid otherParticipantId extracted:', {
-          otherParticipant,
-          otherParticipantId,
-          type: typeof otherParticipantId,
-          roomParticipants: room.participants
-        });
-      }
+      console.log('[getRoomDisplayName] Debug:', {
+        roomId: getRoomId(room),
+        currentUserId,
+        otherParticipant,
+        otherParticipantId,
+        participantProfilesSize: participantProfiles.size,
+        hasProfile: otherParticipantId ? participantProfiles.has(otherParticipantId) : false,
+        participantNamesSize: participantNames.size,
+        hasCachedName: otherParticipantId ? participantNames.has(otherParticipantId) : false
+      });
       
       // Validate otherParticipantId is a valid string before using it
       if (otherParticipantId && typeof otherParticipantId === 'string' && otherParticipantId !== '[object Object]' && otherParticipantId.trim() !== '') {
-        // Check if we have the name cached
+        // First, check if we have enriched profile data (preferred - has real name)
+        const profile = participantProfiles.get(otherParticipantId);
+        if (profile && profile.user) {
+          const displayName = profile.user.userName || 
+                            `${profile.user.firstName || ''} ${profile.user.lastName || ''}`.trim() ||
+                            profile.user.firstName ||
+                            profile.user.lastName ||
+                            'User';
+          console.log('[getRoomDisplayName] Using profile name:', displayName, 'from profile:', profile);
+          return displayName;
+        }
+        
+        // Fallback to cached name
         const cachedName = participantNames.get(otherParticipantId);
         if (cachedName) {
+          console.log('[getRoomDisplayName] Using cached name:', cachedName);
           return cachedName;
         }
         
@@ -964,9 +1265,11 @@ export default function MessagesPage() {
             newMap.set(otherParticipantId, profileName);
             return newMap;
           });
+          console.log('[getRoomDisplayName] Using profileName from query params:', profileName);
           return profileName;
         }
         
+        console.log('[getRoomDisplayName] No name found, will fetch. otherParticipantId:', otherParticipantId);
         // Try to fetch the name if not cached (async, will update later)
         if (!participantNames.has(otherParticipantId)) {
           // Double-check before calling API
@@ -980,7 +1283,16 @@ export default function MessagesPage() {
       } else if (otherParticipantId) {
         // Log warning if we got an invalid ID
         console.warn('Invalid otherParticipantId extracted:', otherParticipantId, 'type:', typeof otherParticipantId, 'from participant:', otherParticipant);
+      } else {
+        console.warn('[getRoomDisplayName] Could not extract otherParticipantId. Room:', room, 'currentUserId:', currentUserId);
       }
+    } else {
+      console.warn('[getRoomDisplayName] Invalid room structure:', {
+        hasParticipants: !!room.participants,
+        participantsLength: room.participants?.length,
+        currentUserId,
+        roomType: room.type
+      });
     }
     
     return 'Direct Message';
@@ -1012,10 +1324,41 @@ export default function MessagesPage() {
     return `${prefix}Message`;
   };
   
-  // Get participant profile image URL (would need to fetch from user profile)
+  // Get participant profile image URL from enriched profile
   const getParticipantImage = (room: ChatRoom): string | null => {
-    // TODO: Fetch actual profile images from user profiles
-    // For now, return null to show initials
+    if (room.type === 'group') {
+      // For group chats, could use group avatar if available
+      return room.avatar || null;
+    }
+    
+    // For direct messages, find the other participant's profile image
+    const currentUserId = userId || user?.id || fallbackUserId;
+    if (room.participants && room.participants.length === 2 && currentUserId) {
+      const otherParticipant = room.participants.find(p => {
+        const pId = extractParticipantId(p);
+        return pId && pId !== currentUserId;
+      });
+      
+      const otherParticipantId = otherParticipant ? extractParticipantId(otherParticipant) : null;
+      
+      if (otherParticipantId && typeof otherParticipantId === 'string' && otherParticipantId !== '[object Object]' && otherParticipantId.trim() !== '') {
+        // Get profile data
+        const profile = participantProfiles.get(otherParticipantId);
+        if (profile && profile.media && Array.isArray(profile.media)) {
+          // Filter out placeholder values and get first valid image URL
+          const validMedia = profile.media.filter(
+            (url) => typeof url === 'string' &&
+                     url.trim() !== '' &&
+                     url !== 'string' &&
+                     (url.startsWith('http://') || url.startsWith('https://'))
+          );
+          if (validMedia.length > 0) {
+            return validMedia[0];
+          }
+        }
+      }
+    }
+    
     return null;
   };
 
@@ -1266,9 +1609,7 @@ export default function MessagesPage() {
         {/* Chat List - Scrollable */}
         <div className="flex-1 overflow-y-auto scrollbar-hide">
           {loadingRooms && (!Array.isArray(rooms) || rooms.length === 0) ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FA266D]"></div>
-            </div>
+            <ChatListSkeleton count={5} />
           ) : error ? (
             <div className="p-4 text-center">
               <p className="text-red-400 mb-2">{error}</p>
@@ -1300,20 +1641,21 @@ export default function MessagesPage() {
               }
               return hasId;
             }).map((room) => {
-              console.log('[MessagesPage] Rendering room:', room.id, room);
+              const roomId = getRoomId(room);
+              console.log('[MessagesPage] Rendering room:', roomId, room);
               return (
                 <div
-                  key={room.id}
+                  key={roomId || room.id || (room as { _id?: string })._id}
                   onClick={() => {
-                    console.log('Chat clicked, room ID:', room.id, 'full room:', room);
-                    if (room.id) {
-                      setSelectedChat(room.id);
+                    console.log('Chat clicked, room ID:', roomId, 'full room:', room);
+                    if (roomId) {
+                      setSelectedChat(roomId);
                     } else {
                       console.error('Room has no ID:', room);
                     }
                   }}
                   className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${
-                    selectedChat === room.id ? "bg-white/10" : ""
+                    selectedChat === roomId ? "bg-white/10" : ""
                   }`}
                 >
                 <div className="flex items-center gap-3">
@@ -1416,9 +1758,7 @@ export default function MessagesPage() {
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto scrollbar-hide p-4">
               {messagesLoading ? (
-                <div className="flex items-center justify-center h-64">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FA266D]"></div>
-                </div>
+                <MessagesSkeleton count={6} />
               ) : !Array.isArray(messages) || messages.length === 0 ? (
                 <div className="flex items-center justify-center h-64 text-gray-400">
                   <div className="text-center">
@@ -1459,6 +1799,33 @@ export default function MessagesPage() {
                   );
                 })
               )}
+              
+              {/* Typing Indicator */}
+              {selectedChat && typingUsers.has(selectedChat) && typingUsers.get(selectedChat)!.size > 0 && (
+                <div className="px-4 py-2">
+                  <div className="flex items-center gap-2 text-gray-400 text-sm">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    </div>
+                    <span>
+                      {Array.from(typingUsers.get(selectedChat)!).map((userId, idx, arr) => {
+                        const profile = participantProfiles.get(userId);
+                        const name = profile?.user?.userName || profile?.user?.firstName || 'Someone';
+                        return (
+                          <span key={userId}>
+                            {name}
+                            {idx < arr.length - 1 && ', '}
+                            {idx === arr.length - 2 && ' and '}
+                          </span>
+                        );
+                      })}
+                      {typingUsers.get(selectedChat)!.size === 1 ? ' is' : ' are'} typing...
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Message Input */}
@@ -1470,12 +1837,47 @@ export default function MessagesPage() {
                   type="text"
                   placeholder="Write message..."
                   value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
+                  onChange={(e) => {
+                    setMessageInput(e.target.value);
+                    // Send typing indicator
+                    if (selectedChat && connected) {
+                      setTyping(selectedChat, true);
+                      // Clear typing indicator after 2 seconds of no typing
+                      const timeout = setTimeout(() => {
+                        if (connected) {
+                          setTyping(selectedChat, false);
+                        }
+                      }, 2000);
+                      // Clear previous timeout
+                      if (typingTimeoutRef.current.has(`typing-${selectedChat}`)) {
+                        clearTimeout(typingTimeoutRef.current.get(`typing-${selectedChat}`)!);
+                      }
+                      typingTimeoutRef.current.set(`typing-${selectedChat}`, timeout);
+                    }
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       e.stopPropagation();
+                      // Stop typing indicator
+                      if (selectedChat && connected) {
+                        setTyping(selectedChat, false);
+                        if (typingTimeoutRef.current.has(`typing-${selectedChat}`)) {
+                          clearTimeout(typingTimeoutRef.current.get(`typing-${selectedChat}`)!);
+                          typingTimeoutRef.current.delete(`typing-${selectedChat}`);
+                        }
+                      }
                       sendMessage(e);
+                    }
+                  }}
+                  onBlur={() => {
+                    // Stop typing indicator when input loses focus
+                    if (selectedChat && connected) {
+                      setTyping(selectedChat, false);
+                      if (typingTimeoutRef.current.has(`typing-${selectedChat}`)) {
+                        clearTimeout(typingTimeoutRef.current.get(`typing-${selectedChat}`)!);
+                        typingTimeoutRef.current.delete(`typing-${selectedChat}`);
+                      }
                     }
                   }}
                   className="bg-transparent text-white placeholder-gray-400 focus:outline-none flex-1 text-base rounded-[32px] border border-white/10 py-[18px] pl-[24px] w-full"
