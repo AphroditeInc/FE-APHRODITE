@@ -2,16 +2,23 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './useAuth';
 
-// WebSocket URL - convert HTTP to WebSocket URL
+// WebSocket URL - Socket.IO handles protocol conversion automatically
 const getWebSocketUrl = (): string => {
-  // For development, use localhost:5001
+  // Check for environment variable first
+  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_WEBSOCKET_URL;
+  if (wsUrl) {
+    return wsUrl;
+  }
+
+  // For development, use localhost:5001 (as per documentation)
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    return 'https://be-aphrodite-8wrp.onrender.com/chat';
+    return 'https://be-aphrodite-8wrp.onrender.com';
   }
   
-  // For production, convert HTTPS to WSS
-  const baseUrl = 'https://be-aphrodite-8wrp.onrender.com';
-  return baseUrl.replace(/^https?:\/\//, 'wss://').replace(/^http:\/\//, 'ws://') + '/chat';
+  // For production, use the backend URL
+  // Socket.IO will automatically use the /chat namespace
+  const baseUrl = process.env.NEXT_PUBLIC_USER_BASE_URL || 'https://be-aphrodite-8wrp.onrender.com';
+  return baseUrl;
 };
 
 interface ChatMessage {
@@ -108,18 +115,26 @@ export const useChatSocket = (): UseChatSocketReturn => {
     }
 
     const wsUrl = getWebSocketUrl();
-    console.log('[useChatSocket] Connecting to WebSocket:', wsUrl);
+    // Socket.IO automatically handles the /chat namespace
+    const socketUrl = `${wsUrl}/chat`;
+    console.log('[useChatSocket] Connecting to WebSocket:', socketUrl);
+    console.log('[useChatSocket] Using access token:', accessToken ? `${accessToken.substring(0, 20)}...` : 'none');
 
-    const newSocket = io(wsUrl, {
+    const newSocket = io(socketUrl, {
       withCredentials: true,
       auth: {
         token: accessToken,
       },
-      transports: ['websocket'],
+      // Also try passing token in extraHeaders as fallback
+      extraHeaders: accessToken ? {
+        Authorization: `Bearer ${accessToken}`,
+      } : undefined,
+      transports: ['websocket', 'polling'], // Allow fallback to polling if websocket fails
       reconnection: true,
       reconnectionAttempts: maxReconnectAttempts,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
+      timeout: 20000, // 20 second timeout
     });
 
     // Connection events
@@ -147,7 +162,19 @@ export const useChatSocket = (): UseChatSocketReturn => {
 
     newSocket.on('connect_error', (error) => {
       console.error('[useChatSocket] Connection error:', error);
+      console.error('[useChatSocket] Error details:', {
+        message: error.message,
+        type: error.type,
+        description: error.description,
+        context: error.context,
+      });
       setConnected(false);
+      
+      // Don't retry on authentication errors
+      if (error.message?.includes('Authentication') || error.message?.includes('Unauthorized')) {
+        console.error('[useChatSocket] Authentication failed - check token validity');
+        return;
+      }
       
       // Implement exponential backoff for reconnection
       reconnectAttempts.current += 1;

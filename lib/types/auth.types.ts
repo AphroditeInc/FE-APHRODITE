@@ -201,15 +201,16 @@ export interface ChatRoom {
 
 /**
  * Send Message Payload
+ * Matches API endpoint: POST /chat/messages
  */
 export interface SendMessagePayload {
-  receiverId?: string;
-  content: string;
-  type: MessageType;
-  metadata?: Record<string, unknown>;
-  attachments?: string[];
-  replyTo?: string;
-  tempId?: string;
+  receiverId: string; // Required: ID of the user receiving the message
+  content: string; // Required: Message content
+  type: MessageType; // Required: Message type (text, image, file, video, audio)
+  metadata?: Record<string, unknown>; // Optional: Additional metadata (e.g., { imageUrl: "..." })
+  attachments?: string[]; // Optional: Array of attachment URLs
+  replyTo?: string; // Optional: ID of message being replied to
+  tempId?: string; // Optional: Temporary ID for optimistic UI updates
 }
 
 /**
@@ -377,18 +378,17 @@ export interface EnrichedProfile {
 export interface EnrichedProfileResponse {
   success: boolean;
   data: EnrichedProfile;
+    stats: {
+      averageRating: number;
+      totalReviews: number;
+      ratingDistribution: Record<string, number>;
+    };
+  };
 }
 
 /**
- * List Profiles API Response
+ * Enriched Profile API Response
  */
-export interface ListProfilesResponse {
+export interface EnrichedProfileResponse {
   success: boolean;
-  data: EnrichedProfile[] | {
-    items: EnrichedProfile[];
-    total?: number;
-    page?: number;
-    limit?: number;
-    hasMore?: boolean;
-  };
-}
+  data: EnrichedProfile;

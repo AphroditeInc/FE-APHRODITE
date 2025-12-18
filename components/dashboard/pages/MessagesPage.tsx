@@ -17,9 +17,9 @@ import {
   X,
   Briefcase,
 } from "lucide-react";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useAuth, useChatSocket } from "@/lib/hooks";
+import { useAuth } from "@/lib/hooks";
 import { 
   useGetRoomMessagesQuery, 
   useMarkRoomAsReadMutation, 
@@ -28,11 +28,7 @@ import {
   useGetUserRoomsQuery
 } from "@/app/api/apiSlice";
 import { apiService } from "@/lib/services";
-import { useGetEnrichedProfileQuery } from "@/feature/profile/profileApiSlice";
-import type { EnrichedProfile } from "@/lib/types";
 import type { ChatRoom, ChatMessage } from "@/lib/types";
-import { ChatListSkeleton, MessagesSkeleton } from "@/components/ui/Skeleton";
-import type { SocketChatMessage, MessageDeliveredData, UserTypingData, MessagesReadData, UserPresenceData } from "@/lib/hooks/useChatSocket";
 
 // Type definitions for API responses
 interface ConversationParticipant {
@@ -58,7 +54,7 @@ interface ConversationLastMessage {
   _id?: string;
   id?: string;
   senderId: string;
-  receiverId: string;
+  receiverId?: string; // Made optional to match ChatMessage type
   roomId?: string;
   content: string;
   type: string;
@@ -121,15 +117,8 @@ export default function MessagesPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
-  // WebSocket connection
-  const { socket, connected, sendMessage: sendSocketMessage, joinRoom, leaveRoom, setTyping, markAsRead: markAsReadSocket } = useChatSocket();
-  
   // Fallback: Try to get user ID from localStorage if not in context
   const [fallbackUserId, setFallbackUserId] = useState<string | null>(null);
-  
-  // Typing indicators
-  const [typingUsers, setTypingUsers] = useState<Map<string, Set<string>>>(new Map()); // roomId -> Set of userIds
-  const typingTimeoutRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   
   useEffect(() => {
     if (!userId && !user?.id && isAuthenticated) {
@@ -150,7 +139,6 @@ export default function MessagesPage() {
   }, [userId, user?.id, isAuthenticated]);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
-  const [hasProcessedQueryParams, setHasProcessedQueryParams] = useState(false);
   const [modalContent, setModalContent] = useState<{
     type: "video" | "image";
     src: string;
@@ -161,41 +149,17 @@ export default function MessagesPage() {
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
   const [newChatUserId, setNewChatUserId] = useState("");
   
-  // Store participant profile data (userId -> EnrichedProfile)
-  const [participantProfiles, setParticipantProfiles] = useState<Map<string, EnrichedProfile>>(new Map());
-  
   // RTK Query hooks
   const currentUserId = userId || user?.id || fallbackUserId;
-  const shouldSkipQuery = !currentUserId || authLoading;
-  
-  console.log('[MessagesPage] Query state:', {
-    currentUserId,
-    userId,
-    'user?.id': user?.id,
-    fallbackUserId,
-    authLoading,
-    shouldSkipQuery,
-    isAuthenticated
-  });
-  
-  // Use getUserRooms instead of getConversations to get ALL rooms (including newly created ones without messages)
+  // Use getUserRooms instead of getConversations to get all rooms (matches Swagger: /chat/rooms returns 3, /chat/conversations returns 2)
   const { data: roomsData, isLoading: loadingRooms, error: roomsError, refetch: refetchRooms } = useGetUserRoomsQuery(
     { limit: 50, offset: 0 },
-    { skip: shouldSkipQuery }
+    { skip: !currentUserId || authLoading }
   );
   
-  console.log('[MessagesPage] Query result:', {
-    roomsData,
-    loadingRooms,
-    roomsError,
-    hasRoomsData: !!roomsData,
-    roomsDataIsArray: Array.isArray(roomsData),
-    roomsDataLength: Array.isArray(roomsData) ? roomsData.length : 'not array'
-  });
-  
-  const { data: messagesData, isLoading: loadingMessages, refetch: refetchMessages } = useGetRoomMessagesQuery(
+  const { data: messagesData, isLoading: loadingMessages, error: messagesError, refetch: refetchMessages } = useGetRoomMessagesQuery(
     { roomId: selectedChat || '', query: { limit: 50 } },
-    { skip: !selectedChat }
+    { skip: !selectedChat || !selectedChat.trim() }
   );
   
   const [markRoomAsReadMutation] = useMarkRoomAsReadMutation();
@@ -203,6 +167,8 @@ export default function MessagesPage() {
   const [createRoomMutation] = useCreateRoomMutation();
 
   // Convert API data to component state
+  // According to Swagger: GET /chat/rooms returns { success: true, data: [...] }
+  // Each room has participants as array of objects with userId property
   const rooms = useMemo(() => {
     if (!roomsData) {
       console.log('[MessagesPage] No roomsData yet');
@@ -210,86 +176,33 @@ export default function MessagesPage() {
     }
     
     console.log('[MessagesPage] roomsData:', roomsData);
+    console.log('[MessagesPage] roomsData type:', typeof roomsData, 'isArray:', Array.isArray(roomsData));
     
-    // transformResponse should have extracted the data, so roomsData should be an array of ChatRoom[]
-    // But we need to handle it as ConversationResponse for transformation
-    let roomsArray: (ConversationResponse | ChatRoom)[] = [];
+    // transformResponse should already extract the array, so roomsData should be ChatRoom[]
+    let roomsArray: ChatRoom[] = [];
     
     if (Array.isArray(roomsData)) {
+      console.log('[MessagesPage] roomsData is array (expected), length:', roomsData.length);
       roomsArray = roomsData;
-    } else if (roomsData && typeof roomsData === 'object') {
-      // Fallback: Check if it's ApiResponse format with 'data' field
-      if ('data' in roomsData && Array.isArray((roomsData as { data: (ConversationResponse | ChatRoom)[] }).data)) {
-        roomsArray = (roomsData as { data: (ConversationResponse | ChatRoom)[] }).data;
-      } else if ('success' in roomsData && 'data' in roomsData && Array.isArray((roomsData as { success: boolean; data: (ConversationResponse | ChatRoom)[] }).data)) {
-        roomsArray = (roomsData as { success: boolean; data: (ConversationResponse | ChatRoom)[] }).data;
-      }
-    }
-    
-    if (!Array.isArray(roomsArray)) {
-      console.warn('[MessagesPage] roomsArray is not an array:', roomsArray);
+    } else {
+      console.warn('[MessagesPage] roomsData is not an array (unexpected):', roomsData);
       return [];
     }
     
-    console.log('[MessagesPage] Processing', roomsArray.length, 'rooms');
-    
-    // Transform rooms to ChatRoom format
-    // Handle both formats: conversations (with sender/receiver) and rooms (with participants array)
-    const filteredRooms = roomsArray.map((conv: ConversationResponse | ChatRoom) => {
-      console.log('[MessagesPage] Processing room item:', conv);
-      
-      // If it's already a ChatRoom, ensure it has an id property
-      // RTK Query returns frozen objects, so we must create a new object
-      if ('participants' in conv && Array.isArray(conv.participants) && 'type' in conv && (conv.type === 'direct' || conv.type === 'group')) {
-        const room = conv as ChatRoom;
-        // Extract id from various possible fields
-        const roomId = room.id || room.roomId || (room as { _id?: string })._id || '';
-        
-        if (!roomId) {
-          console.warn('[MessagesPage] ChatRoom has no id/roomId/_id, skipping:', room);
-          return null;
-        }
-        
-        // Create a new object (can't modify frozen RTK Query objects)
-        const normalizedRoom: ChatRoom = {
-          ...room,
-          id: roomId,
-          roomId: roomId,
-        };
-        
-        console.log('[MessagesPage] Room already ChatRoom format, normalized:', normalizedRoom);
-        return normalizedRoom;
-      }
-      
-      // Otherwise, treat it as ConversationResponse and transform
-      const convResponse = conv as ConversationResponse;
-      // Try multiple ways to get the room ID
-      const roomId = convResponse.roomId 
-        || (convResponse as { _id?: string })._id 
-        || (convResponse as { id?: string }).id
-        || (conv as { roomId?: string; _id?: string; id?: string }).roomId
-        || (conv as { roomId?: string; _id?: string; id?: string })._id
-        || (conv as { roomId?: string; _id?: string; id?: string }).id;
-      
-      console.log('[MessagesPage] Extracted roomId:', roomId, 'from conv:', conv);
+    // Transform rooms to match ChatRoom type
+    // According to Swagger, participants is an array of objects: [{ userId: "...", ... }, ...]
+    const transformedRooms = roomsArray.map((room: any) => {
+      const roomId = room.roomId || room._id || room.id;
       if (!roomId) {
-        console.warn('[MessagesPage] No roomId found, skipping room:', conv);
+        console.warn('[MessagesPage] Room missing roomId:', room);
         return null;
       }
-
+      
+      // Extract participant IDs from objects with userId property
       const participants: string[] = [];
-      
-      // Handle conversations format (has sender/receiver)
-      if (convResponse.sender && convResponse.sender._id) {
-        participants.push(convResponse.sender._id);
-      }
-      if (convResponse.receiver && convResponse.receiver._id) {
-        participants.push(convResponse.receiver._id);
-      }
-      
-      // Handle room format (has participants array with userId)
-      if (convResponse.participants && Array.isArray(convResponse.participants)) {
-        convResponse.participants.forEach((p: string | ConversationParticipant) => {
+      if (room.participants && Array.isArray(room.participants)) {
+        room.participants.forEach((p: any) => {
+          // Handle both formats: object with userId, or string
           const participantId = typeof p === 'string' 
             ? p 
             : (p.userId || p._id || p.id);
@@ -298,96 +211,122 @@ export default function MessagesPage() {
           }
         });
       }
-
+      
+      // Transform lastMessage if present
       let lastMessage: ChatMessage | undefined;
-      if (convResponse.lastMessage) {
-        const messageId = convResponse.lastMessage._id || convResponse.lastMessage.id;
-        // Only create lastMessage if we have a valid id
-        if (messageId && typeof messageId === 'string') {
-          lastMessage = {
-            id: messageId,
-            senderId: convResponse.lastMessage.senderId,
-            receiverId: convResponse.lastMessage.receiverId || '',
-            roomId: convResponse.lastMessage.roomId || roomId,
-            content: convResponse.lastMessage.content,
-            type: convResponse.lastMessage.type as ChatMessage['type'],
-            status: convResponse.lastMessage.status as ChatMessage['status'],
-            createdAt: convResponse.lastMessage.createdAt,
-            updatedAt: convResponse.lastMessage.updatedAt,
-            metadata: convResponse.lastMessage.metadata,
-            attachments: convResponse.lastMessage.attachments,
-            readAt: convResponse.lastMessage.readAt,
-            deliveredAt: convResponse.lastMessage.deliveredAt,
-            replyTo: convResponse.lastMessage.replyTo,
-          };
+      if (room.lastMessage) {
+        // lastMessage might be a string ID or an object
+        if (typeof room.lastMessage === 'string') {
+          // If it's just an ID, we can't create a full ChatMessage
+          // We'll need to fetch it separately or skip it
+          console.log('[MessagesPage] Room has lastMessage as ID only:', room.lastMessage);
+        } else if (typeof room.lastMessage === 'object' && room.lastMessage !== null) {
+          const msg = room.lastMessage;
+          const messageId = msg._id || msg.id;
+          if (messageId && typeof messageId === 'string') {
+            lastMessage = {
+              id: messageId,
+              senderId: msg.senderId,
+              receiverId: msg.receiverId,
+              roomId: msg.roomId || roomId,
+              content: msg.content || '',
+              type: (msg.type || 'text') as ChatMessage['type'],
+              status: (msg.status || 'sent') as ChatMessage['status'],
+              createdAt: msg.createdAt || new Date().toISOString(),
+              updatedAt: msg.updatedAt || new Date().toISOString(),
+              metadata: msg.metadata,
+              attachments: msg.attachments || [],
+              readAt: msg.readAt,
+              deliveredAt: msg.deliveredAt,
+              replyTo: msg.replyTo,
+            };
+          }
         }
       }
-
+      
       const chatRoom: ChatRoom = {
         id: roomId,
         roomId: roomId,
-        type: (convResponse.type as ChatRoom['type']) || 'direct',
+        type: (room.type || 'direct') as ChatRoom['type'],
         participants: participants,
-        createdAt: convResponse.createdAt || new Date().toISOString(),
-        updatedAt: convResponse.updatedAt || new Date().toISOString(),
+        createdAt: room.createdAt || new Date().toISOString(),
+        updatedAt: room.updatedAt || new Date().toISOString(),
         lastMessage: lastMessage,
-        unreadCount: typeof convResponse.unreadCount === 'number' ? convResponse.unreadCount : 0,
+        unreadCount: room.unreadCount || 0,
       };
       
-      console.log('[MessagesPage] Transformed room:', chatRoom);
       return chatRoom;
-    }).filter((room): room is ChatRoom => {
-      const isValid = Boolean(room !== null && typeof room.id === 'string' && room.id.trim() !== '');
-      if (!isValid) {
-        console.warn('[MessagesPage] Filtered out invalid room:', room);
-      }
-      return isValid;
-    });
+    }).filter((room): room is ChatRoom => room !== null);
     
-    console.log('[MessagesPage] Transformed', filteredRooms.length, 'rooms');
-    console.log('[MessagesPage] Final rooms array:', filteredRooms);
-    filteredRooms.forEach((room, index) => {
-      console.log(`[MessagesPage] Room ${index}:`, { id: room.id, roomId: room.roomId, type: room.type, participants: room.participants });
-    });
-    return filteredRooms;
+    console.log('[MessagesPage] Transformed', transformedRooms.length, 'rooms from', roomsArray.length, 'raw rooms');
+    return transformedRooms;
   }, [roomsData]);
 
   const messages = useMemo(() => {
-    if (!messagesData) return [];
+    console.log('[MessagesPage] Processing messagesData:', messagesData);
+    console.log('[MessagesPage] messagesData type:', typeof messagesData, 'isArray:', Array.isArray(messagesData));
     
-    // transformResponse should have extracted the data, so messagesData should be an array
-    // But handle both cases for safety
+    // transformResponse should already extract the array, so messagesData should be ChatMessage[]
+    if (!messagesData) {
+      console.log('[MessagesPage] No messagesData, returning empty array');
+      return [];
+    }
+    
+    // transformResponse should return ChatMessage[], so this should be an array
     let messagesArray: ChatMessage[] = [];
     
     if (Array.isArray(messagesData)) {
+      console.log('[MessagesPage] messagesData is array (expected), length:', messagesData.length);
       messagesArray = messagesData;
-    } else if (messagesData && typeof messagesData === 'object') {
-      // Fallback: Check if it's ApiResponse format with 'data' field
-      if ('data' in messagesData && Array.isArray((messagesData as { data: ChatMessage[] }).data)) {
-        messagesArray = (messagesData as { data: ChatMessage[] }).data;
-      } else if ('success' in messagesData && 'data' in messagesData && Array.isArray((messagesData as { success: boolean; data: ChatMessage[] }).data)) {
-        messagesArray = (messagesData as { success: boolean; data: ChatMessage[] }).data;
+    } else {
+      // Fallback: if transformResponse didn't work, try to extract manually
+      console.warn('[MessagesPage] messagesData is not an array (unexpected), trying to extract:', messagesData);
+      const messagesResponse = messagesData as MessagesResponse | { data?: ChatMessage[]; items?: ChatMessage[]; messages?: ChatMessage[] };
+      
+      if (Array.isArray(messagesResponse.messages)) {
+        messagesArray = messagesResponse.messages;
+      } else if (Array.isArray(messagesResponse.data)) {
+        messagesArray = messagesResponse.data;
+      } else if (Array.isArray(messagesResponse.items)) {
+        messagesArray = messagesResponse.items;
       } else {
-        // Fallback to old structure
-        const messagesResponse = messagesData as MessagesResponse;
-        if (Array.isArray(messagesResponse.messages)) {
-          messagesArray = messagesResponse.messages;
-        } else if (Array.isArray(messagesResponse.data)) {
-          messagesArray = messagesResponse.data;
-        } else if (Array.isArray(messagesResponse.items)) {
-          messagesArray = messagesResponse.items;
-        }
+        console.error('[MessagesPage] Could not extract messages array from:', messagesResponse);
+        return [];
       }
+    }
+    
+    console.log('[MessagesPage] Final messagesArray length:', messagesArray.length);
+    if (messagesArray.length > 0) {
+      console.log('[MessagesPage] First message:', messagesArray[0]);
+      console.log('[MessagesPage] Last message:', messagesArray[messagesArray.length - 1]);
     }
     
     // Create a copy of the array before sorting (RTK Query returns frozen arrays)
     // Sort messages by createdAt (oldest first)
-    return [...messagesArray].sort((a, b) => {
+    const sorted = [...messagesArray].sort((a, b) => {
       const dateA = new Date(a.createdAt).getTime();
       const dateB = new Date(b.createdAt).getTime();
       return dateA - dateB;
     });
+    
+    console.log('[MessagesPage] Sorted messages length:', sorted.length);
+    return sorted;
   }, [messagesData]);
+  
+  // Log messages data for debugging (moved after messages definition to avoid hoisting issue)
+  // Note: selectedChatData is defined later, so we'll add another useEffect after it
+  useEffect(() => {
+    if (selectedChat) {
+      console.log('[MessagesPage] Selected chat:', selectedChat);
+      console.log('[MessagesPage] Messages data:', messagesData);
+      console.log('[MessagesPage] Messages data type:', typeof messagesData, 'isArray:', Array.isArray(messagesData));
+      console.log('[MessagesPage] Loading messages:', loadingMessages);
+      console.log('[MessagesPage] Messages error:', messagesError);
+      console.log('[MessagesPage] Processed messages array length:', messages.length);
+    } else {
+      console.log('[MessagesPage] No chat selected');
+    }
+  }, [selectedChat, messagesData, loadingMessages, messagesError, messages]);
 
   const loading = loadingRooms || loadingMessages;
   const messagesLoading = loadingMessages;
@@ -433,10 +372,8 @@ export default function MessagesPage() {
 
     // Handle objects - NEVER convert to string directly as it becomes [object Object]
     if (participant && typeof participant === 'object') {
-      // Try to get userId, id, or _id property (userId is most common in participant objects)
-      const id = (participant as { userId?: string | number; id?: string | number; _id?: string | number }).userId 
-               || (participant as { id?: string | number; _id?: string | number }).id 
-               || (participant as { _id?: string | number })._id;
+      // Try to get id or _id property
+      const id = participant.id || participant._id;
       
       if (id !== null && id !== undefined) {
         // If id is a string, validate and return
@@ -452,8 +389,8 @@ export default function MessagesPage() {
         }
         // If id is another object, try to extract from it (nested)
         if (typeof id === 'object' && id !== null) {
-          const nestedObj = id as { id?: string | number; _id?: string | number; userId?: string | number };
-          const nestedId = nestedObj.userId || nestedObj.id || nestedObj._id;
+          const nestedObj = id as { id?: string | number; _id?: string | number };
+          const nestedId = nestedObj.id || nestedObj._id;
           if (nestedId && typeof nestedId === 'string' && nestedId !== '[object Object]') {
             return nestedId;
           }
@@ -525,75 +462,132 @@ export default function MessagesPage() {
     }
 
     setProcessingUserId(targetUserId);
-    console.log('Creating room with targetUserId:', targetUserId, 'current user:', currentUserId);
+    console.log('[createRoomWithUser] Creating room with targetUserId:', targetUserId, 'current user:', currentUserId);
+    console.log('[createRoomWithUser] Current user ID type:', typeof currentUserId, 'value:', currentUserId);
+    console.log('[createRoomWithUser] Target user ID type:', typeof targetUserId, 'value:', targetUserId);
+
+    // Ensure both IDs are strings and valid
+    if (!currentUserId || typeof currentUserId !== 'string') {
+      const errorMsg = 'Current user ID is invalid. Please log in again.';
+      console.error('[createRoomWithUser]', errorMsg, 'currentUserId:', currentUserId);
+      setProcessingUserId(null);
+      throw new Error(errorMsg);
+    }
+
+    if (!targetUserId || typeof targetUserId !== 'string') {
+      const errorMsg = 'Target user ID is invalid.';
+      console.error('[createRoomWithUser]', errorMsg, 'targetUserId:', targetUserId);
+      setProcessingUserId(null);
+      throw new Error(errorMsg);
+    }
+
+    // Ensure IDs are trimmed and not empty
+    const cleanCurrentUserId = currentUserId.trim();
+    const cleanTargetUserId = targetUserId.trim();
+
+    if (!cleanCurrentUserId || !cleanTargetUserId) {
+      const errorMsg = 'User IDs cannot be empty.';
+      console.error('[createRoomWithUser]', errorMsg);
+      setProcessingUserId(null);
+      throw new Error(errorMsg);
+    }
+
+    if (cleanCurrentUserId === cleanTargetUserId) {
+      const errorMsg = 'Cannot create a room with yourself.';
+      console.error('[createRoomWithUser]', errorMsg);
+      setProcessingUserId(null);
+      throw new Error(errorMsg);
+    }
 
     try {
+      const participants = [cleanCurrentUserId, cleanTargetUserId];
+      console.log('[createRoomWithUser] Calling createRoomMutation with:', {
+        type: 'direct',
+        participants: participants
+      });
+      
       const result = await createRoomMutation({
         type: 'direct',
-        participants: [currentUserId, targetUserId],
+        participants: participants, // Use cleaned IDs
       }).unwrap();
 
-      console.log('Room created successfully:', result);
+      console.log('[createRoomWithUser] Room created successfully, raw result:', result);
+      console.log('[createRoomWithUser] Result type:', typeof result, 'isArray:', Array.isArray(result));
       
-      if (result) {
-        // transformResponse should have extracted the data, so result should be the ChatRoom object directly
-        // But handle both cases for safety
-        let roomData: ChatRoom | null = null;
+      if (!result) {
+        console.error('[createRoomWithUser] No result returned from createRoomMutation');
+        throw new Error('Room creation failed: No response from server');
+      }
+      
+      // transformResponse should already extract the room data, so result should be ChatRoom
+      // But handle both cases: direct ChatRoom or wrapped in { data: ChatRoom }
+      let roomData: ChatRoom | { roomId?: string; id?: string; _id?: string } | null = null;
+      
+      if (result && typeof result === 'object') {
+        const resultObj = result as unknown as Record<string, unknown>;
         
-        if (result && typeof result === 'object') {
-          if ('data' in result && result.data && typeof result.data === 'object') {
-            // Fallback: if still wrapped in ApiResponse
-            roomData = result.data as ChatRoom;
-          } else if ('roomId' in result || 'id' in result || '_id' in result) {
-            // Direct room object (from transformResponse)
-            roomData = result as ChatRoom;
-          }
-        }
-        
-        if (roomData) {
-          // Use roomId from the response (API returns roomId, not id)
-          const roomId = roomData.roomId || roomData.id || (roomData as { _id?: string })._id;
-          console.log('[createRoomWithUser] Room created, roomId:', roomId, 'roomData:', roomData);
-          if (roomId) {
-            setSelectedChat(roomId);
-            // Remove query parameter from URL after a short delay to ensure state is set
-            setTimeout(() => {
-              router.replace('/chat');
-            }, 100);
-            // Force immediate refetch - RTK Query should auto-refetch due to invalidatesTags
-            // But we'll also manually refetch multiple times to ensure it updates
-            console.log('[createRoomWithUser] Refetching rooms...');
-            refetchRooms();
-            // Also refetch after a short delay to ensure cache is updated
-            setTimeout(() => {
-              console.log('[createRoomWithUser] Delayed refetch...');
-              refetchRooms();
-            }, 500);
-            setTimeout(() => {
-              console.log('[createRoomWithUser] Final refetch...');
-              refetchRooms();
-            }, 1000);
-          } else {
-            console.error('[createRoomWithUser] No roomId found in response:', roomData);
-          }
-        } else {
-          console.error('[createRoomWithUser] Invalid room data in response:', result);
+        // Check if result is already a ChatRoom (has roomId or id)
+        if ('roomId' in resultObj || 'id' in resultObj || '_id' in resultObj) {
+          roomData = resultObj as unknown as ChatRoom;
+          console.log('[createRoomWithUser] Result is ChatRoom object:', roomData);
+        } else if ('data' in resultObj && resultObj.data && typeof resultObj.data === 'object') {
+          // Result is wrapped in { data: {...} }
+          roomData = resultObj.data as unknown as ChatRoom;
+          console.log('[createRoomWithUser] Result has data property:', roomData);
+      } else {
+          console.warn('[createRoomWithUser] Unexpected result structure:', result);
+          roomData = resultObj as any;
         }
       }
       
+      if (!roomData) {
+        console.error('[createRoomWithUser] Could not extract room data from result:', result);
+        throw new Error('Room creation failed: Invalid response format');
+      }
+      
+      // Extract roomId - API might return roomId, id, or _id
+      const roomId = (roomData as ChatRoom).roomId || (roomData as ChatRoom).id || (roomData as any)._id || (roomData as any).id;
+      
+      console.log('[createRoomWithUser] Extracted roomId:', roomId, 'from roomData:', roomData);
+      
+      if (!roomId || typeof roomId !== 'string') {
+        console.error('[createRoomWithUser] No valid roomId found in response:', roomData);
+        throw new Error('Room creation failed: No room ID in response');
+      }
+      
+      console.log('[createRoomWithUser] Setting selected chat to roomId:', roomId);
+      setSelectedChat(roomId);
+      router.replace('/chat');
+      
+      // Wait a bit then refetch rooms to get the new room
+      setTimeout(() => {
+        refetchRooms();
+      }, 500);
+      
       setProcessingUserId(null);
+      console.log('[createRoomWithUser] Room creation completed successfully');
     } catch (err: unknown) {
-      console.error('Error creating room:', err);
+      console.error('[createRoomWithUser] Error creating room:', err);
+      console.error('[createRoomWithUser] Error type:', typeof err);
+      console.error('[createRoomWithUser] Error details:', JSON.stringify(err, null, 2));
+      
       const errorMsg = (err && typeof err === 'object' && 'data' in err && err.data && typeof err.data === 'object' && 'message' in err.data)
         ? String(err.data.message)
         : (err && typeof err === 'object' && 'message' in err)
           ? String(err.message)
-          : 'An error occurred while creating the chat room.';
+          : (err && typeof err === 'object' && 'error' in err && typeof err.error === 'object' && err.error && 'data' in err.error && err.error.data && typeof err.error.data === 'object' && 'message' in err.error.data)
+            ? String(err.error.data.message)
+            : 'An error occurred while creating the chat room.';
+      
+      console.error('[createRoomWithUser] Extracted error message:', errorMsg);
       
       // Check if error is about invalid MongoDB ObjectId
-      if (errorMsg.includes('mongodb id') || errorMsg.includes('ObjectId')) {
+      if (errorMsg.toLowerCase().includes('mongodb') || errorMsg.toLowerCase().includes('objectid') || errorMsg.toLowerCase().includes('invalid')) {
         setInvalidUserIds(prev => new Set(prev).add(targetUserId));
+        setError(errorMsg);
         router.replace('/chat');
+      } else {
+        setError(errorMsg);
       }
       
       setProcessingUserId(null);
@@ -602,100 +596,15 @@ export default function MessagesPage() {
   }, [currentUserId, processingUserId, invalidUserIds, router, createRoomMutation, refetchRooms]);
 
   // Extract participant names from rooms data
+  // Note: /chat/rooms doesn't include user names, so we'll need to fetch them separately
+  // This effect is kept for backward compatibility but won't extract names from rooms
   useEffect(() => {
     if (roomsData && Array.isArray(roomsData)) {
-      const namesToAdd = new Map<string, string>();
-      roomsData.forEach((conv: ConversationResponse | ChatRoom) => {
-        // If it's already a ChatRoom, skip (no sender/receiver info, names should come from participant data)
-        if ('participants' in conv && Array.isArray(conv.participants) && 'type' in conv && (conv.type === 'direct' || conv.type === 'group')) {
-          // For ChatRoom, we can't extract names here - they need to be fetched separately
-          return;
-        }
-        
-        // Otherwise, treat as ConversationResponse
-        const convResponse = conv as ConversationResponse;
-        // Handle conversations format (sender/receiver)
-        if (convResponse.sender && convResponse.sender._id && convResponse.sender.name) {
-          namesToAdd.set(convResponse.sender._id, convResponse.sender.name);
-        }
-        if (convResponse.receiver && convResponse.receiver._id && convResponse.receiver.name) {
-          namesToAdd.set(convResponse.receiver._id, convResponse.receiver.name);
-        }
-        // Handle room format (participants array)
-        if (convResponse.participants && Array.isArray(convResponse.participants)) {
-          convResponse.participants.forEach((p: string | ConversationParticipant) => {
-            const participantId = typeof p === 'string' ? p : (p.userId || p._id || p.id);
-            const participantName = typeof p === 'object' && p !== null ? (p.name || p.firstName || p.username) : null;
-            if (participantId && typeof participantId === 'string' && participantName && typeof participantName === 'string') {
-              namesToAdd.set(participantId, participantName);
-            }
-          });
-        }
-      });
-      
-      if (namesToAdd.size > 0) {
-        setParticipantNames(prev => {
-          const newMap = new Map(prev);
-          namesToAdd.forEach((name, id) => {
-            newMap.set(id, name);
-          });
-          return newMap;
-        });
-      }
+      // Rooms from /chat/rooms don't have sender/receiver info
+      // We'll need to fetch participant names separately using their userIds
+      console.log('[MessagesPage] Rooms data loaded, participant names will be fetched separately');
     }
   }, [roomsData]);
-
-  // Fetch enriched profiles for all participants in rooms
-  useEffect(() => {
-    if (!rooms || rooms.length === 0 || !currentUserId) return;
-
-    // Collect all participant IDs (excluding current user)
-    const allParticipantIds = new Set<string>();
-    rooms.forEach(room => {
-      if (room.participants && Array.isArray(room.participants)) {
-        room.participants.forEach(p => {
-          const pId = extractParticipantId(p);
-          if (pId && pId !== currentUserId) {
-            allParticipantIds.add(pId);
-          }
-        });
-      }
-    });
-
-    // Check which profiles we need to fetch
-    setParticipantProfiles(prev => {
-      const idsToFetch: string[] = [];
-      allParticipantIds.forEach(userId => {
-        if (!prev.has(userId)) {
-          idsToFetch.push(userId);
-        }
-      });
-
-      // Fetch profiles for participants we don't have yet
-      idsToFetch.forEach(userId => {
-        apiService.getEnrichedProfile(userId)
-          .then(response => {
-            if (response && response.data) {
-              const profile = response.data as EnrichedProfile;
-              setParticipantProfiles(prevProfiles => {
-                // Double-check we still don't have it (race condition protection)
-                if (prevProfiles.has(userId)) {
-                  return prevProfiles;
-                }
-                const newMap = new Map(prevProfiles);
-                newMap.set(userId, profile);
-                return newMap;
-              });
-            }
-          })
-          .catch(err => {
-            console.error(`Error fetching profile for user ${userId}:`, err);
-          });
-      });
-
-      return prev; // Return unchanged, updates will happen via setState in promises
-    });
-  }, [rooms, currentUserId]);
 
   // Handle userId query parameter - find or create room with that user
   useEffect(() => {
@@ -703,37 +612,7 @@ export default function MessagesPage() {
     const name = searchParams.get('name');
     const currentUserId = userId || user?.id || fallbackUserId;
     
-    console.log('Query params check - targetUserId:', targetUserId, 'name:', name, 'loading:', loading, 'rooms.length:', rooms.length, 'currentUserId:', currentUserId, 'authLoading:', authLoading, 'processingUserId:', processingUserId, 'hasProcessedQueryParams:', hasProcessedQueryParams, 'selectedChat:', selectedChat);
-    
-    // If we have query params, reset the flag to allow processing
-    if (targetUserId && hasProcessedQueryParams) {
-      // Check if the currently selected chat matches the target user
-      if (selectedChat) {
-        const selectedRoom = rooms.find(r => {
-          const roomId = getRoomId(r);
-          return roomId === selectedChat;
-        });
-        if (selectedRoom) {
-          const participantIds = selectedRoom.participants
-            ?.map(p => extractParticipantId(p))
-            .filter((id): id is string => id !== null) || [];
-          // If the selected chat already matches the target user, skip processing
-          if (participantIds.includes(targetUserId)) {
-            console.log('Selected chat already matches target user, skipping...');
-            return;
-          }
-        }
-      }
-      // Reset flag to process new query params
-      console.log('New query params detected, resetting hasProcessedQueryParams');
-      setHasProcessedQueryParams(false);
-    }
-    
-    // If we've already processed query params and have a selected chat, and no new query params, don't process again
-    if (!targetUserId && hasProcessedQueryParams && selectedChat) {
-      console.log('Already processed query params and have selected chat, no new params, skipping...');
-      return;
-    }
+    console.log('Query params check - targetUserId:', targetUserId, 'name:', name, 'loading:', loading, 'rooms.length:', rooms.length, 'currentUserId:', currentUserId, 'authLoading:', authLoading, 'processingUserId:', processingUserId);
     
     if (name) {
       setProfileName(name);
@@ -774,195 +653,28 @@ export default function MessagesPage() {
       });
 
       if (existingRoom) {
-        // Use roomId if available, otherwise fall back to id or _id
-        const roomIdToSelect = existingRoom.roomId || existingRoom.id || (existingRoom as { _id?: string })._id;
-        console.log('Found existing room:', roomIdToSelect, 'room object:', existingRoom);
-        if (roomIdToSelect) {
-          setSelectedChat(roomIdToSelect);
-          setHasProcessedQueryParams(true);
-          // Remove query parameter from URL after a short delay to ensure state is set
-          setTimeout(() => {
-            router.replace('/chat');
-          }, 100);
-        } else {
-          console.error('Found room but no valid ID:', existingRoom);
-        }
+        console.log('Found existing room:', existingRoom.id);
+        setSelectedChat(existingRoom.id);
+        // Remove query parameter from URL
+        router.replace('/chat');
       } else {
         console.log('No existing room found, creating new one...');
         // If no existing room, create one
-        setHasProcessedQueryParams(true);
         createRoomWithUser(targetUserId);
       }
     } else {
-      console.log('Skipping processing - targetUserId:', targetUserId, 'currentUserId:', currentUserId, 'loading:', loading, 'authLoading:', authLoading, 'processingUserId:', processingUserId, 'hasProcessedQueryParams:', hasProcessedQueryParams);
+      console.log('Skipping processing - targetUserId:', targetUserId, 'currentUserId:', currentUserId, 'loading:', loading, 'authLoading:', authLoading, 'processingUserId:', processingUserId);
     }
-    
-    // Reset hasProcessedQueryParams when query params are cleared (user navigates away)
-    // But only if we don't have a selected chat (to allow new query params to be processed)
-    if (!targetUserId && hasProcessedQueryParams && !selectedChat) {
-      setHasProcessedQueryParams(false);
-    }
-    
-    // If we have a new targetUserId and we've already processed a different one, reset the flag
-    if (targetUserId && hasProcessedQueryParams && selectedChat) {
-      // Check if the selectedChat matches the targetUserId
-      const selectedRoom = rooms.find(r => r.id === selectedChat);
-      if (selectedRoom) {
-        const participantIds = selectedRoom.participants
-          ?.map(p => extractParticipantId(p))
-          .filter((id): id is string => id !== null) || [];
-        if (!participantIds.includes(targetUserId)) {
-          // Different user, reset flag to process new one
-          setHasProcessedQueryParams(false);
-          setSelectedChat(null);
-        }
-      }
-    }
-  }, [rooms, searchParams, userId, user?.id, fallbackUserId, router, loading, authLoading, processingUserId, invalidUserIds, createRoomWithUser, hasProcessedQueryParams, selectedChat]);
+  }, [rooms, searchParams, userId, user?.id, fallbackUserId, router, loading, authLoading, processingUserId, invalidUserIds, createRoomWithUser]);
 
-  // WebSocket event listeners
   useEffect(() => {
-    if (!socket || !connected) {
-      console.log('[MessagesPage] WebSocket not connected, skipping event listeners');
-      return;
-    }
-
-    console.log('[MessagesPage] Setting up WebSocket event listeners');
-
-    // Listen for new messages
-    const handleNewMessage = (data: { message: SocketChatMessage }) => {
-      console.log('[MessagesPage] Received new message via WebSocket:', data.message);
-      // Refetch messages to get updated list
-      if (data.message.roomId === selectedChat) {
-        refetchMessages();
-      }
-      // Refetch rooms to update last message
-      refetchRooms();
-    };
-
-    // Listen for message delivery confirmation
-    const handleMessageDelivered = (data: MessageDeliveredData) => {
-      console.log('[MessagesPage] Message delivered via WebSocket:', data);
-      // Refetch messages to update with server response
-      if (data.message.roomId === selectedChat) {
-        refetchMessages();
-      }
-    };
-
-    // Listen for typing indicators
-    const handleUserTyping = (data: UserTypingData) => {
-      console.log('[MessagesPage] User typing:', data);
-      if (data.roomId === selectedChat) {
-        setTypingUsers(prev => {
-          const newMap = new Map(prev);
-          if (!newMap.has(data.roomId)) {
-            newMap.set(data.roomId, new Set());
-          }
-          const roomTyping = new Set(newMap.get(data.roomId)!);
-          if (data.isTyping) {
-            roomTyping.add(data.userId);
-            // Clear typing indicator after 3 seconds
-            if (typingTimeoutRef.current.has(`${data.roomId}-${data.userId}`)) {
-              clearTimeout(typingTimeoutRef.current.get(`${data.roomId}-${data.userId}`)!);
-            }
-            const timeout = setTimeout(() => {
-              setTypingUsers(prev => {
-                const newMap = new Map(prev);
-                const roomTyping = new Set(newMap.get(data.roomId) || []);
-                roomTyping.delete(data.userId);
-                newMap.set(data.roomId, roomTyping);
-                return newMap;
-              });
-            }, 3000);
-            typingTimeoutRef.current.set(`${data.roomId}-${data.userId}`, timeout);
-          } else {
-            roomTyping.delete(data.userId);
-            if (typingTimeoutRef.current.has(`${data.roomId}-${data.userId}`)) {
-              clearTimeout(typingTimeoutRef.current.get(`${data.roomId}-${data.userId}`)!);
-              typingTimeoutRef.current.delete(`${data.roomId}-${data.userId}`);
-            }
-          }
-          newMap.set(data.roomId, roomTyping);
-          return newMap;
-        });
-      }
-    };
-
-    // Listen for read receipts
-    const handleMessagesRead = (data: MessagesReadData) => {
-      console.log('[MessagesPage] Messages read:', data);
-      // Refetch messages to update read status
-      if (data.roomId === selectedChat) {
-        refetchMessages();
-      }
-    };
-
-    // Listen for user presence changes
-    const handleUserPresence = (data: UserPresenceData) => {
-      console.log('[MessagesPage] User presence changed:', data);
-      // Could update UI to show online/offline status
-    };
-
-    socket.on('newMessage', handleNewMessage);
-    socket.on('roomMessage', handleNewMessage);
-    socket.on('messageDelivered', handleMessageDelivered);
-    socket.on('userTyping', handleUserTyping);
-    socket.on('messagesRead', handleMessagesRead);
-    socket.on('userPresenceChanged', handleUserPresence);
-
-    return () => {
-      console.log('[MessagesPage] Cleaning up WebSocket event listeners');
-      socket.off('newMessage', handleNewMessage);
-      socket.off('roomMessage', handleNewMessage);
-      socket.off('messageDelivered', handleMessageDelivered);
-      socket.off('userTyping', handleUserTyping);
-      socket.off('messagesRead', handleMessagesRead);
-      socket.off('userPresenceChanged', handleUserPresence);
-      // Clear typing timeouts
-      typingTimeoutRef.current.forEach(timeout => clearTimeout(timeout));
-      typingTimeoutRef.current.clear();
-    };
-  }, [socket, connected, selectedChat, refetchMessages, refetchRooms]);
-
-  // Join/leave rooms when chat is selected
-  useEffect(() => {
-    if (!socket || !connected) return;
-
-    // Leave previous room
-    const previousRoom = selectedChat;
-    
-    // Join new room
     if (selectedChat) {
-      console.log('[MessagesPage] Joining room via WebSocket:', selectedChat);
-      joinRoom(selectedChat);
+      console.log('Selected chat changed, marking room as read:', selectedChat);
+      markRoomAsReadMutation(selectedChat).catch(err => {
+        console.error('Error marking room as read:', err);
+      });
     }
-
-    return () => {
-      if (previousRoom) {
-        console.log('[MessagesPage] Leaving room via WebSocket:', previousRoom);
-        leaveRoom(previousRoom);
-      }
-    };
-  }, [socket, connected, selectedChat, joinRoom, leaveRoom]);
-
-  // Mark room as read when selected
-  // NOTE: Disabled because the API endpoint expects messageIds in the request body
-  // The endpoint `/chat/rooms/{roomId}/read` requires a body with messageIds array
-  // Uncomment and update if the API is fixed to accept just roomId or if we have messageIds
-  /*
-  useEffect(() => {
-    if (selectedChat && messages.length > 0) {
-      // If API requires messageIds, we would need to pass them:
-      // const messageIds = messages.map(m => m.id);
-      // markRoomAsReadMutation({ roomId: selectedChat, messageIds }).catch(err => {
-      //   console.error('Error marking room as read:', err);
-      // });
-      
-      // For now, disabled to avoid API errors
-      console.log('Room selected:', selectedChat, '- Mark as read disabled');
-    }
-  }, [selectedChat, markRoomAsReadMutation, messages]);
-  */
+  }, [selectedChat, markRoomAsReadMutation]);
 
   // Fetch participant names for a user ID (using apiService for now, can be moved to RTK Query later)
   const fetchParticipantName = async (participantId: string | Participant): Promise<string | null> => {
@@ -1016,10 +728,7 @@ export default function MessagesPage() {
     if (!messageInput.trim() || !selectedChat || sending || !currentUserId) return;
 
     // Get the selected room to find the receiver ID
-    const room = rooms.find(r => {
-      const roomId = getRoomId(r);
-      return roomId === selectedChat;
-    });
+    const room = rooms.find(r => r.id === selectedChat);
     if (!room) {
       console.error('Room not found');
       return;
@@ -1036,49 +745,24 @@ export default function MessagesPage() {
       receiverId = otherParticipant ? extractParticipantId(otherParticipant) || undefined : undefined;
     }
 
-    if (!receiverId && room.type === 'direct') {
+    // Validate receiverId is provided (required by API)
+    if (!receiverId || receiverId.trim() === '') {
       console.error('Receiver ID not found for direct message');
       return;
     }
 
-    // Use WebSocket if connected, otherwise fall back to REST API
-    const tempId = `temp_${Date.now()}`;
-    
-    if (connected && sendSocketMessage) {
-      // Send via WebSocket for real-time delivery
-      console.log('[MessagesPage] Sending message via WebSocket');
-      sendSocketMessage({
-        receiverId: receiverId,
-        roomId: selectedChat,
-        content: messageInput.trim(),
-        type: 'text',
-        tempId,
-      });
-      
-      // Optimistically add message to UI (will be updated when messageDelivered event is received)
-      // The message will be refetched via WebSocket events, so we can clear input immediately
-      setMessageInput("");
-      return;
-    }
-
-    // Fallback to REST API if WebSocket is not connected
     try {
       const result = await sendMessageMutation({
-        receiverId: receiverId,
+        receiverId: receiverId, // TypeScript now knows receiverId is defined (string, not undefined)
         content: messageInput.trim(),
         type: 'text',
-        tempId,
+        tempId: `temp_${Date.now()}`,
       }).unwrap();
 
       if (result) {
-        // transformResponse should have extracted the data, so result should be the ChatMessage object directly
-        // But handle both cases for safety
-        const messageData = (result && typeof result === 'object' && 'data' in result && result.data)
-          ? result.data as ChatMessage
-          : (result as ChatMessage);
-        
+        // transformResponse already extracted the data, so result is the message object
         const sentMessage = {
-          ...messageData,
+          ...result,
           senderId: currentUserId, // Ensure senderId is set correctly
         };
         
@@ -1087,10 +771,8 @@ export default function MessagesPage() {
         
         // RTK Query will automatically refetch messages and rooms due to invalidatesTags
         // But we can also manually refetch to ensure immediate update
-        setTimeout(() => {
-          refetchMessages();
-          refetchRooms();
-        }, 300);
+        refetchMessages();
+        refetchRooms();
       }
     } catch (err: unknown) {
       console.error('Error sending message:', err);
@@ -1105,7 +787,6 @@ export default function MessagesPage() {
 
   const handleBackClick = () => {
     setSelectedChat(null);
-    setHasProcessedQueryParams(false);
   };
 
   const handleMediaClick = (
@@ -1145,67 +826,98 @@ export default function MessagesPage() {
     const targetUserId = newChatUserId.trim();
     const currentUserId = userId || user?.id || fallbackUserId;
     
-    console.log('handleStartNewChat called with userId:', targetUserId, 'currentUserId:', currentUserId, 'authLoading:', authLoading, 'isAuthenticated:', isAuthenticated, 'fallbackUserId:', fallbackUserId);
+    console.log('[handleStartNewChat] Called with userId:', targetUserId, 'currentUserId:', currentUserId, 'authLoading:', authLoading, 'isAuthenticated:', isAuthenticated, 'fallbackUserId:', fallbackUserId);
     
     if (!targetUserId) {
-      console.error('No userId provided');
+      console.error('[handleStartNewChat] No userId provided');
       setError('Please enter a user ID');
       return;
     }
 
     if (authLoading) {
-      console.log('Auth still loading, waiting...');
+      console.log('[handleStartNewChat] Auth still loading, waiting...');
       setError('Please wait for authentication to complete');
       return;
     }
 
     if (!isAuthenticated || !currentUserId) {
-      console.error('User not authenticated or not loaded');
+      console.error('[handleStartNewChat] User not authenticated or not loaded');
       setError('Please log in to start a chat');
       return;
     }
 
     if (processingUserId === targetUserId) {
-      console.log('Already processing this userId');
+      console.log('[handleStartNewChat] Already processing this userId');
       return;
     }
 
-    console.log('Starting new chat with userId:', targetUserId, 'current user:', currentUserId);
-    setShowNewChatDialog(false);
+    // Check if room already exists before creating
+    const existingRoom = rooms.find(room => {
+      if (!room.participants || room.type !== 'direct') return false;
+      
+      const participantIds = room.participants
+        .map(p => extractParticipantId(p))
+        .filter((id): id is string => id !== null);
+      
+      const hasBothParticipants = participantIds.includes(targetUserId) && participantIds.includes(currentUserId);
+      return hasBothParticipants;
+    });
+
+    if (existingRoom) {
+      console.log('[handleStartNewChat] Room already exists:', existingRoom.id);
+      setSelectedChat(existingRoom.id);
+      setShowNewChatDialog(false);
+      setNewChatUserId("");
+      setError(null);
+      return;
+    }
+
+    console.log('[handleStartNewChat] Starting new chat with userId:', targetUserId, 'current user:', currentUserId);
     setError(null); // Clear any previous errors
+    setShowNewChatDialog(false); // Close dialog while processing
     
     // Use the existing createRoomWithUser function
     try {
       await createRoomWithUser(targetUserId);
       setNewChatUserId("");
+      console.log('[handleStartNewChat] Chat started successfully');
     } catch (err) {
-      console.error('Error in handleStartNewChat:', err);
-      setError('Failed to start chat. Please try again.');
-      setShowNewChatDialog(true); // Reopen dialog on error
+      console.error('[handleStartNewChat] Error starting chat:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to start chat. Please try again.';
+      setError(errorMessage);
+      setShowNewChatDialog(true); // Reopen dialog on error so user can see the error and try again
     }
   };
 
-  // Helper to get room ID (checks roomId, id, or _id)
-  const getRoomId = (room: ChatRoom): string | undefined => {
-    return room.roomId || room.id || (room as { _id?: string })._id;
-  };
+  const selectedChatData = rooms.find((room) => room.id === selectedChat);
   
-  const selectedChatData = rooms.find((room) => {
-    const roomId = getRoomId(room);
-    return roomId === selectedChat;
-  });
+  // Log participant information for debugging (after selectedChatData is defined)
+  useEffect(() => {
+    if (selectedChat && selectedChatData) {
+      const currentUserId = userId || user?.id || fallbackUserId;
+      console.log('[MessagesPage] Selected room data:', selectedChatData);
+      console.log('[MessagesPage] Current user ID:', currentUserId, 'type:', typeof currentUserId);
+      console.log('[MessagesPage] Room participants:', selectedChatData.participants);
+      
+      // Check if current user is in participants
+      if (selectedChatData.participants) {
+        const participantIds = selectedChatData.participants
+          .map(p => extractParticipantId(p))
+          .filter((id): id is string => id !== null);
+        const isParticipant = currentUserId && participantIds.includes(currentUserId);
+        console.log('[MessagesPage] Is current user a participant?', isParticipant, 'participantIds:', participantIds, 'currentUserId:', currentUserId);
+        
+        if (!isParticipant && currentUserId) {
+          console.warn('[MessagesPage] WARNING: Current user is NOT a participant in this room!');
+          console.warn('[MessagesPage] This will cause "User is not a participant in this room" error when fetching messages.');
+        }
+      }
+    }
+  }, [selectedChat, selectedChatData, userId, user?.id, fallbackUserId]);
   
   // Helper functions for data transformation
-  const formatTime = (dateString: string | undefined | null) => {
-    if (!dateString) {
-      return '';
-    }
+  const formatTime = (dateString: string) => {
     const date = new Date(dateString);
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-      console.warn('[formatTime] Invalid date string:', dateString);
-      return '';
-    }
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -1223,37 +935,28 @@ export default function MessagesPage() {
         return pId && pId !== currentUserId;
       });
       
+      // Debug logging
+      if (otherParticipant && typeof otherParticipant === 'object') {
+        console.log('Found otherParticipant object:', otherParticipant, 'keys:', Object.keys(otherParticipant));
+      }
+      
       const otherParticipantId = otherParticipant ? extractParticipantId(otherParticipant) : null;
       
-      console.log('[getRoomDisplayName] Debug:', {
-        roomId: getRoomId(room),
-        currentUserId,
-        otherParticipant,
-        otherParticipantId,
-        participantProfilesSize: participantProfiles.size,
-        hasProfile: otherParticipantId ? participantProfiles.has(otherParticipantId) : false,
-        participantNamesSize: participantNames.size,
-        hasCachedName: otherParticipantId ? participantNames.has(otherParticipantId) : false
-      });
+      // Debug logging
+      if (otherParticipantId === '[object Object]' || (otherParticipantId && typeof otherParticipantId !== 'string')) {
+        console.error('Invalid otherParticipantId extracted:', {
+          otherParticipant,
+          otherParticipantId,
+          type: typeof otherParticipantId,
+          roomParticipants: room.participants
+        });
+      }
       
       // Validate otherParticipantId is a valid string before using it
       if (otherParticipantId && typeof otherParticipantId === 'string' && otherParticipantId !== '[object Object]' && otherParticipantId.trim() !== '') {
-        // First, check if we have enriched profile data (preferred - has real name)
-        const profile = participantProfiles.get(otherParticipantId);
-        if (profile && profile.user) {
-          const displayName = profile.user.userName || 
-                            `${profile.user.firstName || ''} ${profile.user.lastName || ''}`.trim() ||
-                            profile.user.firstName ||
-                            profile.user.lastName ||
-                            'User';
-          console.log('[getRoomDisplayName] Using profile name:', displayName, 'from profile:', profile);
-          return displayName;
-        }
-        
-        // Fallback to cached name
+        // Check if we have the name cached
         const cachedName = participantNames.get(otherParticipantId);
         if (cachedName) {
-          console.log('[getRoomDisplayName] Using cached name:', cachedName);
           return cachedName;
         }
         
@@ -1265,11 +968,9 @@ export default function MessagesPage() {
             newMap.set(otherParticipantId, profileName);
             return newMap;
           });
-          console.log('[getRoomDisplayName] Using profileName from query params:', profileName);
           return profileName;
         }
         
-        console.log('[getRoomDisplayName] No name found, will fetch. otherParticipantId:', otherParticipantId);
         // Try to fetch the name if not cached (async, will update later)
         if (!participantNames.has(otherParticipantId)) {
           // Double-check before calling API
@@ -1283,16 +984,7 @@ export default function MessagesPage() {
       } else if (otherParticipantId) {
         // Log warning if we got an invalid ID
         console.warn('Invalid otherParticipantId extracted:', otherParticipantId, 'type:', typeof otherParticipantId, 'from participant:', otherParticipant);
-      } else {
-        console.warn('[getRoomDisplayName] Could not extract otherParticipantId. Room:', room, 'currentUserId:', currentUserId);
       }
-    } else {
-      console.warn('[getRoomDisplayName] Invalid room structure:', {
-        hasParticipants: !!room.participants,
-        participantsLength: room.participants?.length,
-        currentUserId,
-        roomType: room.type
-      });
     }
     
     return 'Direct Message';
@@ -1302,64 +994,20 @@ export default function MessagesPage() {
     if (!room.lastMessage) return 'No messages yet';
     
     const message = room.lastMessage;
-    const currentUserId = userId || user?.id || fallbackUserId;
-    const isOwnMessage = message.senderId === currentUserId;
-    const prefix = isOwnMessage ? 'You : ' : '';
-    
     if (message.type === 'text') {
-      const content = message.content || '';
-      const preview = content.length > 30 
-        ? `${content.substring(0, 30)}...` 
-        : content;
-      return `${prefix}${preview}`;
+      return message.content.length > 50 
+        ? `${message.content.substring(0, 50)}...` 
+        : message.content;
     } else if (message.type === 'image') {
-      return `${prefix}📷 Image`;
+      return '📷 Image';
     } else if (message.type === 'file') {
-      return `${prefix}📎 File`;
+      return '📎 File';
     } else if (message.type === 'video') {
-      return `${prefix}🎥 Video`;
+      return '🎥 Video';
     } else if (message.type === 'audio') {
-      return `${prefix}🎵 Audio`;
+      return '🎵 Audio';
     }
-    return `${prefix}Message`;
-  };
-  
-  // Get participant profile image URL from enriched profile
-  const getParticipantImage = (room: ChatRoom): string | null => {
-    if (room.type === 'group') {
-      // For group chats, could use group avatar if available
-      return room.avatar || null;
-    }
-    
-    // For direct messages, find the other participant's profile image
-    const currentUserId = userId || user?.id || fallbackUserId;
-    if (room.participants && room.participants.length === 2 && currentUserId) {
-      const otherParticipant = room.participants.find(p => {
-        const pId = extractParticipantId(p);
-        return pId && pId !== currentUserId;
-      });
-      
-      const otherParticipantId = otherParticipant ? extractParticipantId(otherParticipant) : null;
-      
-      if (otherParticipantId && typeof otherParticipantId === 'string' && otherParticipantId !== '[object Object]' && otherParticipantId.trim() !== '') {
-        // Get profile data
-        const profile = participantProfiles.get(otherParticipantId);
-        if (profile && profile.media && Array.isArray(profile.media)) {
-          // Filter out placeholder values and get first valid image URL
-          const validMedia = profile.media.filter(
-            (url) => typeof url === 'string' &&
-                     url.trim() !== '' &&
-                     url !== 'string' &&
-                     (url.startsWith('http://') || url.startsWith('https://'))
-          );
-          if (validMedia.length > 0) {
-            return validMedia[0];
-          }
-        }
-      }
-    }
-    
-    return null;
+    return 'Message';
   };
 
   // Convert API ChatMessage to UI Message format
@@ -1479,10 +1127,10 @@ export default function MessagesPage() {
             </div>
           </div>
           {isOwnMessage && (
-            <div className="flex items-center gap-1">
-              <CheckCheck className="h-3 w-3 text-blue-500" />
-              <span className="text-xs text-gray-500">Sent</span>
-            </div>
+          <div className="flex items-center gap-1">
+            <CheckCheck className="h-3 w-3 text-blue-500" />
+            <span className="text-xs text-gray-500">Sent</span>
+          </div>
           )}
         </div>
       );
@@ -1550,7 +1198,7 @@ export default function MessagesPage() {
         </div>
       );
     }
-    
+
     return (
       <div
         className={`rounded-lg p-3 max-w-xs ${
@@ -1587,9 +1235,9 @@ export default function MessagesPage() {
               >
                 New Chat
               </button>
-              <button className="text-[#FA266D] hover:text-pink-400 transition-colors">
-                <Menu className="h-5 w-5" />
-              </button>
+            <button className="text-[#FA266D] hover:text-pink-400 transition-colors">
+              <Menu className="h-5 w-5" />
+            </button>
             </div>
           </div>
 
@@ -1608,16 +1256,15 @@ export default function MessagesPage() {
 
         {/* Chat List - Scrollable */}
         <div className="flex-1 overflow-y-auto scrollbar-hide">
-          {loadingRooms && (!Array.isArray(rooms) || rooms.length === 0) ? (
-            <ChatListSkeleton count={5} />
+          {loading && (!Array.isArray(rooms) || rooms.length > 0) ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FA266D]"></div>
+            </div>
           ) : error ? (
             <div className="p-4 text-center">
               <p className="text-red-400 mb-2">{error}</p>
               <button
-                onClick={() => {
-                  console.log('[MessagesPage] Manual refetch triggered');
-                  refetchRooms();
-                }}
+                onClick={() => refetchRooms()}
                 className="px-4 py-2 bg-[#FA266D] text-white rounded-lg hover:bg-pink-600"
               >
                 Retry
@@ -1627,72 +1274,45 @@ export default function MessagesPage() {
             <div className="p-4 text-center text-gray-400">
               <p>No conversations yet</p>
               <p className="text-sm">Start a new conversation to begin chatting</p>
-              <p className="text-xs mt-2 text-gray-500">
-                Debug: roomsData={roomsData ? JSON.stringify(roomsData).substring(0, 100) : 'null'}, 
-                rooms.length={rooms.length}, 
-                loadingRooms={String(loadingRooms)}
-              </p>
             </div>
           ) : (
-            rooms.filter(room => {
-              const hasId = room && room.id && room.id.trim() !== '';
-              if (!hasId) {
-                console.warn('[MessagesPage] Filtering out room without id:', room);
-              }
-              return hasId;
-            }).map((room) => {
-              const roomId = getRoomId(room);
-              console.log('[MessagesPage] Rendering room:', roomId, room);
-              return (
-                <div
-                  key={roomId || room.id || (room as { _id?: string })._id}
-                  onClick={() => {
-                    console.log('Chat clicked, room ID:', roomId, 'full room:', room);
-                    if (roomId) {
-                      setSelectedChat(roomId);
-                    } else {
-                      console.error('Room has no ID:', room);
-                    }
-                  }}
-                  className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${
-                    selectedChat === roomId ? "bg-white/10" : ""
-                  }`}
-                >
+            rooms.filter(room => room.id).map((room) => (
+              <div
+                key={room.id}
+                onClick={() => {
+                  console.log('Chat clicked, room ID:', room.id, 'full room:', room);
+                  if (room.id) {
+                    setSelectedChat(room.id);
+                  } else {
+                    console.error('Room has no ID:', room);
+                  }
+                }}
+                className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${
+                  selectedChat === room.id ? "bg-white/10" : ""
+                }`}
+              >
                 <div className="flex items-center gap-3">
                   {/* Avatar */}
-                  {getParticipantImage(room) ? (
-                    <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
-                      <img
-                        src={getParticipantImage(room)!}
-                        alt={getRoomDisplayName(room)}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-gray-800 font-semibold text-sm">
-                        {getRoomDisplayName(room).charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                  )}
+                  <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center relative">
+                    <span className="text-gray-600 font-semibold text-sm">
+                      {getRoomDisplayName(room).charAt(0).toUpperCase()}
+                    </span>
+                    {/* Online status could be added here if available */}
+                  </div>
 
                   {/* Chat Info */}
-                  <div className="flex-1 min-w-0 flex flex-col">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <h3 className="text-white font-semibold text-sm truncate">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-white font-medium text-sm truncate">
                         {getRoomDisplayName(room)}
                       </h3>
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        {room.lastMessage?.createdAt ? (
-                          <span className="text-gray-400 text-xs whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        {room.lastMessage && (
+                          <span className="text-gray-400 text-xs">
                             {formatTime(room.lastMessage.createdAt)}
                           </span>
-                        ) : room.createdAt ? (
-                          <span className="text-gray-400 text-xs whitespace-nowrap">
-                            {formatTime(room.createdAt)}
-                          </span>
-                        ) : null}
-                        <CheckCheck className="h-3 w-3 text-gray-400" />
+                        )}
+                        <Check className="h-3 w-3 text-[#FA266D]" />
                       </div>
                     </div>
                     <p className="text-gray-400 text-xs truncate">
@@ -1708,8 +1328,7 @@ export default function MessagesPage() {
                   </div>
                 </div>
               </div>
-              );
-            })
+            ))
           )}
         </div>
       </div>
@@ -1758,7 +1377,45 @@ export default function MessagesPage() {
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto scrollbar-hide p-4">
               {messagesLoading ? (
-                <MessagesSkeleton count={6} />
+                <div className="flex items-center justify-center h-64">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FA266D]"></div>
+                </div>
+              ) : messagesError ? (
+                <div className="flex items-center justify-center h-64 text-red-400">
+                  <div className="text-center max-w-md">
+                    <p className="text-lg mb-2 font-semibold">Error loading messages</p>
+                    <p className="text-sm mb-4">
+                      {('data' in messagesError && messagesError.data && typeof messagesError.data === 'object' && 'message' in messagesError.data)
+                        ? String(messagesError.data.message)
+                        : ('message' in messagesError ? String(messagesError.message) : 'Failed to load messages')}
+                    </p>
+                    {messagesError && typeof messagesError === 'object' && 'message' in messagesError && String(messagesError.message).includes('not a participant') && (
+                      <p className="text-xs text-yellow-400 mb-4">
+                        This might happen if the room was created with a different account. Try creating a new chat.
+                      </p>
+                    )}
+                    <div className="flex gap-2 justify-center">
+                      <button
+                        onClick={() => {
+                          console.log('[MessagesPage] Retrying messages fetch for room:', selectedChat);
+                          refetchMessages();
+                        }}
+                        className="px-4 py-2 bg-[#FA266D] text-white rounded-lg hover:bg-pink-600"
+                      >
+                        Retry
+                      </button>
+                      <button
+                        onClick={() => {
+                          console.log('[MessagesPage] Clearing selected chat due to error');
+                          setSelectedChat(null);
+                        }}
+                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
               ) : !Array.isArray(messages) || messages.length === 0 ? (
                 <div className="flex items-center justify-center h-64 text-gray-400">
                   <div className="text-center">
@@ -1793,38 +1450,11 @@ export default function MessagesPage() {
                       }`}
                     >
                       <div className={`max-w-[70%] ${isOwnMessage ? "ml-auto" : "mr-auto"}`}>
-                        {renderMessage(message)}
+                      {renderMessage(message)}
                       </div>
                     </div>
                   );
                 })
-              )}
-              
-              {/* Typing Indicator */}
-              {selectedChat && typingUsers.has(selectedChat) && typingUsers.get(selectedChat)!.size > 0 && (
-                <div className="px-4 py-2">
-                  <div className="flex items-center gap-2 text-gray-400 text-sm">
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                    </div>
-                    <span>
-                      {Array.from(typingUsers.get(selectedChat)!).map((userId, idx, arr) => {
-                        const profile = participantProfiles.get(userId);
-                        const name = profile?.user?.userName || profile?.user?.firstName || 'Someone';
-                        return (
-                          <span key={userId}>
-                            {name}
-                            {idx < arr.length - 1 && ', '}
-                            {idx === arr.length - 2 && ' and '}
-                          </span>
-                        );
-                      })}
-                      {typingUsers.get(selectedChat)!.size === 1 ? ' is' : ' are'} typing...
-                    </span>
-                  </div>
-                </div>
               )}
             </div>
 
@@ -1837,47 +1467,12 @@ export default function MessagesPage() {
                   type="text"
                   placeholder="Write message..."
                   value={messageInput}
-                  onChange={(e) => {
-                    setMessageInput(e.target.value);
-                    // Send typing indicator
-                    if (selectedChat && connected) {
-                      setTyping(selectedChat, true);
-                      // Clear typing indicator after 2 seconds of no typing
-                      const timeout = setTimeout(() => {
-                        if (connected) {
-                          setTyping(selectedChat, false);
-                        }
-                      }, 2000);
-                      // Clear previous timeout
-                      if (typingTimeoutRef.current.has(`typing-${selectedChat}`)) {
-                        clearTimeout(typingTimeoutRef.current.get(`typing-${selectedChat}`)!);
-                      }
-                      typingTimeoutRef.current.set(`typing-${selectedChat}`, timeout);
-                    }
-                  }}
+                  onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       e.stopPropagation();
-                      // Stop typing indicator
-                      if (selectedChat && connected) {
-                        setTyping(selectedChat, false);
-                        if (typingTimeoutRef.current.has(`typing-${selectedChat}`)) {
-                          clearTimeout(typingTimeoutRef.current.get(`typing-${selectedChat}`)!);
-                          typingTimeoutRef.current.delete(`typing-${selectedChat}`);
-                        }
-                      }
                       sendMessage(e);
-                    }
-                  }}
-                  onBlur={() => {
-                    // Stop typing indicator when input loses focus
-                    if (selectedChat && connected) {
-                      setTyping(selectedChat, false);
-                      if (typingTimeoutRef.current.has(`typing-${selectedChat}`)) {
-                        clearTimeout(typingTimeoutRef.current.get(`typing-${selectedChat}`)!);
-                        typingTimeoutRef.current.delete(`typing-${selectedChat}`);
-                      }
                     }
                   }}
                   className="bg-transparent text-white placeholder-gray-400 focus:outline-none flex-1 text-base rounded-[32px] border border-white/10 py-[18px] pl-[24px] w-full"
@@ -2217,7 +1812,7 @@ export default function MessagesPage() {
               >
                 <X className="h-5 w-5" />
               </button>
-            </div>
+    </div>
 
             {authLoading && (
               <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-3 mb-4">
@@ -2234,6 +1829,15 @@ export default function MessagesPage() {
             {error && (
               <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 mb-4">
                 <p className="text-red-400 text-sm">{error}</p>
+              </div>
+            )}
+
+            {processingUserId && (
+              <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+                  <p className="text-blue-400 text-sm">Creating chat room...</p>
+                </div>
               </div>
             )}
             

@@ -159,10 +159,3 @@ export const {
   useGetProfileReviewsQuery,
   useFollowProfileMutation,
 } = profileApiSlice;
-
-
-
-
-
-
-

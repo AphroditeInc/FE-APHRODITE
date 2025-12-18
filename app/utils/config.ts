@@ -8,6 +8,8 @@ interface AppConfig {
   CLOUDINARY_CLOUD_NAME?: string;
   CLOUDINARY_UPLOAD_PRESET?: string;
   CLOUDINARY_API_KEY?: string;
+  NEXT_PUBLIC_WS_URL?: string;
+  NEXT_PUBLIC_WEBSOCKET_URL?: string;
   [key: string]: unknown;
 }
 
@@ -27,6 +29,8 @@ export const getConfig = (): AppConfig => {
     CLOUDINARY_CLOUD_NAME: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
     CLOUDINARY_UPLOAD_PRESET: process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET,
     CLOUDINARY_API_KEY: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY,
+    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL,
+    NEXT_PUBLIC_WEBSOCKET_URL: process.env.NEXT_PUBLIC_WEBSOCKET_URL,
   };
 };
 
