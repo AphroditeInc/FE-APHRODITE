@@ -246,13 +246,23 @@ function DetailsForm() {
                 console.log("Profile created successfully");
               } catch (error: unknown) {
                 console.error("Profile creation error:", error);
-                const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
-                  ? String(error.data.message)
-                  : (error && typeof error === 'object' && 'message' in error)
-                    ? String(error.message)
-                    : 'Failed to create profile';
-                setError(errorMessage);
-                return; // Don't proceed if profile creation fails
+                
+                // Check if it's a 409 conflict (profile already exists)
+                const is409 = error && typeof error === 'object' && 'status' in error && error.status === 409;
+                
+                if (is409) {
+                  console.log("Profile already exists, proceeding to next step");
+                  // Profile already exists, that's okay - continue to next step
+                } else {
+                  // Other errors should be shown to the user
+                  const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+                    ? String(error.data.message)
+                    : (error && typeof error === 'object' && 'message' in error)
+                      ? String(error.message)
+                      : 'Failed to create profile';
+                  setError(errorMessage);
+                  return; // Don't proceed if profile creation fails
+                }
               }
             }
             
@@ -320,13 +330,23 @@ function DetailsForm() {
                 console.log("Profile created successfully");
               } catch (error: unknown) {
                 console.error("Profile creation error:", error);
-                const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
-                  ? String(error.data.message)
-                  : (error && typeof error === 'object' && 'message' in error)
-                    ? String(error.message)
-                    : 'Failed to create profile';
-                setError(errorMessage);
-                return; // Don't proceed if profile creation fails
+                
+                // Check if it's a 409 conflict (profile already exists)
+                const is409 = error && typeof error === 'object' && 'status' in error && error.status === 409;
+                
+                if (is409) {
+                  console.log("Profile already exists, proceeding to next step");
+                  // Profile already exists, that's okay - continue to next step
+                } else {
+                  // Other errors should be shown to the user
+                  const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+                    ? String(error.data.message)
+                    : (error && typeof error === 'object' && 'message' in error)
+                      ? String(error.message)
+                      : 'Failed to create profile';
+                  setError(errorMessage);
+                  return; // Don't proceed if profile creation fails
+                }
               }
             }
             

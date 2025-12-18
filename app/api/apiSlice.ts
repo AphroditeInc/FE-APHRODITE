@@ -487,25 +487,13 @@ export const apiSlice = createApi({
         console.log('[createRoom transformResponse] Response type:', typeof response);
         console.log('[createRoom transformResponse] Is array:', Array.isArray(response));
         
-        // Check for error response: { success: false, message: "..." }
-        if (response && typeof response === 'object' && !Array.isArray(response)) {
-          const responseObj = response as Record<string, unknown>;
-          
-          // Check for { success: false, message: "..." } - this is an error even with HTTP 201
-          if ('success' in responseObj && responseObj.success === false) {
-            const errorMessage = 'message' in responseObj ? String(responseObj.message) : 'Failed to create room';
-            console.error('[createRoom transformResponse] API returned error:', errorMessage);
-            // Throw an error so RTK Query treats it as an error
-            throw new Error(errorMessage);
-          }
-        }
-        
-        // According to Swagger, POST /chat/rooms returns 201 with room data
-        // Handle different response formats
+        // Note: transformResponse is only called for successful responses (2xx status codes)
+        // Error responses are handled by transformErrorResponse or caught as fetch errors
+        // Don't throw errors here - just transform the successful response
         
         if (!response) {
           console.warn('[createRoom transformResponse] Response is null/undefined');
-          throw new Error('Room creation failed: No response from server');
+          return {} as ChatRoom; // Return empty object instead of throwing
         }
         
         // Case 1: Response is already a ChatRoom object (has roomId, id, or _id)
@@ -547,8 +535,28 @@ export const apiSlice = createApi({
         // Handle error responses
         if (response && typeof response === 'object') {
           const errorObj = response as Record<string, unknown>;
+          
+          // Check for nested data.message (common format)
+          if ('data' in errorObj && errorObj.data && typeof errorObj.data === 'object') {
+            const dataObj = errorObj.data as Record<string, unknown>;
+            if ('message' in dataObj) {
+              const message = String(dataObj.message);
+              console.error('[createRoom transformErrorResponse] Error message:', message);
+              return { message };
+            }
+          }
+          
+          // Check for direct message property
           if ('message' in errorObj) {
-            return { message: String(errorObj.message) };
+            const message = String(errorObj.message);
+            console.error('[createRoom transformErrorResponse] Error message:', message);
+            return { message };
+          }
+          
+          // Check for error property
+          if ('error' in errorObj && typeof errorObj.error === 'string') {
+            console.error('[createRoom transformErrorResponse] Error string:', errorObj.error);
+            return { message: String(errorObj.error) };
           }
         }
         return { message: 'Failed to create room' };
