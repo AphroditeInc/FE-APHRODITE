@@ -201,15 +201,16 @@ export interface ChatRoom {
 
 /**
  * Send Message Payload
+ * Matches API endpoint: POST /chat/messages
  */
 export interface SendMessagePayload {
-  receiverId?: string;
-  content: string;
-  type: MessageType;
-  metadata?: Record<string, unknown>;
-  attachments?: string[];
-  replyTo?: string;
-  tempId?: string;
+  receiverId: string; // Required: ID of the user receiving the message
+  content: string; // Required: Message content
+  type: MessageType; // Required: Message type (text, image, file, video, audio)
+  metadata?: Record<string, unknown>; // Optional: Additional metadata (e.g., { imageUrl: "..." })
+  attachments?: string[]; // Optional: Array of attachment URLs
+  replyTo?: string; // Optional: ID of message being replied to
+  tempId?: string; // Optional: Temporary ID for optimistic UI updates
 }
 
 /**
@@ -276,8 +277,14 @@ export interface AuthProfileResponse {
  */
 export interface Service {
   id?: string;
+  profileId?: string;
   name?: string;
   description?: string;
+  durationMinutes?: number;
+  pricingId?: string;
+  active?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
   price?: number;
   duration?: number;
   [key: string]: unknown;
@@ -330,21 +337,30 @@ export interface EnrichedProfile {
     firstName: string;
     lastName: string;
   };
-  bio: string;
-  education: string;
-  occupation: string;
-  maritalStatus: string;
-  smoker: boolean;
-  hasVideoProof: boolean;
-  issuedIdVerified: boolean;
-  media: string[];
-  services: Service[];
-  followersCount: number;
-  createdAt: string;
-  updatedAt: string;
-  pricing: Pricing | null;
-  servicesExpanded: Service[];
-  reviews: {
+  bio?: string;
+  education?: string;
+  occupation?: string;
+  maritalStatus?: string;
+  gender?: string;
+  sexualOrientation?: string;
+  bodyBuild?: string;
+  bustSize?: string;
+  nationality?: string;
+  ethnicity?: string;
+  state?: string;
+  city?: string;
+  smoker?: boolean;
+  looks?: string;
+  hasVideoProof?: boolean;
+  issuedIdVerified?: boolean;
+  media?: string[];
+  services?: Service[] | string[];
+  followersCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  pricing?: Pricing | null;
+  servicesExpanded?: Service[];
+  reviews?: {
     items: ReviewItem[];
     limit: number;
     hasMore: boolean;

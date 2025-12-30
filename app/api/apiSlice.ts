@@ -21,9 +21,10 @@ import type {
 
 interface RootState {
   auth?: {
-    accessToken?: string;
-    refreshToken?: string;
-    uid?: string;
+    accessToken?: string | null;
+    refreshToken?: string | null;
+    uid?: string | null;
+    user?: unknown;
   };
 }
 
@@ -234,7 +235,8 @@ export const apiSlice = createApi({
       }),
     }),
     getUserProfile: builder.query<ApiResponse<User>, string>({
-      query: (userId) => `/auth/users/${userId}`,
+      query: (userId) => `/profiles/users/${userId}`,
+      // query: (userId) => `/auth/profile`,
       providesTags: (result, error, id) => [{ type: 'User', id }],
     }),
     updateUser: builder.mutation<ApiResponse<User>, { userId: string; data: Partial<User> }>({
@@ -247,39 +249,387 @@ export const apiSlice = createApi({
     }),
 
     // Chat Endpoints
-    getRoomMessages: builder.query<ApiResponse<ChatMessage[]>, { roomId: string; query?: GetMessagesQuery }>({
+    getRoomMessages: builder.query<ChatMessage[], { roomId: string; query?: GetMessagesQuery }>({
       query: ({ roomId, query }) => {
+        if (!roomId || roomId.trim() === '') {
+          console.error('[getRoomMessages] Invalid roomId:', roomId);
+          throw new Error('Room ID is required');
+        }
+        
         const params = new URLSearchParams();
         if (query?.limit) params.append('limit', query.limit.toString());
         if (query?.offset) params.append('offset', query.offset.toString());
         if (query?.before) params.append('before', query.before);
         if (query?.after) params.append('after', query.after);
-        return `/chat/rooms/${roomId}/messages?${params.toString()}`;
+        
+        const queryString = params.toString();
+        const url = `/chat/rooms/${roomId}/messages${queryString ? `?${queryString}` : ''}`;
+        console.log('[getRoomMessages] Fetching messages for room:', roomId, 'URL:', url);
+        return url;
       },
-      providesTags: (result, error, { roomId }) => [{ type: 'Chat', id: roomId }],
+      transformResponse: (response: unknown, meta, arg) => {
+        console.log('[getRoomMessages transformResponse] Raw response:', response);
+        console.log('[getRoomMessages transformResponse] Response type:', typeof response);
+        console.log('[getRoomMessages transformResponse] Is array:', Array.isArray(response));
+        
+        // Check for error response: { success: false, message: "..." }
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          const responseObj = response as Record<string, unknown>;
+          
+          // Check for { success: false, message: "..." } - this is an error even with HTTP 200
+          if ('success' in responseObj && responseObj.success === false) {
+            const errorMessage = 'message' in responseObj ? String(responseObj.message) : 'Failed to fetch messages';
+            console.error('[getRoomMessages transformResponse] API returned error:', errorMessage);
+            // Throw an error so RTK Query treats it as an error
+            throw new Error(errorMessage);
+          }
+        }
+        
+        // According to Swagger API docs, endpoint returns array directly: [{...}, {...}]
+        // RTK Query's transformResponse receives result.data from baseQuery
+        // So if API returns array directly, response should be that array
+        
+        // Helper function to normalize a message object
+        const normalizeMessage = (msg: any): ChatMessage => {
+          // Extract senderId - can be string or object with _id
+          let senderId = '';
+          if (typeof msg.senderId === 'string') {
+            senderId = msg.senderId;
+          } else if (msg.senderId && typeof msg.senderId === 'object' && '_id' in msg.senderId) {
+            senderId = String(msg.senderId._id);
+          } else if (msg.senderId && typeof msg.senderId === 'object' && 'id' in msg.senderId) {
+            senderId = String(msg.senderId.id);
+          }
+          
+          // Extract receiverId - can be string or object with _id
+          let receiverId = '';
+          if (typeof msg.receiverId === 'string') {
+            receiverId = msg.receiverId;
+          } else if (msg.receiverId && typeof msg.receiverId === 'object' && '_id' in msg.receiverId) {
+            receiverId = String(msg.receiverId._id);
+          } else if (msg.receiverId && typeof msg.receiverId === 'object' && 'id' in msg.receiverId) {
+            receiverId = String(msg.receiverId.id);
+          }
+          
+          // Extract id from _id or id field
+          const id = msg._id ? String(msg._id) : (msg.id ? String(msg.id) : '');
+          
+          return {
+            id,
+            senderId,
+            receiverId,
+            roomId: msg.roomId || '',
+            content: msg.content || '',
+            type: (msg.type || 'text') as ChatMessage['type'],
+            status: (msg.status || 'sent') as ChatMessage['status'],
+            createdAt: msg.createdAt || new Date().toISOString(),
+            updatedAt: msg.updatedAt || msg.createdAt || new Date().toISOString(),
+            metadata: msg.metadata || {},
+            attachments: msg.attachments || [],
+            readAt: msg.readAt || undefined,
+            deliveredAt: msg.deliveredAt || undefined,
+            replyTo: msg.replyTo || undefined,
+          };
+        };
+        
+        // Case 1: Response is already an array (direct from API - SUCCESS case)
+        if (Array.isArray(response)) {
+          console.log('[getRoomMessages transformResponse] Response is array (success), length:', response.length);
+          if (response.length > 0) {
+            console.log('[getRoomMessages transformResponse] First message before normalization:', response[0]);
+          }
+          // Normalize all messages
+          const normalizedMessages = response.map(normalizeMessage);
+          console.log('[getRoomMessages transformResponse] Normalized messages count:', normalizedMessages.length);
+          return normalizedMessages;
+        }
+        
+        // Case 2: Response is wrapped in an object with success: true
+        if (response && typeof response === 'object' && response !== null) {
+          const responseObj = response as Record<string, unknown>;
+          
+          // Check for { success: true, data: [...] }
+          if ('success' in responseObj && responseObj.success === true && 'data' in responseObj && Array.isArray(responseObj.data)) {
+            console.log('[getRoomMessages transformResponse] Found success:true with data array, length:', responseObj.data.length);
+            const normalizedMessages = (responseObj.data as any[]).map(normalizeMessage);
+            return normalizedMessages;
+          }
+          
+          // Check for { data: [...] } (without success field, assume success)
+          if ('data' in responseObj && Array.isArray(responseObj.data)) {
+            console.log('[getRoomMessages transformResponse] Found response.data array, length:', responseObj.data.length);
+            const normalizedMessages = (responseObj.data as any[]).map(normalizeMessage);
+            return normalizedMessages;
+          }
+          
+          // Check for { items: [...] }
+          if ('items' in responseObj && Array.isArray(responseObj.items)) {
+            console.log('[getRoomMessages transformResponse] Found response.items array, length:', responseObj.items.length);
+            const normalizedMessages = (responseObj.items as any[]).map(normalizeMessage);
+            return normalizedMessages;
+          }
+          
+          // Check for { messages: [...] }
+          if ('messages' in responseObj && Array.isArray(responseObj.messages)) {
+            console.log('[getRoomMessages transformResponse] Found response.messages array, length:', responseObj.messages.length);
+            const normalizedMessages = (responseObj.messages as any[]).map(normalizeMessage);
+            return normalizedMessages;
+          }
+          
+          // Log the actual structure for debugging
+          console.warn('[getRoomMessages transformResponse] Response is object but no array found. Structure:', JSON.stringify(responseObj, null, 2));
+        }
+        
+        // Case 3: Response is null, undefined, or unexpected format
+        console.warn('[getRoomMessages transformResponse] Unexpected response format:', response);
+        console.warn('[getRoomMessages transformResponse] Returning empty array');
+        return [];
+      },
+      transformErrorResponse: (response: unknown, meta, arg) => {
+        console.error('[getRoomMessages transformErrorResponse] Error response:', response);
+        // Handle error responses
+        if (response && typeof response === 'object') {
+          const errorObj = response as Record<string, unknown>;
+          if ('message' in errorObj) {
+            return { message: String(errorObj.message) };
+          }
+        }
+        return { message: 'Failed to fetch messages' };
+      },
+      providesTags: (result, error, { roomId }) => {
+        console.log('[getRoomMessages providesTags] Result:', result, 'Error:', error, 'RoomId:', roomId);
+        return result ? [{ type: 'Chat', id: roomId }] : [];
+      },
+      // Keep cached data for 5 minutes to prevent unnecessary refetches when switching rooms
+      keepUnusedDataFor: 300,
     }),
-    sendMessage: builder.mutation<ApiResponse<ChatMessage>, SendMessagePayload>({
+    sendMessage: builder.mutation<ChatMessage, SendMessagePayload>({
       query: (body) => ({
         url: "/chat/messages",
         method: "POST",
         body,
       }),
-      invalidatesTags: (result, error, arg) => result?.data?.roomId ? [{ type: 'Chat', id: result.data.roomId }] : ['Chat'],
+      transformResponse: (response: unknown, meta, arg) => {
+        console.log('[sendMessage transformResponse] Raw response:', response);
+        console.log('[sendMessage transformResponse] Response type:', typeof response);
+        
+        // According to Swagger: POST /chat/messages returns the message object directly (not wrapped)
+        // Status 201 with message object: { id, senderId, receiverId, roomId, content, ... }
+        
+        // Check if response is already a ChatMessage object (has id or senderId)
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          const responseObj = response as Record<string, unknown>;
+          
+          // Check for { success: false, message: "..." } - this is an error even with HTTP 201
+          if ('success' in responseObj && responseObj.success === false) {
+            const errorMessage = 'message' in responseObj ? String(responseObj.message) : 'Failed to send message';
+            console.error('[sendMessage transformResponse] API returned error:', errorMessage);
+            // Throw an error so RTK Query treats it as an error
+            throw new Error(errorMessage);
+          }
+          
+          // Check if it's wrapped in { success: true, data: {...} }
+          if ('success' in responseObj && responseObj.success === true && 'data' in responseObj && responseObj.data && typeof responseObj.data === 'object') {
+            console.log('[sendMessage transformResponse] Found success:true with data object');
+            return responseObj.data as ChatMessage;
+          }
+          
+          // Check if it's wrapped in { data: {...} }
+          if ('data' in responseObj && responseObj.data && typeof responseObj.data === 'object') {
+            console.log('[sendMessage transformResponse] Found data object');
+            return responseObj.data as ChatMessage;
+          }
+          
+          // Check if it's already a message object (has id or senderId)
+          if ('id' in responseObj || 'senderId' in responseObj) {
+            console.log('[sendMessage transformResponse] Response is already ChatMessage object');
+            return responseObj as unknown as ChatMessage;
+          }
+        }
+        
+        // Last resort: cast to ChatMessage
+        console.log('[sendMessage transformResponse] Using fallback cast');
+        return response as unknown as ChatMessage;
+      },
+      transformErrorResponse: (response: unknown, meta, arg) => {
+        console.error('[sendMessage transformErrorResponse] Error response:', response);
+        // Handle error responses
+        if (response && typeof response === 'object') {
+          const errorObj = response as Record<string, unknown>;
+          if ('message' in errorObj) {
+            return { message: String(errorObj.message) };
+          }
+        }
+        return { message: 'Failed to send message' };
+      },
+      invalidatesTags: (result, error, arg) => result?.roomId ? [{ type: 'Chat', id: result.roomId }, 'Room'] : ['Chat', 'Room'],
     }),
-    getUserRooms: builder.query<ApiResponse<ChatRoom[]>, { limit?: number; offset?: number }>({
-      query: ({ limit = 10, offset = 0 }) => `/chat/rooms?limit=${limit}&offset=${offset}`,
+    getUserRooms: builder.query<ChatRoom[], { limit?: number; offset?: number }>({
+      query: ({ limit = 10, offset = 0 }) => {
+        console.log('[getUserRooms] Query called with:', { limit, offset });
+        return `/chat/rooms?limit=${limit}&offset=${offset}`;
+      },
+      transformResponse: (response: unknown, meta, arg) => {
+        console.log('[getUserRooms] Raw response:', response);
+        console.log('[getUserRooms] Response type:', typeof response);
+        
+        // Check for error response: { success: false, message: "..." }
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          const responseObj = response as Record<string, unknown>;
+          
+          // Check for { success: false, message: "..." } - this is an error even with HTTP 200
+          if ('success' in responseObj && responseObj.success === false) {
+            const errorMessage = 'message' in responseObj ? String(responseObj.message) : 'Failed to fetch rooms';
+            console.error('[getUserRooms] API returned error:', errorMessage);
+            // Throw an error so RTK Query treats it as an error
+            throw new Error(errorMessage);
+          }
+        }
+        
+        // According to Swagger: GET /chat/rooms returns { success: true, data: [...] }
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          const responseObj = response as Record<string, unknown>;
+          
+          // Check for { success: true, data: [...] }
+          if ('success' in responseObj && responseObj.success === true && 'data' in responseObj && Array.isArray(responseObj.data)) {
+            console.log('[getUserRooms] Extracted from ApiResponse.data (success:true), length:', responseObj.data.length);
+            return responseObj.data as unknown as ChatRoom[];
+          }
+          
+          // Check for { data: [...] } (without success field, assume success)
+          if ('data' in responseObj && Array.isArray(responseObj.data)) {
+            console.log('[getUserRooms] Extracted from ApiResponse.data (no success field), length:', responseObj.data.length);
+            return responseObj.data as unknown as ChatRoom[];
+          }
+        }
+        
+        // Fallback: if response is already an array, return it
+        if (Array.isArray(response)) {
+          console.log('[getUserRooms] Response is already array, length:', response.length);
+          return response as unknown as ChatRoom[];
+        }
+        
+        console.warn('[getUserRooms] Unexpected response format, returning empty array');
+        return [];
+      },
+      transformErrorResponse: (response: unknown, meta, arg) => {
+        console.error('[getUserRooms transformErrorResponse] Error response:', response);
+        // Handle error responses
+        if (response && typeof response === 'object') {
+          const errorObj = response as Record<string, unknown>;
+          if ('message' in errorObj) {
+            return { message: String(errorObj.message) };
+          }
+        }
+        return { message: 'Failed to fetch rooms' };
+      },
       providesTags: ['Room'],
+      // Keep cached data for 5 minutes
+      keepUnusedDataFor: 300,
     }),
-    createRoom: builder.mutation<ApiResponse<ChatRoom>, CreateRoomPayload>({
-      query: (body) => ({
-        url: "/chat/rooms",
-        method: "POST",
-        body,
-      }),
-      invalidatesTags: ['Room'],
+    createRoom: builder.mutation<ChatRoom, CreateRoomPayload>({
+      query: (body) => {
+        console.log('[createRoom query] Creating room with payload:', body);
+        return {
+          url: "/chat/rooms",
+          method: "POST",
+          body,
+        };
+      },
+      transformResponse: (response: unknown, meta, arg) => {
+        console.log('[createRoom transformResponse] Raw response:', response);
+        console.log('[createRoom transformResponse] Response type:', typeof response);
+        console.log('[createRoom transformResponse] Is array:', Array.isArray(response));
+        
+        // Note: transformResponse is only called for successful responses (2xx status codes)
+        // Error responses are handled by transformErrorResponse or caught as fetch errors
+        // Don't throw errors here - just transform the successful response
+        
+        if (!response) {
+          console.warn('[createRoom transformResponse] Response is null/undefined');
+          return {} as ChatRoom; // Return empty object instead of throwing
+        }
+        
+        // Case 1: Response is already a ChatRoom object (has roomId, id, or _id)
+        if (response && typeof response === 'object' && !Array.isArray(response)) {
+          const responseObj = response as Record<string, unknown>;
+          
+          if ('roomId' in responseObj || 'id' in responseObj || '_id' in responseObj) {
+            console.log('[createRoom transformResponse] Response is ChatRoom object:', responseObj);
+            return responseObj as unknown as ChatRoom;
+          }
+          
+          // Case 2: Response is wrapped in { data: ChatRoom }
+          if ('data' in responseObj && responseObj.data && typeof responseObj.data === 'object') {
+            console.log('[createRoom transformResponse] Found response.data:', responseObj.data);
+            const roomData = responseObj.data as Record<string, unknown>;
+            if ('roomId' in roomData || 'id' in roomData || '_id' in roomData) {
+              return roomData as unknown as ChatRoom;
+            }
+          }
+          
+          // Case 3: Response is wrapped in { success: true, data: ChatRoom }
+          if ('success' in responseObj && responseObj.success === true && 'data' in responseObj && responseObj.data && typeof responseObj.data === 'object') {
+            console.log('[createRoom transformResponse] Found ApiResponse format with success:true:', responseObj.data);
+            const roomData = responseObj.data as Record<string, unknown>;
+            if ('roomId' in roomData || 'id' in roomData || '_id' in roomData) {
+              return roomData as unknown as ChatRoom;
+            }
+          }
+          
+          console.warn('[createRoom transformResponse] Unexpected response structure:', JSON.stringify(responseObj, null, 2));
+        }
+        
+        // Last resort: try to cast
+        console.log('[createRoom transformResponse] Using fallback cast');
+        return response as unknown as ChatRoom;
+      },
+      transformErrorResponse: (response: unknown, meta, arg) => {
+        console.error('[createRoom transformErrorResponse] Error response:', response);
+        // Handle error responses
+        if (response && typeof response === 'object') {
+          const errorObj = response as Record<string, unknown>;
+          
+          // Check for nested data.message (common format)
+          if ('data' in errorObj && errorObj.data && typeof errorObj.data === 'object') {
+            const dataObj = errorObj.data as Record<string, unknown>;
+            if ('message' in dataObj) {
+              const message = String(dataObj.message);
+              console.error('[createRoom transformErrorResponse] Error message:', message);
+              return { message };
+            }
+          }
+          
+          // Check for direct message property
+          if ('message' in errorObj) {
+            const message = String(errorObj.message);
+            console.error('[createRoom transformErrorResponse] Error message:', message);
+            return { message };
+          }
+          
+          // Check for error property
+          if ('error' in errorObj && typeof errorObj.error === 'string') {
+            console.error('[createRoom transformErrorResponse] Error string:', errorObj.error);
+            return { message: String(errorObj.error) };
+          }
+        }
+        return { message: 'Failed to create room' };
+      },
+      invalidatesTags: ['Room'], // This should trigger getUserRooms/getConversations to refetch
     }),
-    getConversations: builder.query<ApiResponse<ChatRoom[]>, { limit?: number; offset?: number }>({
+    getConversations: builder.query<ChatRoom[], { limit?: number; offset?: number }>({
       query: ({ limit = 10, offset = 0 }) => `/chat/conversations?limit=${limit}&offset=${offset}`,
+      transformResponse: (response: ApiResponse<ChatRoom[]>) => {
+        // Extract data from ApiResponse: { success: true, data: [...] }
+        if (response && typeof response === 'object' && 'data' in response && Array.isArray(response.data)) {
+          return response.data;
+        }
+        // Fallback: if response is already an array, return it
+        if (Array.isArray(response)) {
+          return response;
+        }
+        return [];
+      },
       providesTags: ['Room'],
     }),
     updateMessageStatus: builder.mutation<ApiResponse<ChatMessage>, { messageId: string } & UpdateMessageStatusPayload>({

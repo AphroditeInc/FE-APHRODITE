@@ -2,6 +2,7 @@ import { apiSlice } from "../../app/api/apiSlice";
 import endpoints from "../../app/utils/endpoints";
 
 export const authApiSlice = apiSlice.injectEndpoints({
+  overrideExisting: true, // Allow overriding existing endpoints
   endpoints: (builder) => ({
     registerUser: builder.mutation({
       query: (data) => ({
@@ -50,7 +51,7 @@ export const authApiSlice = apiSlice.injectEndpoints({
       extraOptions: { serviceKey: "us" },
       providesTags: ['User'],
     }),
-    updateProfile: builder.mutation({
+    updateAuthProfile: builder.mutation({
       query: (data) => ({
         url: endpoints.AUTH_PROFILE,
         method: "PUT",
@@ -119,7 +120,7 @@ export const {
   useLogoutMutation,
   useRefreshTokenMutation,
   useGetAuthProfileQuery,
-  useUpdateProfileMutation,
+  useUpdateAuthProfileMutation,
   useChangePasswordMutation,
   useSendOTPMutation,
   useCreateCompleteUserMutation,
@@ -127,4 +128,3 @@ export const {
   useCompleteBasicDetailsMutation,
   useUpdateUserMutation,
 } = authApiSlice;
-

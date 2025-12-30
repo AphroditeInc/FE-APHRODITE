@@ -1,96 +1,94 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { getAuthTokens, getUser, saveAuthTokens, saveUser, clearAuthData } from "../../lib/utils/storage.utils";
-import type { User, AuthTokens } from "../../lib/types";
+import type { User } from "@/lib/types";
 
 interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
-  uid: string | null;
   user: User | null;
-  isAuthenticated: boolean;
+  uid: string | null;
 }
 
-// Initialize state from localStorage (only on client side)
-const getInitialState = (): AuthState => {
-  if (typeof window === 'undefined') {
-    return {
-      accessToken: null,
-      refreshToken: null,
-      uid: null,
-      user: null,
-      isAuthenticated: false,
-    };
-  }
+interface SetCredentialsPayload {
+  access_token?: string;
+  refresh_token?: string;
+  user?: User;
+  uid?: string;
+}
 
-  const tokens = getAuthTokens();
-  const user = getUser();
-
-  return {
-    accessToken: tokens?.accessToken || null,
-    refreshToken: tokens?.refreshToken || null,
-    uid: user?.id || null,
-    user: user || null,
-    isAuthenticated: !!tokens?.accessToken,
-  };
+const initialState: AuthState = {
+  accessToken: typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null,
+  refreshToken: typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null,
+  user: typeof window !== 'undefined' 
+    ? (localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!) : null)
+    : null,
+  uid: typeof window !== 'undefined' ? localStorage.getItem('uid') : null,
 };
-
-const initialState: AuthState = getInitialState();
 
 const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
-    setCredentials: (state, action: PayloadAction<{
-      access_token: string;
-      refresh_token: string;
-      user?: User;
-      uid?: string;
-    }>) => {
+    setCredentials: (state, action: PayloadAction<SetCredentialsPayload>) => {
       const { access_token, refresh_token, user, uid } = action.payload;
       
-      const tokens: AuthTokens = {
-        accessToken: access_token,
-        refreshToken: refresh_token,
-        expiresIn: '3600',
-      };
-
-      state.accessToken = access_token;
-      state.refreshToken = refresh_token;
-      state.uid = uid || user?.id || null;
-      state.user = user || state.user;
-      state.isAuthenticated = true;
-
-      // Save to localStorage
-      saveAuthTokens(tokens);
+      if (access_token) {
+        state.accessToken = access_token;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('accessToken', access_token);
+        }
+      }
+      
+      if (refresh_token) {
+        state.refreshToken = refresh_token;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('refreshToken', refresh_token);
+        }
+      }
+      
       if (user) {
-        saveUser(user);
+        state.user = user;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('user', JSON.stringify(user));
+        }
+      }
+      
+      if (uid) {
+        state.uid = uid;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('uid', uid);
+        }
+      } else if (user?.id) {
+        state.uid = user.id;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('uid', user.id);
+        }
       }
     },
     logOut: (state) => {
       state.accessToken = null;
       state.refreshToken = null;
-      state.uid = null;
       state.user = null;
-      state.isAuthenticated = false;
+      state.uid = null;
 
-      // Clear localStorage
-      clearAuthData();
-    },
-    setUser: (state, action: PayloadAction<User>) => {
-      state.user = action.payload;
-      state.uid = action.payload.id;
-      saveUser(action.payload);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        localStorage.removeItem('uid');
+      }
     },
   },
 });
 
-export const { setCredentials, logOut, setUser } = authSlice.actions;
-export default authSlice.reducer;
+export const { setCredentials, logOut } = authSlice.actions;
 
 // Selectors
-export const selectCurrentAccessToken = (state: { auth: AuthState }) => state.auth.accessToken;
-export const selectCurrentRefreshToken = (state: { auth: AuthState }) => state.auth.refreshToken;
 export const selectCurrentUser = (state: { auth: AuthState }) => state.auth.user;
-export const selectCurrentUid = (state: { auth: AuthState }) => state.auth.uid;
-export const selectIsAuthenticated = (state: { auth: AuthState }) => state.auth.isAuthenticated;
+export const selectIsAuthenticated = (state: { auth: AuthState }) => 
+  !!state.auth.accessToken && !!state.auth.user;
+export const selectAccessToken = (state: { auth: AuthState }) => state.auth.accessToken;
+export const selectRefreshToken = (state: { auth: AuthState }) => state.auth.refreshToken;
+export const selectUid = (state: { auth: AuthState }) => state.auth.uid;
+
+export default authSlice.reducer;
 

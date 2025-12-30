@@ -26,12 +26,18 @@ export default function MessageSender({ receiverId }: { receiverId?: string }) {
   const handleSend = async () => {
     if (!content.trim()) return;
 
+    // Validate receiverId is provided (required by API)
+    if (!receiverId || receiverId.trim() === "") {
+      console.error("Receiver ID is required to send a message");
+      return;
+    }
+
     // Generate a temporary ID for optimistic UI updates
     const tempId = `temp_${Date.now()}`;
 
     // Prepare the message payload exactly as specified
     const payload = {
-      receiverId: receiverId || "", // Replace with actual receiver ID
+      receiverId: receiverId, // Required: ID of the user receiving the message
       content: content,
       type: "text" as const,
       metadata: imageUrl
@@ -44,17 +50,17 @@ export default function MessageSender({ receiverId }: { receiverId?: string }) {
       tempId: tempId,
     };
 
-    // Send the message
-    const response = await sendMessage(payload);
-
-    if (response.success && response.data) {
-      console.log("Message sent successfully:", response.data);
+    try {
+      // Send the message - returns ChatMessage directly (not ApiResponse)
+      const sentMessage = await sendMessage(payload);
+      
+      console.log("Message sent successfully:", sentMessage);
       // Clear the form
       setContent("");
       setImageUrl("");
       setAttachments([]);
-    } else {
-      console.error("Failed to send message:", response.error);
+    } catch (error) {
+      console.error("Failed to send message:", error);
     }
   };
 
@@ -147,4 +153,3 @@ export default function MessageSender({ receiverId }: { receiverId?: string }) {
     </div>
   );
 }
-

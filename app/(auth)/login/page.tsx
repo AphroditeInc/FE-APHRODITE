@@ -90,9 +90,7 @@ export default function LoginPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {(error || loginError) && (
           <div className="bg-red-500/10 border border-red-500 rounded-lg p-3 text-red-400 text-sm font-urbanist">
-            {error || (loginError && typeof loginError === 'object' && 'data' in loginError && loginError.data && typeof loginError.data === 'object' && 'message' in loginError.data
-              ? String(loginError.data.message)
-              : 'Login failed. Please try again.')}
+            {error || (loginError as any)?.data?.message || 'Login failed. Please try again.'}
           </div>
         )}
 

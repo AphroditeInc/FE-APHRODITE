@@ -23,11 +23,14 @@ const USER_UPDATE_PROFILE = (userId: string) => `/auth/users/${userId}`;
 
 // Profile
 const PROFILE_CREATE = "/profiles";
+const PROFILE_LIST = "/profiles"; // GET /profiles - list profiles with filters
+const PROFILE_UPDATE = (id: string) => `/profiles/${id}`; // PUT /profiles/{id}
+const PROFILE_GET_BY_ID = (id: string) => `/profiles/${id}`; // GET /profiles/{id}
 const PROFILE_GET_USER_PROFILE = (userId: string) => `/profiles/user/${userId}`;
 const PROFILE_PRICING = (userId: string) => `/profiles/${userId}/pricing`;
-const PROFILE_SERVICES = (userId: string) => `/profiles/${userId}/services`;
+const PROFILE_SERVICES = (id: string) => `/profiles/${id}/services`;
 const PROFILE_VIDEO = (userId: string) => `/profiles/${userId}/video-proof`;
-const PROFILE_MEDIA = (userId: string) => `/profiles/${userId}/media`;
+const PROFILE_MEDIA = (id: string) => `/profiles/${id}/media`;
 const PROFILE_REVIEWS = (userId: string) => `/profiles/${userId}/reviews`;
 const PROFILE_FOLLOW = (userId: string) => `/profiles/${userId}/follow`;
 
@@ -64,6 +67,9 @@ const endpoints = {
   
   // Profile
   PROFILE_CREATE,
+  PROFILE_LIST,
+  PROFILE_UPDATE,
+  PROFILE_GET_BY_ID,
   PROFILE_GET_USER_PROFILE,
   PROFILE_PRICING,
   PROFILE_SERVICES,
@@ -86,4 +92,3 @@ const endpoints = {
 };
 
 export default endpoints;
-
