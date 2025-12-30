@@ -378,17 +378,4 @@ export interface EnrichedProfile {
 export interface EnrichedProfileResponse {
   success: boolean;
   data: EnrichedProfile;
-    stats: {
-      averageRating: number;
-      totalReviews: number;
-      ratingDistribution: Record<string, number>;
-    };
-  };
 }
-
-/**
- * Enriched Profile API Response
- */
-export interface EnrichedProfileResponse {
-  success: boolean;
-  data: EnrichedProfile;

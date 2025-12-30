@@ -36,6 +36,7 @@ export default function ProfileDetailPage() {
   const [activeTab, setActiveTab] = useState("About");
   const [reviewText, setReviewText] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
+  const [isLiked, setIsLiked] = useState(false);
 
   // Fetch profile from API
   const { data: profileResponse, isLoading, error } = useGetProfileByIdQuery(profileId, {
@@ -97,7 +98,7 @@ export default function ProfileDetailPage() {
       rating: enrichedProfile.reviews?.stats?.averageRating || 0,
       image: profileImage,
       isOnline: false, // API doesn't provide this yet
-      isLiked: false, // Will be handled separately if needed
+      isLiked: isLiked, // Use state for like status
       services: uniqueServices,
       age: undefined, // Calculate from dob if available
       bio: enrichedProfile.bio || '',
@@ -170,12 +171,7 @@ export default function ProfileDetailPage() {
   };
 
   const handleLike = () => {
-    if (profile) {
-      setProfile({
-        ...profile,
-        isLiked: !profile.isLiked
-      });
-    }
+    setIsLiked(!isLiked);
   };
 
   // Loading state

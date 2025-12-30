@@ -289,13 +289,59 @@ export const apiSlice = createApi({
         // RTK Query's transformResponse receives result.data from baseQuery
         // So if API returns array directly, response should be that array
         
+        // Helper function to normalize a message object
+        const normalizeMessage = (msg: any): ChatMessage => {
+          // Extract senderId - can be string or object with _id
+          let senderId = '';
+          if (typeof msg.senderId === 'string') {
+            senderId = msg.senderId;
+          } else if (msg.senderId && typeof msg.senderId === 'object' && '_id' in msg.senderId) {
+            senderId = String(msg.senderId._id);
+          } else if (msg.senderId && typeof msg.senderId === 'object' && 'id' in msg.senderId) {
+            senderId = String(msg.senderId.id);
+          }
+          
+          // Extract receiverId - can be string or object with _id
+          let receiverId = '';
+          if (typeof msg.receiverId === 'string') {
+            receiverId = msg.receiverId;
+          } else if (msg.receiverId && typeof msg.receiverId === 'object' && '_id' in msg.receiverId) {
+            receiverId = String(msg.receiverId._id);
+          } else if (msg.receiverId && typeof msg.receiverId === 'object' && 'id' in msg.receiverId) {
+            receiverId = String(msg.receiverId.id);
+          }
+          
+          // Extract id from _id or id field
+          const id = msg._id ? String(msg._id) : (msg.id ? String(msg.id) : '');
+          
+          return {
+            id,
+            senderId,
+            receiverId,
+            roomId: msg.roomId || '',
+            content: msg.content || '',
+            type: (msg.type || 'text') as ChatMessage['type'],
+            status: (msg.status || 'sent') as ChatMessage['status'],
+            createdAt: msg.createdAt || new Date().toISOString(),
+            updatedAt: msg.updatedAt || msg.createdAt || new Date().toISOString(),
+            metadata: msg.metadata || {},
+            attachments: msg.attachments || [],
+            readAt: msg.readAt || undefined,
+            deliveredAt: msg.deliveredAt || undefined,
+            replyTo: msg.replyTo || undefined,
+          };
+        };
+        
         // Case 1: Response is already an array (direct from API - SUCCESS case)
         if (Array.isArray(response)) {
           console.log('[getRoomMessages transformResponse] Response is array (success), length:', response.length);
           if (response.length > 0) {
-            console.log('[getRoomMessages transformResponse] First message:', response[0]);
+            console.log('[getRoomMessages transformResponse] First message before normalization:', response[0]);
           }
-          return response as ChatMessage[];
+          // Normalize all messages
+          const normalizedMessages = response.map(normalizeMessage);
+          console.log('[getRoomMessages transformResponse] Normalized messages count:', normalizedMessages.length);
+          return normalizedMessages;
         }
         
         // Case 2: Response is wrapped in an object with success: true
@@ -305,25 +351,29 @@ export const apiSlice = createApi({
           // Check for { success: true, data: [...] }
           if ('success' in responseObj && responseObj.success === true && 'data' in responseObj && Array.isArray(responseObj.data)) {
             console.log('[getRoomMessages transformResponse] Found success:true with data array, length:', responseObj.data.length);
-            return responseObj.data as ChatMessage[];
+            const normalizedMessages = (responseObj.data as any[]).map(normalizeMessage);
+            return normalizedMessages;
           }
           
           // Check for { data: [...] } (without success field, assume success)
           if ('data' in responseObj && Array.isArray(responseObj.data)) {
             console.log('[getRoomMessages transformResponse] Found response.data array, length:', responseObj.data.length);
-            return responseObj.data as ChatMessage[];
+            const normalizedMessages = (responseObj.data as any[]).map(normalizeMessage);
+            return normalizedMessages;
           }
           
           // Check for { items: [...] }
           if ('items' in responseObj && Array.isArray(responseObj.items)) {
             console.log('[getRoomMessages transformResponse] Found response.items array, length:', responseObj.items.length);
-            return responseObj.items as ChatMessage[];
+            const normalizedMessages = (responseObj.items as any[]).map(normalizeMessage);
+            return normalizedMessages;
           }
           
           // Check for { messages: [...] }
           if ('messages' in responseObj && Array.isArray(responseObj.messages)) {
             console.log('[getRoomMessages transformResponse] Found response.messages array, length:', responseObj.messages.length);
-            return responseObj.messages as ChatMessage[];
+            const normalizedMessages = (responseObj.messages as any[]).map(normalizeMessage);
+            return normalizedMessages;
           }
           
           // Log the actual structure for debugging
@@ -350,6 +400,8 @@ export const apiSlice = createApi({
         console.log('[getRoomMessages providesTags] Result:', result, 'Error:', error, 'RoomId:', roomId);
         return result ? [{ type: 'Chat', id: roomId }] : [];
       },
+      // Keep cached data for 5 minutes to prevent unnecessary refetches when switching rooms
+      keepUnusedDataFor: 300,
     }),
     sendMessage: builder.mutation<ChatMessage, SendMessagePayload>({
       query: (body) => ({
@@ -391,7 +443,7 @@ export const apiSlice = createApi({
           // Check if it's already a message object (has id or senderId)
           if ('id' in responseObj || 'senderId' in responseObj) {
             console.log('[sendMessage transformResponse] Response is already ChatMessage object');
-            return responseObj as ChatMessage;
+            return responseObj as unknown as ChatMessage;
           }
         }
         
@@ -441,20 +493,20 @@ export const apiSlice = createApi({
           // Check for { success: true, data: [...] }
           if ('success' in responseObj && responseObj.success === true && 'data' in responseObj && Array.isArray(responseObj.data)) {
             console.log('[getUserRooms] Extracted from ApiResponse.data (success:true), length:', responseObj.data.length);
-            return responseObj.data as ChatRoom[];
+            return responseObj.data as unknown as ChatRoom[];
           }
           
           // Check for { data: [...] } (without success field, assume success)
           if ('data' in responseObj && Array.isArray(responseObj.data)) {
             console.log('[getUserRooms] Extracted from ApiResponse.data (no success field), length:', responseObj.data.length);
-            return responseObj.data as ChatRoom[];
+            return responseObj.data as unknown as ChatRoom[];
           }
         }
         
         // Fallback: if response is already an array, return it
         if (Array.isArray(response)) {
           console.log('[getUserRooms] Response is already array, length:', response.length);
-          return response as ChatRoom[];
+          return response as unknown as ChatRoom[];
         }
         
         console.warn('[getUserRooms] Unexpected response format, returning empty array');
@@ -472,6 +524,8 @@ export const apiSlice = createApi({
         return { message: 'Failed to fetch rooms' };
       },
       providesTags: ['Room'],
+      // Keep cached data for 5 minutes
+      keepUnusedDataFor: 300,
     }),
     createRoom: builder.mutation<ChatRoom, CreateRoomPayload>({
       query: (body) => {
@@ -502,7 +556,7 @@ export const apiSlice = createApi({
           
           if ('roomId' in responseObj || 'id' in responseObj || '_id' in responseObj) {
             console.log('[createRoom transformResponse] Response is ChatRoom object:', responseObj);
-            return responseObj as ChatRoom;
+            return responseObj as unknown as ChatRoom;
           }
           
           // Case 2: Response is wrapped in { data: ChatRoom }
@@ -510,7 +564,7 @@ export const apiSlice = createApi({
             console.log('[createRoom transformResponse] Found response.data:', responseObj.data);
             const roomData = responseObj.data as Record<string, unknown>;
             if ('roomId' in roomData || 'id' in roomData || '_id' in roomData) {
-              return roomData as ChatRoom;
+              return roomData as unknown as ChatRoom;
             }
           }
           
@@ -519,7 +573,7 @@ export const apiSlice = createApi({
             console.log('[createRoom transformResponse] Found ApiResponse format with success:true:', responseObj.data);
             const roomData = responseObj.data as Record<string, unknown>;
             if ('roomId' in roomData || 'id' in roomData || '_id' in roomData) {
-              return roomData as ChatRoom;
+              return roomData as unknown as ChatRoom;
             }
           }
           

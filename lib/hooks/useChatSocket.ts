@@ -12,7 +12,7 @@ const getWebSocketUrl = (): string => {
 
   // For development, use localhost:5001 (as per documentation)
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    return 'https://be-aphrodite-8wrp.onrender.com';
+    return 'http://localhost:5001';
   }
   
   // For production, use the backend URL
@@ -164,9 +164,9 @@ export const useChatSocket = (): UseChatSocketReturn => {
       console.error('[useChatSocket] Connection error:', error);
       console.error('[useChatSocket] Error details:', {
         message: error.message,
-        type: error.type,
-        description: error.description,
-        context: error.context,
+        type: (error as any).type,
+        description: (error as any).description,
+        context: (error as any).context,
       });
       setConnected(false);
       
