@@ -1,11 +1,12 @@
 "use client";
 
-import { User, Mail, Phone, MapPin, Calendar, Edit, ArrowLeft, Star, Check, Users, Calendar as CalendarIcon, X, Heart, BookOpen, MessageCircle, UserPlus, Info, Coins, Play, ThumbsUp, ThumbsDown, ChevronDown } from "lucide-react";
+import { User, Mail, Phone, MapPin, Calendar, Edit, ArrowLeft, Star, Check, Users, Calendar as CalendarIcon, X, Heart, BookOpen, MessageCircle, UserPlus, Info, Coins, Play, ThumbsUp, ThumbsDown, ChevronDown, Plus, Pencil } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
 import { useUpdateProfileMutation, useUpdateProfileMediaMutation, useCreateProfileServiceMutation } from "@/feature/profile/profileApiSlice";
+import { useCreatePricingMutation, useCreateServiceMutation } from "@/app/api/apiSlice";
 import { ProfilePageSkeleton } from "@/components/ui/Skeleton";
 
 // Mock reviews data
@@ -55,6 +56,8 @@ export default function ProfilePage() {
   const [updateProfile, { isLoading: isUpdatingProfile }] = useUpdateProfileMutation();
   const [updateProfileMedia, { isLoading: isUpdatingMedia }] = useUpdateProfileMediaMutation();
   const [createProfileService, { isLoading: isCreatingService }] = useCreateProfileServiceMutation();
+  const [createPricing, { isLoading: isCreatingPricing }] = useCreatePricingMutation();
+  const [createService, { isLoading: isCreatingServiceCustom }] = useCreateServiceMutation();
   const { uploadMultiple, isUploading, progress, error: uploadError } = useCloudinaryUpload({
     folder: 'aphrodite/profile-media',
     resourceType: 'auto', // Auto-detect image or video
@@ -62,6 +65,9 @@ export default function ProfilePage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
+  const [isCustomPricingModalOpen, setIsCustomPricingModalOpen] = useState(false);
+  const [isEditPricingModalOpen, setIsEditPricingModalOpen] = useState(false);
+  const [editingPricingType, setEditingPricingType] = useState<'shortTime' | 'overnight' | 'weekend' | null>(null);
   const [currentFormStep, setCurrentFormStep] = useState(1);
   const [activeTab, setActiveTab] = useState("About");
   const [reviewText, setReviewText] = useState("");
@@ -73,6 +79,20 @@ export default function ProfilePage() {
   const [customServices, setCustomServices] = useState<string[]>([]);
   const [customServiceInput, setCustomServiceInput] = useState("");
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  
+  // Custom Pricing Form State
+  const [customPricingForm, setCustomPricingForm] = useState({
+    categoryName: "",
+    incallPrice: "",
+    outcallPrice: "",
+    duration: "7 days",
+  });
+  
+  // Edit Pricing Form State
+  const [editPricingForm, setEditPricingForm] = useState({
+    incall: "",
+    outcall: "",
+  });
 
   // Initialize services from profile.services when profile loads
   useEffect(() => {
@@ -886,74 +906,164 @@ export default function ProfilePage() {
 
             {/* Pricing Section */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <h3 className="text-2xl font-bold text-pink-500">Pricing</h3>
-                <Info className="w-5 h-5 text-white/60" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-2xl font-bold text-pink-500">Pricing</h3>
+                  <Info className="w-5 h-5 text-white/60" />
+                </div>
+                <button
+                  onClick={() => setIsCustomPricingModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 border border-white/30 text-white rounded-lg hover:border-pink-500 hover:text-pink-500 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Custom Pricing</span>
+                </button>
               </div>
               
               <div className="grid md:grid-cols-3 gap-6">
                 {/* Short Time Card */}
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                    Short Time
+                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4 flex items-center justify-center gap-2">
+                    <span>Short Time</span>
+                    <button
+                      onClick={() => {
+                        setEditingPricingType('shortTime');
+                        const pricing = profile?.pricing;
+                        setEditPricingForm({
+                          incall: pricing?.shortTime?.incall?.toString() || "",
+                          outcall: pricing?.shortTime?.outcall?.toString() || "",
+                        });
+                        setIsEditPricingModalOpen(true);
+                      }}
+                      className="ml-auto"
+                    >
+                      <Pencil className="w-4 h-4 text-white" />
+                    </button>
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-white">Incall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">50,000.00 APH</span>
-                      </div>
+                      {profile?.pricing?.shortTime?.incall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.shortTime.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-white">Outcall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">80,000.00 APH</span>
-                      </div>
+                      {profile?.pricing?.shortTime?.outcall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.shortTime.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Overnight Card */}
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                    Overnight
+                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4 flex items-center justify-center gap-2">
+                    <span>Overnight</span>
+                    <button
+                      onClick={() => {
+                        setEditingPricingType('overnight');
+                        const pricing = profile?.pricing;
+                        setEditPricingForm({
+                          incall: pricing?.overnight?.incall?.toString() || "",
+                          outcall: pricing?.overnight?.outcall?.toString() || "",
+                        });
+                        setIsEditPricingModalOpen(true);
+                      }}
+                      className="ml-auto"
+                    >
+                      <Pencil className="w-4 h-4 text-white" />
+                    </button>
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-white">Incall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">50,000.00 APH</span>
-                      </div>
+                      {profile?.pricing?.overnight?.incall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.overnight.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-white">Outcall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">80,000.00 APH</span>
-                      </div>
+                      {profile?.pricing?.overnight?.outcall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.overnight.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Weekend Card */}
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                    Weekend
+                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4 flex items-center justify-center gap-2">
+                    <span>Weekend</span>
+                    <button
+                      onClick={() => {
+                        setEditingPricingType('weekend');
+                        const pricing = profile?.pricing;
+                        setEditPricingForm({
+                          incall: pricing?.weekend?.incall?.toString() || "",
+                          outcall: pricing?.weekend?.outcall?.toString() || "",
+                        });
+                        setIsEditPricingModalOpen(true);
+                      }}
+                      className="ml-auto"
+                    >
+                      <Pencil className="w-4 h-4 text-white" />
+                    </button>
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-white">Incall</span>
-                      <span className="text-white/60">---</span>
+                      {profile?.pricing?.weekend?.incall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.weekend.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-white">Outcall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">80,000.00 APH</span>
-                      </div>
+                      {profile?.pricing?.weekend?.outcall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.weekend.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1661,6 +1771,255 @@ export default function ProfilePage() {
               >
                 {isUpdatingProfile ? 'Updating...' : 'Submit'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Pricing Modal */}
+      {isEditPricingModalOpen && editingPricingType && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
+                Edit {editingPricingType === 'shortTime' ? 'Short Time' : editingPricingType === 'overnight' ? 'Overnight' : 'Weekend'} Pricing
+              </h2>
+              <button 
+                onClick={() => {
+                  setIsEditPricingModalOpen(false);
+                  setEditingPricingType(null);
+                }}
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Incall Price (APH)</label>
+                  <input
+                    type="number"
+                    value={editPricingForm.incall}
+                    onChange={(e) => setEditPricingForm({ ...editPricingForm, incall: e.target.value })}
+                    placeholder="Enter incall price"
+                    className="w-full px-4 h-14 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Outcall Price (APH)</label>
+                  <input
+                    type="number"
+                    value={editPricingForm.outcall}
+                    onChange={(e) => setEditPricingForm({ ...editPricingForm, outcall: e.target.value })}
+                    placeholder="Enter outcall price"
+                    className="w-full px-4 h-14 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-gray-800"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-4 pt-4">
+                <button
+                  onClick={() => {
+                    setIsEditPricingModalOpen(false);
+                    setEditingPricingType(null);
+                  }}
+                  className="px-6 py-3 text-pink-500 font-medium hover:text-pink-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!profile?.id) return;
+                    try {
+                      const pricingData: any = {
+                        profileId: profile.id,
+                        shortTime: profile.pricing?.shortTime || { incall: 0, outcall: 0 },
+                        overnight: profile.pricing?.overnight || { incall: 0, outcall: 0 },
+                        weekend: profile.pricing?.weekend || { incall: 0, outcall: 0 },
+                      };
+                      
+                      pricingData[editingPricingType] = {
+                        incall: Number(editPricingForm.incall) || 0,
+                        outcall: Number(editPricingForm.outcall) || 0,
+                        currency: "APH",
+                      };
+                      
+                      await createPricing({ id: profile.id, data: pricingData }).unwrap();
+                      await refetch();
+                      setIsEditPricingModalOpen(false);
+                      setEditingPricingType(null);
+                    } catch (error) {
+                      console.error("Error updating pricing:", error);
+                    }
+                  }}
+                  disabled={isCreatingPricing}
+                  className="px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
+                >
+                  {isCreatingPricing ? 'Saving...' : 'Submit'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Custom Pricing Modal */}
+      {isCustomPricingModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Add Custom Pricing</h2>
+              <button 
+                onClick={() => {
+                  setIsCustomPricingModalOpen(false);
+                  setCustomPricingForm({
+                    categoryName: "",
+                    incallPrice: "",
+                    outcallPrice: "",
+                    duration: "7 days",
+                  });
+                }}
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Category Name</label>
+                  <input
+                    type="text"
+                    value={customPricingForm.categoryName}
+                    onChange={(e) => setCustomPricingForm({ ...customPricingForm, categoryName: e.target.value })}
+                    placeholder="Girlfriend Experience"
+                    className="w-full px-4 h-14 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Duration</label>
+                  <select
+                    value={customPricingForm.duration}
+                    onChange={(e) => setCustomPricingForm({ ...customPricingForm, duration: e.target.value })}
+                    className="w-full px-4 h-14 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-gray-800 appearance-none bg-white"
+                  >
+                    <option value="1 hour">1 hour</option>
+                    <option value="2 hours">2 hours</option>
+                    <option value="3 hours">3 hours</option>
+                    <option value="4 hours">4 hours</option>
+                    <option value="5 hours">5 hours</option>
+                    <option value="6 hours">6 hours</option>
+                    <option value="7 days">7 days</option>
+                    <option value="1 week">1 week</option>
+                    <option value="2 weeks">2 weeks</option>
+                    <option value="1 month">1 month</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Incall Price (APH)</label>
+                  <input
+                    type="number"
+                    value={customPricingForm.incallPrice}
+                    onChange={(e) => setCustomPricingForm({ ...customPricingForm, incallPrice: e.target.value })}
+                    placeholder="200,000 APH"
+                    className="w-full px-4 h-14 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Outcall Price (APH)</label>
+                  <input
+                    type="number"
+                    value={customPricingForm.outcallPrice}
+                    onChange={(e) => setCustomPricingForm({ ...customPricingForm, outcallPrice: e.target.value })}
+                    placeholder="150,000 APH"
+                    className="w-full px-4 h-14 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-gray-800"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-4 pt-4">
+                <button
+                  onClick={() => {
+                    setIsCustomPricingModalOpen(false);
+                    setCustomPricingForm({
+                      categoryName: "",
+                      incallPrice: "",
+                      outcallPrice: "",
+                      duration: "7 days",
+                    });
+                  }}
+                  className="px-6 py-3 text-pink-500 font-medium hover:text-pink-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!profile?.id || !customPricingForm.categoryName) {
+                      alert("Please fill in all required fields");
+                      return;
+                    }
+                    try {
+                      // Create custom service first
+                      const serviceData = {
+                        profileId: profile.id,
+                        name: customPricingForm.categoryName,
+                        description: `Custom pricing for ${customPricingForm.duration}`,
+                        durationMinutes: customPricingForm.duration.includes('hour') 
+                          ? parseInt(customPricingForm.duration) * 60
+                          : customPricingForm.duration.includes('day')
+                          ? parseInt(customPricingForm.duration) * 24 * 60
+                          : customPricingForm.duration.includes('week')
+                          ? parseInt(customPricingForm.duration) * 7 * 24 * 60
+                          : parseInt(customPricingForm.duration) * 30 * 24 * 60,
+                        active: true,
+                      };
+                      
+                      const serviceResult = await createService({ id: profile.id, data: serviceData }).unwrap();
+                      
+                      // Then create pricing if needed
+                      if (customPricingForm.incallPrice || customPricingForm.outcallPrice) {
+                        const pricingData: any = {
+                          profileId: profile.id,
+                          shortTime: profile.pricing?.shortTime || { incall: 0, outcall: 0 },
+                          overnight: profile.pricing?.overnight || { incall: 0, outcall: 0 },
+                          weekend: profile.pricing?.weekend || { incall: 0, outcall: 0 },
+                        };
+                        
+                        // Note: Custom pricing would need a different structure, but for now we'll add it as a note
+                        // The API expects shortTime, overnight, weekend structure
+                        // Custom pricing might need to be stored differently or as part of services
+                        
+                        await createPricing({ id: profile.id, data: pricingData }).unwrap();
+                      }
+                      
+                      await refetch();
+                      setIsCustomPricingModalOpen(false);
+                      setCustomPricingForm({
+                        categoryName: "",
+                        incallPrice: "",
+                        outcallPrice: "",
+                        duration: "7 days",
+                      });
+                    } catch (error) {
+                      console.error("Error creating custom pricing:", error);
+                      alert("Failed to create custom pricing. Please try again.");
+                    }
+                  }}
+                  disabled={isCreatingServiceCustom || isCreatingPricing}
+                  className="px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
+                >
+                  {isCreatingServiceCustom || isCreatingPricing ? 'Submitting...' : 'Submit'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

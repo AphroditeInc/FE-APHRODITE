@@ -120,6 +120,47 @@ export interface SendOTPPayload {
 }
 
 /**
+ * Check Availability Payload
+ */
+export interface CheckAvailabilityPayload {
+  username?: string;
+  email?: string;
+  phoneNumber?: string;
+  countryCode?: string;
+}
+
+/**
+ * Check Availability Response
+ */
+export interface CheckAvailabilityResponse {
+  username?: { available: boolean; message?: string };
+  email?: { available: boolean; message?: string };
+  phoneNumber?: { available: boolean; message?: string };
+}
+
+/**
+ * Introspect Token Payload
+ */
+export interface IntrospectTokenPayload {
+  token: string;
+}
+
+/**
+ * Introspect Token Response
+ */
+export interface IntrospectTokenResponse {
+  active: boolean;
+  payload: {
+    sub: string;
+    email?: string;
+    iat: number;
+    exp: number;
+  };
+  user?: User;
+  expiresAt: number;
+}
+
+/**
  * Verify OTP Payload
  */
 export interface VerifyOTPPayload {

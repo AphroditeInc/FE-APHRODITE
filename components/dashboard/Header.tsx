@@ -3,6 +3,7 @@
 import { Search, Filter, MessageCircle, Bell, LogOut, Wallet, Menu, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuthProfile, useEnrichedProfile } from "@/lib/hooks";
+import { useGetWalletBalanceQuery } from "@/app/api/apiSlice";
 import { useMemo, useState, useEffect } from "react";
 
 interface HeaderProps {
@@ -13,7 +14,18 @@ export default function Header({ onMenuToggle }: HeaderProps) {
   const router = useRouter();
   const { user, loading } = useAuthProfile();
   const { profile: enrichedProfile } = useEnrichedProfile(user?.id || null);
+  const { data: walletBalanceData, isLoading: isLoadingBalance } = useGetWalletBalanceQuery(undefined, {
+    skip: !user, // Skip query if user is not loaded
+  });
   const [imageError, setImageError] = useState(false);
+  
+  // Extract balance from API response
+  const walletBalance = useMemo(() => {
+    if (walletBalanceData?.success && walletBalanceData?.data) {
+      return walletBalanceData.data;
+    }
+    return null;
+  }, [walletBalanceData]);
   
   // Get profile picture from enriched profile media, or fallback to User icon
   const profilePicture = useMemo(() => {
@@ -103,7 +115,18 @@ export default function Header({ onMenuToggle }: HeaderProps) {
           {/* Balance Display - Hidden on mobile */}
           <div className="hidden sm:flex items-center gap-2 bg-white/10 rounded-lg px-3 sm:px-4 py-2">
             <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-400" />
-            <span className="text-white font-medium text-sm sm:text-base">6000.00 APH</span>
+            {isLoadingBalance ? (
+              <span className="text-white/60 font-medium text-sm sm:text-base">Loading...</span>
+            ) : walletBalance ? (
+              <span className="text-white font-medium text-sm sm:text-base">
+                {Number(walletBalance.balance || 0).toLocaleString('en-US', { 
+                  minimumFractionDigits: 2, 
+                  maximumFractionDigits: 2 
+                })} {walletBalance.currency || 'APH'}
+              </span>
+            ) : (
+              <span className="text-white/60 font-medium text-sm sm:text-base">0.00 APH</span>
+            )}
           </div>
 
           {/* User Profile and Logout */}

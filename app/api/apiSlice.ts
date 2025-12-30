@@ -6,17 +6,62 @@ import type {
   ApiResponse, 
   User, 
   AuthPayload, 
-  AuthResponse, 
+  AuthResponse,
+  BasicDetailsPayload,
   EmailRegistrationPayload, 
   CompleteUserPayload, 
-  SendOTPPayload, 
+  SendOTPPayload,
+  CheckAvailabilityPayload,
+  CheckAvailabilityResponse,
+  IntrospectTokenPayload,
+  IntrospectTokenResponse,
   ChatMessage, 
   ChatRoom, 
   SendMessagePayload, 
   CreateRoomPayload, 
   GetMessagesQuery,
   UpdateMessageStatusPayload,
-  RoomStats
+  RoomStats,
+  WalletBalance,
+  FundWalletPayload,
+  FundWalletResponse,
+  VerifyPaymentPayload,
+  VerifyPaymentResponse,
+  Transaction,
+  WithdrawalAccount,
+  AddWithdrawalAccountPayload,
+  SetDefaultAccountPayload,
+  VerifyAccountPayload,
+  VerifyAccountResponse,
+  Bank,
+  CreatePayoutPayload,
+  Payout,
+  CancelPayoutPayload,
+  CreateRiderProfilePayload,
+  UpdateRiderProfilePayload,
+  UploadVerificationDocumentsPayload,
+  UpdateLocationPayload,
+  SetAvailabilityPayload,
+  RiderProfile,
+  CreateOrderPayload,
+  CancelOrderPayload,
+  AssignRiderPayload,
+  UpdateOrderLocationPayload,
+  Order,
+  ListOrdersQuery,
+  CreateProfilePayload,
+  UpdateProfilePayload,
+  CreatePricingPayload,
+  CreateServicePayload,
+  VideoProofPayload,
+  AddMediaPayload,
+  CreateReviewPayload,
+  ReviewsResponse,
+  ListProfilesQuery,
+  GetReviewsQuery,
+  CreateAdminPayload,
+  VerifyRiderPayload,
+  PendingVerification,
 } from "@/lib/types";
 
 interface RootState {
@@ -670,18 +715,519 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ['Chat'],
     }),
+
+    // Additional Auth Endpoints
+    setBasicDetails: builder.mutation<ApiResponse<AuthResponse>, { userId: string; data: BasicDetailsPayload }>({
+      query: ({ userId, data }) => ({
+        url: `/auth/users/${userId}/basic-details`,
+        method: "POST",
+        body: data,
+      }),
+      async onQueryStarted(_, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled;
+          if (data.success && data.data) {
+            const { user, tokens } = data.data;
+            dispatch(setCredentials({
+              user,
+              access_token: tokens.accessToken,
+              refresh_token: tokens.refreshToken,
+              uid: user.id
+            }));
+          }
+        } catch (err) {
+          // Handle error
+        }
+      },
+    }),
+    checkAvailability: builder.mutation<ApiResponse<CheckAvailabilityResponse>, CheckAvailabilityPayload>({
+      query: (body) => ({
+        url: "/auth/check-availability",
+        method: "POST",
+        body,
+      }),
+    }),
+    getAuthProfile: builder.query<ApiResponse<User>, void>({
+      query: () => "/auth/profile",
+      providesTags: ['User'],
+    }),
+    updateAuthProfile: builder.mutation<ApiResponse<User>, Partial<User>>({
+      query: (body) => ({
+        url: "/auth/profile",
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    changePassword: builder.mutation<ApiResponse<{ success: boolean }>, { currentPassword: string; newPassword: string }>({
+      query: (body) => ({
+        url: "/auth/password",
+        method: "PUT",
+        body,
+      }),
+    }),
+    logout: builder.mutation<ApiResponse<{ success: boolean }>, void>({
+      query: () => ({
+        url: "/auth/logout",
+        method: "POST",
+      }),
+      async onQueryStarted(_, { dispatch }) {
+        dispatch(logOut());
+      },
+    }),
+    introspectToken: builder.mutation<ApiResponse<IntrospectTokenResponse>, IntrospectTokenPayload>({
+      query: (body) => ({
+        url: "/auth/introspect",
+        method: "POST",
+        body,
+      }),
+    }),
+
+    // User/Admin Endpoints
+    createAdmin: builder.mutation<ApiResponse<User>, CreateAdminPayload>({
+      query: (body) => ({
+        url: "/user/admin",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    verifyRider: builder.mutation<ApiResponse<any>, { riderId: string; data: VerifyRiderPayload }>({
+      query: ({ riderId, data }) => ({
+        url: `/user/admin/riders/${riderId}/verify`,
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    getPendingVerifications: builder.query<ApiResponse<PendingVerification[]>, void>({
+      query: () => "/user/admin/riders/pending",
+      providesTags: ['User'],
+    }),
+
+    // Profile Endpoints
+    createProfile: builder.mutation<ApiResponse<any>, CreateProfilePayload>({
+      query: (body) => ({
+        url: "/profiles",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ['Profile'],
+    }),
+    listProfiles: builder.query<ApiResponse<any>, ListProfilesQuery>({
+      query: (params) => {
+        const searchParams = new URLSearchParams();
+        searchParams.append('type', params.type);
+        if (params.cursor) searchParams.append('cursor', params.cursor);
+        if (params.limit) searchParams.append('limit', params.limit.toString());
+        if (params.city) searchParams.append('city', params.city);
+        if (params.state) searchParams.append('state', params.state);
+        return `/profiles?${searchParams.toString()}`;
+      },
+      providesTags: ['Profile'],
+    }),
+    getProfileById: builder.query<ApiResponse<any>, string>({
+      query: (id) => `/profiles/${id}`,
+      providesTags: (result, error, id) => [{ type: 'Profile', id }],
+    }),
+    getProfileByUserId: builder.query<ApiResponse<any>, string>({
+      query: (userId) => `/profiles/user/${userId}`,
+      providesTags: (result, error, userId) => [{ type: 'Profile', id: userId }],
+    }),
+    updateProfile: builder.mutation<ApiResponse<any>, { id: string; data: UpdateProfilePayload }>({
+      query: ({ id, data }) => ({
+        url: `/profiles/${id}`,
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'Profile', id }],
+    }),
+    toggleFollow: builder.mutation<ApiResponse<{ action: 'followed' | 'unfollowed'; followersCount: number }>, string>({
+      query: (id) => ({
+        url: `/profiles/${id}/follow`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, id) => [{ type: 'Profile', id }],
+    }),
+    createPricing: builder.mutation<ApiResponse<any>, { id: string; data: CreatePricingPayload }>({
+      query: ({ id, data }) => ({
+        url: `/profiles/${id}/pricing`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'Profile', id }],
+    }),
+    createService: builder.mutation<ApiResponse<any>, { id: string; data: CreateServicePayload }>({
+      query: ({ id, data }) => ({
+        url: `/profiles/${id}/services`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'Profile', id }],
+    }),
+    uploadVideoProof: builder.mutation<ApiResponse<any>, { id: string; data: VideoProofPayload }>({
+      query: ({ id, data }) => ({
+        url: `/profiles/${id}/video-proof`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'Profile', id }],
+    }),
+    addMedia: builder.mutation<ApiResponse<any>, { id: string; data: AddMediaPayload }>({
+      query: ({ id, data }) => ({
+        url: `/profiles/${id}/media`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'Profile', id }],
+    }),
+    createReview: builder.mutation<ApiResponse<any>, { id: string; data: CreateReviewPayload }>({
+      query: ({ id, data }) => ({
+        url: `/profiles/${id}/reviews`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'Profile', id }],
+    }),
+    getReviews: builder.query<ApiResponse<ReviewsResponse>, { id: string; query?: GetReviewsQuery }>({
+      query: ({ id, query }) => {
+        const searchParams = new URLSearchParams();
+        if (query?.cursor) searchParams.append('cursor', query.cursor);
+        if (query?.limit) searchParams.append('limit', query.limit.toString());
+        return `/profiles/${id}/reviews${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+      },
+      providesTags: (result, error, { id }) => [{ type: 'Profile', id }],
+    }),
+
+    // Wallet Endpoints
+    getWalletBalance: builder.query<ApiResponse<WalletBalance>, void>({
+      query: () => "/wallet/balance",
+      providesTags: ['User'],
+    }),
+    fundWallet: builder.mutation<ApiResponse<FundWalletResponse>, FundWalletPayload>({
+      query: (body) => ({
+        url: "/wallet/fund",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    verifyPayment: builder.mutation<ApiResponse<VerifyPaymentResponse>, VerifyPaymentPayload>({
+      query: (body) => ({
+        url: "/wallet/verify-payment",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    getTransactions: builder.query<ApiResponse<Transaction[]>, { limit?: number }>({
+      query: ({ limit = 50 }) => `/wallet/transactions?limit=${limit}`,
+      providesTags: ['User'],
+    }),
+    addWithdrawalAccount: builder.mutation<ApiResponse<WithdrawalAccount>, AddWithdrawalAccountPayload>({
+      query: (body) => ({
+        url: "/wallet/withdrawal-accounts",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    getWithdrawalAccounts: builder.query<ApiResponse<WithdrawalAccount[]>, void>({
+      query: () => "/wallet/withdrawal-accounts",
+      providesTags: ['User'],
+    }),
+    setDefaultAccount: builder.mutation<ApiResponse<{ success: boolean }>, SetDefaultAccountPayload>({
+      query: (body) => ({
+        url: "/wallet/withdrawal-accounts/set-default",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    deleteWithdrawalAccount: builder.mutation<ApiResponse<{ success: boolean }>, string>({
+      query: (accountId) => ({
+        url: `/wallet/withdrawal-accounts/${accountId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ['User'],
+    }),
+    getBanks: builder.query<ApiResponse<Bank[]>, void>({
+      query: () => "/wallet/banks",
+      providesTags: ['User'],
+    }),
+    verifyBankAccount: builder.mutation<ApiResponse<VerifyAccountResponse>, VerifyAccountPayload>({
+      query: (body) => ({
+        url: "/wallet/verify-account",
+        method: "POST",
+        body,
+      }),
+    }),
+    createPayout: builder.mutation<ApiResponse<Payout>, CreatePayoutPayload>({
+      query: (body) => ({
+        url: "/wallet/payout",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    getPayouts: builder.query<ApiResponse<Payout[]>, { limit?: number }>({
+      query: ({ limit = 50 }) => `/wallet/payouts?limit=${limit}`,
+      providesTags: ['User'],
+    }),
+    getPayoutById: builder.query<ApiResponse<Payout>, string>({
+      query: (payoutId) => `/wallet/payouts/${payoutId}`,
+      providesTags: ['User'],
+    }),
+    cancelPayout: builder.mutation<ApiResponse<{ success: boolean }>, { payoutId: string; data: CancelPayoutPayload }>({
+      query: ({ payoutId, data }) => ({
+        url: `/wallet/payouts/${payoutId}/cancel`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ['User'],
+    }),
+
+    // Rider Endpoints
+    createRiderProfile: builder.mutation<ApiResponse<RiderProfile>, CreateRiderProfilePayload>({
+      query: (body) => ({
+        url: "/rider/profile",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    getRiderProfile: builder.query<ApiResponse<RiderProfile>, void>({
+      query: () => "/rider/profile",
+      providesTags: ['User'],
+    }),
+    updateRiderProfile: builder.mutation<ApiResponse<RiderProfile>, UpdateRiderProfilePayload>({
+      query: (body) => ({
+        url: "/rider/profile",
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    uploadVerificationDocuments: builder.mutation<ApiResponse<RiderProfile>, UploadVerificationDocumentsPayload>({
+      query: (body) => ({
+        url: "/rider/verification/documents",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    updateRiderLocation: builder.mutation<ApiResponse<RiderProfile>, UpdateLocationPayload>({
+      query: (body) => ({
+        url: "/rider/location",
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    setRiderAvailability: builder.mutation<ApiResponse<RiderProfile>, SetAvailabilityPayload>({
+      query: (body) => ({
+        url: "/rider/availability",
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    getNearbyOrders: builder.query<ApiResponse<Order[]>, { maxDistance?: number }>({
+      query: ({ maxDistance = 10 }) => `/rider/orders/nearby?maxDistance=${maxDistance}`,
+      providesTags: ['User'],
+    }),
+    acceptOrderByRider: builder.mutation<ApiResponse<Order>, string>({
+      query: (orderId) => ({
+        url: `/rider/orders/${orderId}/accept`,
+        method: "POST",
+      }),
+      invalidatesTags: ['User'],
+    }),
+    rejectOrderByRider: builder.mutation<ApiResponse<{ success: boolean }>, string>({
+      query: (orderId) => ({
+        url: `/rider/orders/${orderId}/reject`,
+        method: "POST",
+      }),
+      invalidatesTags: ['User'],
+    }),
+
+    // Order Endpoints
+    createOrder: builder.mutation<ApiResponse<Order>, CreateOrderPayload>({
+      query: (body) => ({
+        url: "/orders",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    listOrders: builder.query<ApiResponse<Order[]>, ListOrdersQuery>({
+      query: (params) => {
+        const searchParams = new URLSearchParams();
+        if (params.role) searchParams.append('role', params.role);
+        if (params.status) searchParams.append('status', params.status);
+        if (params.cursor) searchParams.append('cursor', params.cursor);
+        if (params.limit) searchParams.append('limit', params.limit.toString());
+        return `/orders${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+      },
+      providesTags: ['User'],
+    }),
+    getOrderById: builder.query<ApiResponse<Order>, string>({
+      query: (id) => `/orders/${id}`,
+      providesTags: (result, error, id) => [{ type: 'User', id }],
+    }),
+    acceptOrderByProvider: builder.mutation<ApiResponse<Order>, string>({
+      query: (id) => ({
+        url: `/orders/${id}/accept`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, id) => [{ type: 'User', id }],
+    }),
+    rejectOrderByProvider: builder.mutation<ApiResponse<{ success: boolean }>, string>({
+      query: (id) => ({
+        url: `/orders/${id}/reject`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, id) => [{ type: 'User', id }],
+    }),
+    markOrderReady: builder.mutation<ApiResponse<Order>, string>({
+      query: (id) => ({
+        url: `/orders/${id}/ready`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, id) => [{ type: 'User', id }],
+    }),
+    startOrder: builder.mutation<ApiResponse<Order>, string>({
+      query: (id) => ({
+        url: `/orders/${id}/start`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, id) => [{ type: 'User', id }],
+    }),
+    completeOrder: builder.mutation<ApiResponse<Order>, string>({
+      query: (id) => ({
+        url: `/orders/${id}/complete`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, id) => [{ type: 'User', id }],
+    }),
+    cancelOrder: builder.mutation<ApiResponse<Order>, { id: string; data: CancelOrderPayload }>({
+      query: ({ id, data }) => ({
+        url: `/orders/${id}/cancel`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'User', id }],
+    }),
+    assignRider: builder.mutation<ApiResponse<Order>, { id: string; data: AssignRiderPayload }>({
+      query: ({ id, data }) => ({
+        url: `/orders/${id}/assign-rider`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'User', id }],
+    }),
+    getRiderChatRoom: builder.query<ApiResponse<{ roomId: string }>, string>({
+      query: (id) => `/orders/${id}/rider-chat-room`,
+      providesTags: (result, error, id) => [{ type: 'User', id }],
+    }),
+    riderPickedUp: builder.mutation<ApiResponse<Order>, string>({
+      query: (id) => ({
+        url: `/orders/${id}/rider-picked-up`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, id) => [{ type: 'User', id }],
+    }),
+    updateOrderLocation: builder.mutation<ApiResponse<Order>, { id: string; data: UpdateOrderLocationPayload }>({
+      query: ({ id, data }) => ({
+        url: `/orders/${id}/location`,
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'User', id }],
+    }),
   }),
 });
 
 export const {
+  // Auth
   useRegisterUserMutation,
   useRegisterWithEmailMutation,
   useLoginUserMutation,
   useLoginWithEmailMutation,
   useSendOTPMutation,
+  useSetBasicDetailsMutation,
+  useCheckAvailabilityMutation,
+  useGetAuthProfileQuery,
+  useUpdateAuthProfileMutation,
+  useChangePasswordMutation,
+  useLogoutMutation,
+  useIntrospectTokenMutation,
+  
+  // User
   useCreateCompleteUserMutation,
   useGetUserProfileQuery,
   useUpdateUserMutation,
+  useCreateAdminMutation,
+  useVerifyRiderMutation,
+  useGetPendingVerificationsQuery,
+  
+  // Profile
+  useCreateProfileMutation,
+  useListProfilesQuery,
+  useGetProfileByIdQuery,
+  useGetProfileByUserIdQuery,
+  useUpdateProfileMutation,
+  useToggleFollowMutation,
+  useCreatePricingMutation,
+  useCreateServiceMutation,
+  useUploadVideoProofMutation,
+  useAddMediaMutation,
+  useCreateReviewMutation,
+  useGetReviewsQuery,
+  
+  // Wallet
+  useGetWalletBalanceQuery,
+  useFundWalletMutation,
+  useVerifyPaymentMutation,
+  useGetTransactionsQuery,
+  useAddWithdrawalAccountMutation,
+  useGetWithdrawalAccountsQuery,
+  useSetDefaultAccountMutation,
+  useDeleteWithdrawalAccountMutation,
+  useGetBanksQuery,
+  useVerifyBankAccountMutation,
+  useCreatePayoutMutation,
+  useGetPayoutsQuery,
+  useGetPayoutByIdQuery,
+  useCancelPayoutMutation,
+  
+  // Rider
+  useCreateRiderProfileMutation,
+  useGetRiderProfileQuery,
+  useUpdateRiderProfileMutation,
+  useUploadVerificationDocumentsMutation,
+  useUpdateRiderLocationMutation,
+  useSetRiderAvailabilityMutation,
+  useGetNearbyOrdersQuery,
+  useAcceptOrderByRiderMutation,
+  useRejectOrderByRiderMutation,
+  
+  // Order
+  useCreateOrderMutation,
+  useListOrdersQuery,
+  useGetOrderByIdQuery,
+  useAcceptOrderByProviderMutation,
+  useRejectOrderByProviderMutation,
+  useMarkOrderReadyMutation,
+  useStartOrderMutation,
+  useCompleteOrderMutation,
+  useCancelOrderMutation,
+  useAssignRiderMutation,
+  useGetRiderChatRoomQuery,
+  useRiderPickedUpMutation,
+  useUpdateOrderLocationMutation,
+  
+  // Chat
   useGetRoomMessagesQuery,
   useLazyGetRoomMessagesQuery,
   useSendMessageMutation,
