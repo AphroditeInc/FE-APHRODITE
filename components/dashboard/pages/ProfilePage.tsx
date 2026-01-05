@@ -56,8 +56,6 @@ export default function ProfilePage() {
   const [updateProfile, { isLoading: isUpdatingProfile }] = useUpdateProfileMutation();
   const [updateProfileMedia, { isLoading: isUpdatingMedia }] = useUpdateProfileMediaMutation();
   const [createProfileService, { isLoading: isCreatingService }] = useCreateProfileServiceMutation();
-  const [createPricing, { isLoading: isCreatingPricing }] = useCreatePricingMutation();
-  const [createService, { isLoading: isCreatingServiceCustom }] = useCreateServiceMutation();
   const { uploadMultiple, isUploading, progress, error: uploadError } = useCloudinaryUpload({
     folder: 'aphrodite/profile-media',
     resourceType: 'auto', // Auto-detect image or video
@@ -68,6 +66,18 @@ export default function ProfilePage() {
   const [isCustomPricingModalOpen, setIsCustomPricingModalOpen] = useState(false);
   const [isEditPricingModalOpen, setIsEditPricingModalOpen] = useState(false);
   const [editingPricingType, setEditingPricingType] = useState<'shortTime' | 'overnight' | 'weekend' | null>(null);
+  const [editPricingForm, setEditPricingForm] = useState({
+    incall: "",
+    outcall: "",
+  });
+  const [customPricingForm, setCustomPricingForm] = useState({
+    categoryName: "",
+    incallPrice: "",
+    outcallPrice: "",
+    duration: "7 days",
+  });
+  const [createPricing, { isLoading: isCreatingPricing }] = useCreatePricingMutation();
+  const [createService, { isLoading: isCreatingServiceCustom }] = useCreateServiceMutation();
   const [currentFormStep, setCurrentFormStep] = useState(1);
   const [activeTab, setActiveTab] = useState("About");
   const [reviewText, setReviewText] = useState("");
@@ -79,20 +89,6 @@ export default function ProfilePage() {
   const [customServices, setCustomServices] = useState<string[]>([]);
   const [customServiceInput, setCustomServiceInput] = useState("");
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
-  
-  // Custom Pricing Form State
-  const [customPricingForm, setCustomPricingForm] = useState({
-    categoryName: "",
-    incallPrice: "",
-    outcallPrice: "",
-    duration: "7 days",
-  });
-  
-  // Edit Pricing Form State
-  const [editPricingForm, setEditPricingForm] = useState({
-    incall: "",
-    outcall: "",
-  });
 
   // Initialize services from profile.services when profile loads
   useEffect(() => {
@@ -568,7 +564,7 @@ export default function ProfilePage() {
           <div className="text-white/80 mb-4">{error}</div>
           <button 
             onClick={refetch}
-            className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-lg transition-colors"
+            className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-lg transition-colors cursor-pointer"
           >
             Try Again
           </button>
@@ -590,7 +586,7 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-[#1F1B2C]">
       {/* Header */}
       <div className="flex items-center justify-between p-4 sm:p-6">
-        <button className="flex items-center gap-2 text-white hover:text-pink-300 transition-colors">
+        <button className="flex items-center gap-2 text-white hover:text-pink-300 transition-colors cursor-pointer">
           <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
           <span className="text-sm sm:text-base">Back</span>
         </button>
@@ -605,7 +601,7 @@ export default function ProfilePage() {
               setIsEditModalOpen(true);
             }
           }}
-            className=" hover:bg-pink-600 text-white px-3 sm:px-4 py-2 rounded-full flex items-center gap-1 sm:gap-2  border-[1px] border-white/10  text-sm sm:text-base"
+            className=" hover:bg-pink-600 text-white px-3 sm:px-4 py-2 rounded-full flex items-center gap-1 sm:gap-2  border-[1px] border-white/10  text-sm sm:text-base cursor-pointer"
           >
             <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="hidden sm:inline">
@@ -677,7 +673,7 @@ export default function ProfilePage() {
                   <button
                     key={index}
                     onClick={() => setCurrentMediaIndex(index)}
-                    className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-all ${
+                    className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-all cursor-pointer ${
                       index === currentMediaIndex 
                         ? 'bg-pink-500 w-6 sm:w-8' 
                         : 'bg-white/30 hover:bg-white/50'
@@ -703,58 +699,56 @@ export default function ProfilePage() {
             
      
 
-            {/* Location */}
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-pink-500" />
-              <span className="text-white text-sm sm:text-base">
-                {authUser?.city && authUser?.state ? `${authUser.city}, ${authUser.state}` : 
-                 authUser?.city || authUser?.state }
-              </span>
-            </div>
-
-            {/* Rating */}
-            <div className="flex items-center gap-2">
-              <div className="flex">
-                {[...Array(5)].map((_, i) => (
-                  <Star 
-                    key={i} 
-                    className={`w-4 h-4 sm:w-5 sm:h-5 ${i < Math.floor(profile?.reviews?.stats?.averageRating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
-                  />
-                ))}
+            {/* Location and Rating on one line */}
+            <div className="flex items-center gap-4">
+              {/* Location */}
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <MapPin className="w-[17.75px] h-[20.5px] text-[#FA266D] fill-[#FA266D]" />
+                  <div className="absolute top-[5px] left-1/2 -translate-x-1/2 w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-black"></div>
+                </div>
+                <span className="text-[#FFFFFF99] text-[16px] font-normal sm:text-base">
+                  {authUser?.city && authUser?.state ? `${authUser.city}, ${authUser.state}` : 
+                   authUser?.city || authUser?.state }
+                </span>
               </div>
-              <span className="text-white font-semibold text-sm sm:text-base">
-                {profile?.reviews?.stats?.averageRating ? profile.reviews.stats.averageRating.toFixed(1) : '0.0'}
-              </span>
-              <span className="text-sm text-gray-400">
-                ({profile?.reviews?.stats?.totalReviews || 0} reviews)
-              </span>
+
+              {/* Rating */}
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  {[...Array(5)].map((_, i) => (
+                    <Star 
+                      key={i} 
+                      className={`w-[11.41px] h-[10.9px] ${i < Math.floor(profile?.reviews?.stats?.averageRating || 0) ? 'text-[#FFDC18] fill-[#FFDC18]' : 'text-[#FFDC18]'}`} 
+                    />
+                  ))}
+                </div>
+                <span className="text-white italic font-normal text-[14px] sm:text-base">
+                  {profile?.reviews?.stats?.averageRating ? profile.reviews.stats.averageRating.toFixed(1) : '0.0'}
+                </span>
+              </div>
             </div>
 
             {/* Bio */}
             <div className="space-y-2 sm:space-y-3 text-white">
               <p className="text-base sm:text-lg">{profile?.bio || 'No bio available'}</p>
-              {profile?.education && profile.education !== 'Not specified' && (
-                <p className="text-xs sm:text-sm text-pink-300">Education: {profile.education}</p>
-              )}
-              {profile?.occupation && profile.occupation !== 'Not specified' && (
-                <p className="text-xs sm:text-sm text-pink-300">Occupation: {profile.occupation}</p>
-              )}
+             
             </div>
 
             {/* Joined Date */}
             <div className="flex items-center gap-2">
-              <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5 text-pink-500" />
-              <span className="text-white text-sm sm:text-base">
+              <CalendarIcon className="w-[24px] h-[24px] sm:w-5 sm:h-5 text-[#FFFFFF99]" />
+              <span className="text-[#FFFFFF99] font-medium text-[15px] sm:text-base">
                 Joined {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown'}
               </span>
             </div>
 
             {/* Followers/Following */}
             <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-pink-500" />
-              <span className="text-white text-sm sm:text-base">{profile?.followersCount || 0} Followers</span>
+              <Users className="w-[24px] h-[24px] sm:w-5 sm:h-5 text-[#FFFFFF99]" />
+              <span className="text-white text-[15px] font-black sm:text-base">{profile?.followersCount || 0} <span className="text-[#FFFFFF99] font-medium text-[15px] sm:text-base">Followers</span></span>
               <span className="text-white/60 text-sm sm:text-base">•</span>
-              <span className="text-white text-sm sm:text-base">{profile?.reviews?.stats?.totalReviews || 0} Reviews</span>
+              <span className="text-white text-[15px] font-black sm:text-base">{0} <span className="text-[#FFFFFF99] font-medium text-[15px] sm:text-base">Following</span></span>
             </div>
               </div>
             </div>
@@ -765,9 +759,9 @@ export default function ProfilePage() {
         <div className="flex space-x-4 sm:space-x-8 border-b border-white/20 overflow-x-auto scrollbar-hide">
           <button 
             onClick={() => setActiveTab("About")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap ${
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
               activeTab === "About" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -775,9 +769,9 @@ export default function ProfilePage() {
           </button>
           <button 
             onClick={() => setActiveTab("Services")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap ${
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
               activeTab === "Services" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -785,9 +779,9 @@ export default function ProfilePage() {
           </button>
           <button 
             onClick={() => setActiveTab("Media")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap ${
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
               activeTab === "Media" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -795,9 +789,9 @@ export default function ProfilePage() {
           </button>
           <button 
             onClick={() => setActiveTab("Reviews")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap ${
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
               activeTab === "Reviews" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -908,23 +902,24 @@ export default function ProfilePage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-2xl font-bold text-pink-500">Pricing</h3>
+                  <h3 className="text-2xl font-bold text-[#FA266D]">Pricing</h3>
                   <Info className="w-5 h-5 text-white/60" />
                 </div>
                 <button
                   onClick={() => setIsCustomPricingModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 border border-white/30 text-white rounded-lg hover:border-pink-500 hover:text-pink-500 transition-colors"
+                  className="h-[48px] rounded-[30px]  px-6 py-3 flex items-center gap-4 text-white transition-colors border-[1px] border-[#FFFFFF1A] cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>Add Custom Pricing</span>
+                  <Plus className="w-4 h-4 text-[#FA266D]" />
+                  <span className="text-[#FA266D] font-normal text-[14px] sm:text-base">Add Custom Pricing</span>
                 </button>
               </div>
               
               <div className="grid md:grid-cols-3 gap-6">
                 {/* Short Time Card */}
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4 flex items-center justify-center gap-2">
-                    <span>Short Time</span>
+                  <div className="bg-[#FA266D] text-white text-[24px] font-bold py-2 px-4 rounded-lg mb-4 flex items-center justify-between relative">
+                    <div className="flex-1"></div>
+                    <span className="flex-1 text-center whitespace-nowrap">Short Time</span>
                     <button
                       onClick={() => {
                         setEditingPricingType('shortTime');
@@ -935,7 +930,7 @@ export default function ProfilePage() {
                         });
                         setIsEditPricingModalOpen(true);
                       }}
-                      className="ml-auto"
+                      className="flex-1 flex justify-end cursor-pointer"
                     >
                       <Pencil className="w-4 h-4 text-white" />
                     </button>
@@ -972,8 +967,9 @@ export default function ProfilePage() {
 
                 {/* Overnight Card */}
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4 flex items-center justify-center gap-2">
-                    <span>Overnight</span>
+                  <div className="bg-[#FA266D] text-white text-[24px] font-bold py-2 px-4 rounded-lg mb-4 flex items-center justify-between relative">
+                    <div className="flex-1"></div>
+                    <span className="flex-1 text-center">Overnight</span>
                     <button
                       onClick={() => {
                         setEditingPricingType('overnight');
@@ -984,7 +980,7 @@ export default function ProfilePage() {
                         });
                         setIsEditPricingModalOpen(true);
                       }}
-                      className="ml-auto"
+                      className="flex-1 flex justify-end cursor-pointer"
                     >
                       <Pencil className="w-4 h-4 text-white" />
                     </button>
@@ -1021,8 +1017,9 @@ export default function ProfilePage() {
 
                 {/* Weekend Card */}
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4 flex items-center justify-center gap-2">
-                    <span>Weekend</span>
+                  <div className="bg-[#FA266D] text-white text-[24px] font-bold py-2 px-4 rounded-lg mb-4 flex items-center justify-between relative">
+                    <div className="flex-1"></div>
+                    <span className="flex-1 text-center">Weekend</span>
                     <button
                       onClick={() => {
                         setEditingPricingType('weekend');
@@ -1033,7 +1030,7 @@ export default function ProfilePage() {
                         });
                         setIsEditPricingModalOpen(true);
                       }}
-                      className="ml-auto"
+                      className="flex-1 flex justify-end cursor-pointer"
                     >
                       <Pencil className="w-4 h-4 text-white" />
                     </button>
@@ -1170,17 +1167,17 @@ export default function ProfilePage() {
                       <div className="flex items-center gap-4">
                         <button 
                           onClick={() => handleReplyToReview(review.id.toString())}
-                          className="text-pink-500 hover:text-pink-400 transition-colors text-sm font-medium"
+                          className="text-pink-500 hover:text-pink-400 transition-colors text-sm font-medium cursor-pointer"
                         >
                           Write a reply
                         </button>
-                        <button className="flex items-center gap-2 text-white hover:text-white/80 transition-colors">
+                        <button className="flex items-center gap-2 text-white hover:text-white/80 transition-colors cursor-pointer">
                           <ThumbsUp className="w-4 h-4" />
                         </button>
-                        <button className="flex items-center gap-2 text-white hover:text-white/80 transition-colors">
+                        <button className="flex items-center gap-2 text-white hover:text-white/80 transition-colors cursor-pointer">
                           <ThumbsDown className="w-4 h-4" />
                         </button>
-                        <button className="text-[#E05050] hover:text-[#E05050]/80 transition-colors text-sm">
+                        <button className="text-[#E05050] hover:text-[#E05050]/80 transition-colors text-sm cursor-pointer">
                           Report
                         </button>
                       </div>
@@ -1205,13 +1202,13 @@ export default function ProfilePage() {
                                 </div>
                                 <p className="text-white text-sm leading-relaxed">{reply.text}</p>
                                 <div className="flex items-center gap-4">
-                                  <button className="flex items-center gap-1 text-white hover:text-white/80 transition-colors">
+                                  <button className="flex items-center gap-1 text-white hover:text-white/80 transition-colors cursor-pointer">
                                     <ThumbsUp className="w-3 h-3" />
                                   </button>
-                                  <button className="flex items-center gap-1 text-white hover:text-white/80 transition-colors">
+                                  <button className="flex items-center gap-1 text-white hover:text-white/80 transition-colors cursor-pointer">
                                     <ThumbsDown className="w-3 h-3" />
                                   </button>
-                                  <button className="text-[#E05050] hover:text-[#E05050]/80 transition-colors text-xs">
+                                  <button className="text-[#E05050] hover:text-[#E05050]/80 transition-colors text-xs cursor-pointer">
                                     Delete
                                   </button>
                                 </div>
@@ -1241,13 +1238,13 @@ export default function ProfilePage() {
                               <button
                                 onClick={handleSubmitReply}
                                 disabled={!replyText.trim()}
-                                className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm disabled:bg-gray-500 disabled:cursor-not-allowed cursor-pointer"
                               >
                                 Reply
                               </button>
                               <button
                                 onClick={handleCancelReply}
-                                className="px-4 py-2 text-white/60 hover:text-white transition-colors text-sm"
+                                className="px-4 py-2 text-white/60 hover:text-white transition-colors text-sm cursor-pointer"
                               >
                                 Cancel
                               </button>
@@ -1263,7 +1260,7 @@ export default function ProfilePage() {
 
             {/* Show More Reviews */}
             {/* <div className="text-left">
-              <button className="flex items-center gap-2 text-pink-500 hover:text-pink-400 transition-colors">
+              <button className="flex items-center gap-2 text-pink-500 hover:text-pink-400 transition-colors cursor-pointer">
                 <span>Show more reviews</span>
                 <ChevronDown className="w-4 h-4" />
               </button>
@@ -1834,27 +1831,61 @@ export default function ProfilePage() {
                 </button>
                 <button
                   onClick={async () => {
-                    if (!profile?.id) return;
+                    if (!profile?.id) {
+                      alert("Profile ID not found. Please refresh the page and try again.");
+                      return;
+                    }
+                    
+                    if (!editPricingForm.incall && !editPricingForm.outcall) {
+                      alert("Please enter at least one price (incall or outcall).");
+                      return;
+                    }
+                    
                     try {
-                      const pricingData: any = {
+                      const pricingData = {
                         profileId: profile.id,
-                        shortTime: profile.pricing?.shortTime || { incall: 0, outcall: 0 },
-                        overnight: profile.pricing?.overnight || { incall: 0, outcall: 0 },
-                        weekend: profile.pricing?.weekend || { incall: 0, outcall: 0 },
+                        shortTime: {
+                          incall: editingPricingType === 'shortTime' 
+                            ? Number(editPricingForm.incall) || 0 
+                            : Number(profile.pricing?.shortTime?.incall) || 0,
+                          outcall: editingPricingType === 'shortTime' 
+                            ? Number(editPricingForm.outcall) || 0 
+                            : Number(profile.pricing?.shortTime?.outcall) || 0,
+                          currency: "APH",
+                        },
+                        overnight: {
+                          incall: editingPricingType === 'overnight' 
+                            ? Number(editPricingForm.incall) || 0 
+                            : Number(profile.pricing?.overnight?.incall) || 0,
+                          outcall: editingPricingType === 'overnight' 
+                            ? Number(editPricingForm.outcall) || 0 
+                            : Number(profile.pricing?.overnight?.outcall) || 0,
+                          currency: "APH",
+                        },
+                        weekend: {
+                          incall: editingPricingType === 'weekend' 
+                            ? Number(editPricingForm.incall) || 0 
+                            : Number(profile.pricing?.weekend?.incall) || 0,
+                          outcall: editingPricingType === 'weekend' 
+                            ? Number(editPricingForm.outcall) || 0 
+                            : Number(profile.pricing?.weekend?.outcall) || 0,
+                          currency: "APH",
+                        },
                       };
                       
-                      pricingData[editingPricingType] = {
-                        incall: Number(editPricingForm.incall) || 0,
-                        outcall: Number(editPricingForm.outcall) || 0,
-                        currency: "APH",
-                      };
+                      console.log("Submitting pricing data:", pricingData);
+                      const result = await createPricing({ id: profile.id, data: pricingData }).unwrap();
+                      console.log("Pricing update result:", result);
                       
-                      await createPricing({ id: profile.id, data: pricingData }).unwrap();
                       await refetch();
                       setIsEditPricingModalOpen(false);
                       setEditingPricingType(null);
-                    } catch (error) {
+                      setEditPricingForm({ incall: "", outcall: "" });
+                      alert("Pricing updated successfully!");
+                    } catch (error: any) {
                       console.error("Error updating pricing:", error);
+                      const errorMessage = error?.data?.message || error?.message || "Failed to update pricing. Please try again.";
+                      alert(`Error: ${errorMessage}`);
                     }
                   }}
                   disabled={isCreatingPricing}
@@ -1963,43 +1994,50 @@ export default function ProfilePage() {
                 </button>
                 <button
                   onClick={async () => {
-                    if (!profile?.id || !customPricingForm.categoryName) {
-                      alert("Please fill in all required fields");
+                    if (!profile?.id) {
+                      alert("Profile ID not found. Please refresh the page and try again.");
                       return;
                     }
+                    
+                    if (!customPricingForm.categoryName) {
+                      alert("Please enter a category name.");
+                      return;
+                    }
+                    
                     try {
-                      // Create custom service first
+                      // Calculate duration in minutes
+                      let durationMinutes = 60; // default 1 hour
+                      if (customPricingForm.duration.includes('hour')) {
+                        const hours = parseInt(customPricingForm.duration);
+                        durationMinutes = hours * 60;
+                      } else if (customPricingForm.duration.includes('day')) {
+                        const days = parseInt(customPricingForm.duration);
+                        durationMinutes = days * 24 * 60;
+                      } else if (customPricingForm.duration.includes('week')) {
+                        const weeks = parseInt(customPricingForm.duration);
+                        durationMinutes = weeks * 7 * 24 * 60;
+                      } else if (customPricingForm.duration.includes('month')) {
+                        const months = parseInt(customPricingForm.duration);
+                        durationMinutes = months * 30 * 24 * 60;
+                      }
+                      
+                      // Create custom service
                       const serviceData = {
                         profileId: profile.id,
                         name: customPricingForm.categoryName,
                         description: `Custom pricing for ${customPricingForm.duration}`,
-                        durationMinutes: customPricingForm.duration.includes('hour') 
-                          ? parseInt(customPricingForm.duration) * 60
-                          : customPricingForm.duration.includes('day')
-                          ? parseInt(customPricingForm.duration) * 24 * 60
-                          : customPricingForm.duration.includes('week')
-                          ? parseInt(customPricingForm.duration) * 7 * 24 * 60
-                          : parseInt(customPricingForm.duration) * 30 * 24 * 60,
+                        durationMinutes: durationMinutes,
                         active: true,
                       };
                       
+                      console.log("Creating custom service:", serviceData);
                       const serviceResult = await createService({ id: profile.id, data: serviceData }).unwrap();
+                      console.log("Service creation result:", serviceResult);
                       
-                      // Then create pricing if needed
-                      if (customPricingForm.incallPrice || customPricingForm.outcallPrice) {
-                        const pricingData: any = {
-                          profileId: profile.id,
-                          shortTime: profile.pricing?.shortTime || { incall: 0, outcall: 0 },
-                          overnight: profile.pricing?.overnight || { incall: 0, outcall: 0 },
-                          weekend: profile.pricing?.weekend || { incall: 0, outcall: 0 },
-                        };
-                        
-                        // Note: Custom pricing would need a different structure, but for now we'll add it as a note
-                        // The API expects shortTime, overnight, weekend structure
-                        // Custom pricing might need to be stored differently or as part of services
-                        
-                        await createPricing({ id: profile.id, data: pricingData }).unwrap();
-                      }
+                      // Note: Custom pricing prices (incallPrice/outcallPrice) would need to be stored
+                      // as part of the service or in a separate pricing structure.
+                      // For now, we're just creating the service. The pricing can be added later
+                      // if the backend supports custom pricing per service.
                       
                       await refetch();
                       setIsCustomPricingModalOpen(false);
@@ -2009,9 +2047,11 @@ export default function ProfilePage() {
                         outcallPrice: "",
                         duration: "7 days",
                       });
-                    } catch (error) {
+                      alert("Custom service created successfully!");
+                    } catch (error: any) {
                       console.error("Error creating custom pricing:", error);
-                      alert("Failed to create custom pricing. Please try again.");
+                      const errorMessage = error?.data?.message || error?.message || "Failed to create custom service. Please try again.";
+                      alert(`Error: ${errorMessage}`);
                     }
                   }}
                   disabled={isCreatingServiceCustom || isCreatingPricing}

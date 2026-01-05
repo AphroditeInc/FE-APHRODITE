@@ -61,21 +61,21 @@ export default function Header({ onMenuToggle }: HeaderProps) {
         {/* Search Bar - Hidden on mobile */}
         <div className="hidden lg:flex items-center gap-4 pl-[80px]">
           <div className="relative">
-            <div className="flex items-center bg-white/10 rounded-lg px-4 py-2 min-w-[400px]">
-              <Search className="h-5 w-5 text-[#FA266D] mr-3" />
+            <div className="flex items-center h-[48px] rounded-[30px] border border-[#3C374E] p-4 gap-3 min-w-[400px]">
+              <Search className="h-5 w-5 text-[#FA266D]" />
               <input
                 type="text"
                 placeholder="Search for anything here..."
                 className="bg-transparent text-white placeholder-gray-400 focus:outline-none flex-1"
               />
-              <button className="ml-3 text-[#FA266D] hover:text-pink-400 transition-colors">
+              <button className="text-[#FA266D] hover:text-pink-400 transition-colors cursor-pointer">
                 <Filter className="h-5 w-5" />
               </button>
             </div>
           </div>
           
           {/* Red Dot Indicator */}
-          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+          {/* <div className="w-2 h-2 bg-red-500 rounded-full"></div> */}
         </div>
 
         {/* Mobile Menu Button and Search - Show on mobile */}
@@ -103,42 +103,42 @@ export default function Header({ onMenuToggle }: HeaderProps) {
         {/* Right Side Actions */}
         <div className="flex items-center space-x-2 sm:space-x-4 pr-0 sm:pr-[80px]">
           {/* Message Icon */}
-          <button className="w-8 h-8 sm:w-10 sm:h-10 bg-gray-700 rounded-full flex items-center justify-center hover:bg-gray-600 transition-colors">
+          <button className="w-8 h-8 sm:w-10 sm:h-10 bg-[#3C374E] rounded-full flex items-center justify-center hover:bg-gray-600 transition-colors">
             <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5 text-[#FA266D]" />
           </button>
 
           {/* Notification Bell */}
-          <button className="w-8 h-8 sm:w-10 sm:h-10 bg-gray-700 rounded-full flex items-center justify-center hover:bg-gray-600 transition-colors">
+          <button className="w-8 h-8 sm:w-10 sm:h-10 bg-[#3C374E] rounded-full flex items-center justify-center hover:bg-gray-600 transition-colors">
             <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-[#FA266D]" />
           </button>
 
           {/* Balance Display - Hidden on mobile */}
-          <div className="hidden sm:flex items-center gap-2 bg-white/10 rounded-lg px-3 sm:px-4 py-2">
+          <div className="hidden sm:flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2">
             <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-400" />
             {isLoadingBalance ? (
               <span className="text-white/60 font-medium text-sm sm:text-base">Loading...</span>
             ) : walletBalance ? (
-              <span className="text-white font-medium text-sm sm:text-base">
+              <span className="text-white text-[16px] font-medium sm:text-base">
                 {Number(walletBalance.balance || 0).toLocaleString('en-US', { 
                   minimumFractionDigits: 2, 
                   maximumFractionDigits: 2 
                 })} {walletBalance.currency || 'APH'}
               </span>
             ) : (
-              <span className="text-white/60 font-medium text-sm sm:text-base">0.00 APH</span>
+              <span className="text-white text-[16px] font-medium sm:text-base">0.00 APH</span>
             )}
           </div>
 
           {/* User Profile and Logout */}
           <div className="flex items-center gap-2 sm:gap-3">
             {/* User Info - Hidden on mobile */}
-            {user && (
+            {/* {user && (
               <div className="hidden sm:flex items-center gap-2">
                 <span className="text-white text-sm font-medium">
                   {user.firstName} {user.lastName}
                 </span>
               </div>
-            )}
+            )} */}
             
             {/* Profile Picture */}
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center border border-white/20 hover:border-white/40 transition-colors cursor-pointer overflow-hidden bg-white/10">

@@ -16,6 +16,7 @@ import {
   CheckCheck,
   X,
   Briefcase,
+  Wallet,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -26,6 +27,7 @@ import {
   useSendMessageMutation,
   useCreateRoomMutation,
   useGetUserRoomsQuery,
+  useGetProfileByUserIdQuery,
 } from "@/app/api/apiSlice";
 import { apiService } from "@/lib/services";
 import type { ChatRoom, ChatMessage } from "@/lib/types";
@@ -107,8 +109,22 @@ interface Message {
   duration?: string;
   videoThumbnail?: string;
   pricing?: {
-    shortTime: { incall: string; outcall: string };
-    overnight: { incall: string; outcall: string };
+    shortTime?: { incall: string; outcall: string };
+    overnight?: { incall: string; outcall: string };
+    weekend?: { incall: string; outcall: string };
+  };
+  pricingMetadata?: {
+    type?: string;
+    incall?: number;
+    outcall?: number;
+    currency?: string;
+    amount?: string;
+    allPlans?: Array<{
+      type: string;
+      incall?: number;
+      outcall?: number;
+      currency?: string;
+    }>;
   };
 }
 
@@ -152,6 +168,7 @@ export default function MessagesPage() {
   } | null>(null);
   const [showPricingDialog, setShowPricingDialog] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [customPrice, setCustomPrice] = useState<string>("");
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
   const [newChatUserId, setNewChatUserId] = useState("");
   const [participantAvatars, setParticipantAvatars] = useState<
@@ -159,9 +176,23 @@ export default function MessagesPage() {
   >(new Map());
   const [preloadedProfileId, setPreloadedProfileId] = useState<string | null>(null);
   const hasProcessedQueryParams = useRef(false);
+  const sendingPricingRef = useRef<Set<string>>(new Set());
 
   // RTK Query hooks
   const currentUserId = userId || user?.id || fallbackUserId;
+  
+  // Fetch user's profile pricing when dialog opens
+  const {
+    data: profileData,
+    isLoading: loadingProfile,
+  } = useGetProfileByUserIdQuery(
+    currentUserId || "",
+    { skip: !currentUserId || !showPricingDialog }
+  );
+  
+  const userPricing = profileData?.success && profileData?.data?.pricing 
+    ? profileData.data.pricing 
+    : null;
   // Use getUserRooms instead of getConversations to get all rooms (matches Swagger: /chat/rooms returns 3, /chat/conversations returns 2)
   const {
     data: roomsData,
@@ -537,7 +568,6 @@ export default function MessagesPage() {
     console.log("[MessagesPage] Sorted messages length:", sorted.length);
     
     // Merge with real-time messages for the selected chat
-    const allMessages = [...sorted];
     if (selectedChat) {
       const roomRealtimeMessages = realtimeMessages.filter(
         (msg) => msg.roomId === selectedChat
@@ -546,14 +576,22 @@ export default function MessagesPage() {
       // Merge and deduplicate by message ID
       const messageMap = new Map<string, ChatMessage>();
       
-      // Add API messages first
+      // Add API messages first (from database)
       sorted.forEach((msg) => {
         messageMap.set(msg.id, msg);
       });
       
-      // Add/update with real-time messages (they take precedence)
+      // Add/update with real-time messages
+      // The Map will automatically deduplicate by message.id
+      // API messages are added first, so real-time messages will only be added if they don't exist
+      // This prevents duplicates - if API has the message, it's already in the map
       roomRealtimeMessages.forEach((msg) => {
-        messageMap.set(msg.id, msg);
+        // Only add if message doesn't exist in API messages (Map already has it from sorted.forEach above)
+        // This prevents duplicates when API refetches after WebSocket delivers
+        if (!messageMap.has(msg.id)) {
+          messageMap.set(msg.id, msg);
+        }
+        // If message already exists in map (from API), don't add it again - this prevents duplicates
       });
       
       // Convert back to array and sort
@@ -607,6 +645,13 @@ export default function MessagesPage() {
       console.log("[MessagesPage] Received newMessage via WebSocket:", data.message);
       const newMessage = data.message;
       
+      // Skip if this is a message we just sent (it will be handled by messageDelivered)
+      const currentUserId = userId || user?.id || fallbackUserId;
+      if (currentUserId && newMessage.senderId === currentUserId) {
+        console.log("[MessagesPage] Skipping newMessage for our own message, will be handled by messageDelivered");
+        return;
+      }
+      
       // Update lastMessage for this room
       if (newMessage.roomId) {
         setRoomLastMessages((prev) => {
@@ -616,7 +661,7 @@ export default function MessagesPage() {
         });
       }
       
-      // Only add if it's for the currently selected chat
+      // Only add if it's for the currently selected chat (match old code pattern)
       if (selectedChat && newMessage.roomId === selectedChat) {
         setRealtimeMessages((prev) => {
           // Check if message already exists (avoid duplicates)
@@ -635,28 +680,57 @@ export default function MessagesPage() {
       console.log("[MessagesPage] Received messageDelivered via WebSocket:", data);
       const deliveredMessage = data.message;
       
+      // Remove from sending set
+      if (data.tempId) {
+        sendingPricingRef.current.delete(data.tempId);
+      }
+      
       // Update lastMessage for this room
       if (deliveredMessage.roomId) {
         setRoomLastMessages((prev) => {
           const updated = new Map(prev);
-          updated.set(deliveredMessage.roomId, deliveredMessage);
+          // Preserve metadata in lastMessage too
+          const messageWithMetadata = {
+            ...deliveredMessage,
+            metadata: deliveredMessage.metadata || prev.get(deliveredMessage.roomId)?.metadata,
+          };
+          updated.set(deliveredMessage.roomId, messageWithMetadata);
           return updated;
         });
       }
       
-      // Update the message in real-time messages (replace temp message with real one)
-      if (data.tempId) {
+      // Only add to realtimeMessages if it's for the selected chat
+      // Check if message already exists in current API messages to prevent duplicates
+      if (selectedChat && deliveredMessage.roomId === selectedChat) {
+        // Check current API messages to see if this message already exists
+        // If it does, don't add to realtimeMessages - it will be shown from API messages
+        const existsInApi = messagesData && Array.isArray(messagesData) 
+          ? messagesData.some((msg: ChatMessage) => msg.id === deliveredMessage.id)
+          : false;
+        
+        if (existsInApi) {
+          console.log("[MessagesPage] Message already exists in API messages, skipping realtimeMessages to prevent duplicate");
+          return;
+        }
+        
         setRealtimeMessages((prev) => {
-          const filtered = prev.filter((msg) => msg.tempId !== data.tempId);
-          return [...filtered, deliveredMessage];
-        });
-      } else {
-        // No tempId, just add/update the message
-        setRealtimeMessages((prev) => {
+          // Check if message already exists in realtimeMessages to prevent duplicates
           const exists = prev.some((msg) => msg.id === deliveredMessage.id);
           if (exists) {
-            return prev.map((msg) => (msg.id === deliveredMessage.id ? deliveredMessage : msg));
+            // Update existing message, preserving metadata
+            return prev.map((msg) => {
+              if (msg.id === deliveredMessage.id) {
+                return {
+                  ...deliveredMessage,
+                  metadata: deliveredMessage.metadata && Object.keys(deliveredMessage.metadata).length > 0
+                    ? deliveredMessage.metadata
+                    : msg.metadata,
+                };
+              }
+              return msg;
+            });
           }
+          // Add new message - merge logic will deduplicate with API messages
           return [...prev, deliveredMessage];
         });
       }
@@ -664,7 +738,16 @@ export default function MessagesPage() {
 
     const handleRoomMessage = (data: { message: ChatMessage }) => {
       console.log("[MessagesPage] Received roomMessage via WebSocket:", data.message);
-      // Room messages are handled the same as newMessage
+      const roomMessage = data.message;
+      
+      // Skip if this is a message we just sent (it will be handled by messageDelivered)
+      const currentUserId = userId || user?.id || fallbackUserId;
+      if (currentUserId && roomMessage.senderId === currentUserId) {
+        console.log("[MessagesPage] Skipping roomMessage for our own message, will be handled by messageDelivered");
+        return;
+      }
+      
+      // Room messages are handled the same as newMessage (for messages from others)
       handleNewMessage(data);
     };
 
@@ -1632,38 +1715,14 @@ export default function MessagesPage() {
       return;
     }
     
-    // Create optimistic message for immediate UI update
-    const optimisticMessage: ChatMessage = {
-      id: tempId,
-      senderId: currentUserId,
-      receiverId: receiverId,
-      roomId: selectedChat,
-      content: messageContent,
-      type: "text",
-      status: "sending",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      tempId: tempId,
-    };
-
-    // Add optimistic message to real-time messages
-    setRealtimeMessages((prev) => [...prev, optimisticMessage]);
-    
-    // Update room's lastMessage immediately for optimistic UI
-    if (selectedChat) {
-      setRoomLastMessages((prev) => {
-        const updated = new Map(prev);
-        updated.set(selectedChat, optimisticMessage);
-        return updated;
-      });
-    }
-    
+    // Clear input immediately for better UX
     setMessageInput("");
 
     // Try WebSocket first if connected, otherwise fallback to REST API
+    // Wait for WebSocket response instead of showing optimistic message
     if (socketConnected && socket) {
       try {
-        console.log("[MessagesPage] Sending message via WebSocket");
+        console.log("[MessagesPage] Sending message via WebSocket, waiting for messageDelivered");
         sendSocketMessage({
           receiverId: receiverId,
           roomId: selectedChat,
@@ -1672,8 +1731,8 @@ export default function MessagesPage() {
           tempId: tempId,
         });
         
-        // WebSocket will handle the messageDelivered event to update the optimistic message
-        // Only refetch rooms to update last message, not messages (we already have optimistic update)
+        // WebSocket will emit messageDelivered event, which will add the message to UI
+        // Refetch rooms after a delay to update last message
         setTimeout(() => {
           refetchRooms();
         }, 1000);
@@ -1692,22 +1751,22 @@ export default function MessagesPage() {
       // receiverId is already validated above, but TypeScript needs this check
       if (!receiverId) {
         console.error("[MessagesPage] Cannot send via REST API: receiverId is undefined");
-        return;
-      }
-      
-      try {
-        const result = await sendMessageMutation({
+      return;
+    }
+
+    try {
+      const result = await sendMessageMutation({
           receiverId: receiverId,
           content: messageContent,
-          type: "text",
+        type: "text",
           tempId: tempId,
-        }).unwrap();
+      }).unwrap();
 
         if (result && receiverId && selectedChat && currentUserId) {
-          // transformResponse already extracted the data, so result is the message object
+        // transformResponse already extracted the data, so result is the message object
           // Ensure senderId and receiverId are strings (not null)
           const sentMessage: ChatMessage = {
-            ...result,
+          ...result,
             senderId: (result.senderId && typeof result.senderId === "string") ? result.senderId : currentUserId,
             receiverId: (result.receiverId && typeof result.receiverId === "string") ? result.receiverId : receiverId,
             roomId: (result.roomId && typeof result.roomId === "string") ? result.roomId : selectedChat,
@@ -1715,12 +1774,15 @@ export default function MessagesPage() {
 
           console.log("[MessagesPage] Message sent successfully via REST API:", sentMessage);
           
-          // Update optimistic message with real message
-          setRealtimeMessages((prev) => 
-            prev.map((msg) => 
-              msg.tempId === tempId ? sentMessage : msg
-            )
-          );
+          // Add message to real-time messages (no optimistic message, just add the real one)
+          setRealtimeMessages((prev) => {
+            // Check if message already exists to prevent duplicates
+            const exists = prev.some((msg) => msg.id === sentMessage.id);
+            if (exists) {
+              return prev;
+            }
+            return [...prev, sentMessage];
+          });
           
           // Update room's lastMessage with the real message
           if (selectedChat) {
@@ -1731,27 +1793,23 @@ export default function MessagesPage() {
             });
           }
 
-          // RTK Query will automatically refetch messages and rooms due to invalidatesTags
-          // Only refetch rooms, messages will be updated via invalidatesTags
-          refetchRooms();
-        }
-      } catch (err: unknown) {
+        // RTK Query will automatically refetch messages and rooms due to invalidatesTags
+        refetchRooms();
+      }
+    } catch (err: unknown) {
         console.error("[MessagesPage] Error sending message via REST API:", err);
         
-        // Remove optimistic message on error
-        setRealtimeMessages((prev) => prev.filter((msg) => msg.tempId !== tempId));
-        
-        const errorMsg =
-          err &&
-          typeof err === "object" &&
-          "data" in err &&
-          err.data &&
-          typeof err.data === "object" &&
-          "message" in err.data
-            ? String(err.data.message)
-            : err && typeof err === "object" && "message" in err
-            ? String(err.message)
-            : "Failed to send message";
+      const errorMsg =
+        err &&
+        typeof err === "object" &&
+        "data" in err &&
+        err.data &&
+        typeof err.data === "object" &&
+        "message" in err.data
+          ? String(err.data.message)
+          : err && typeof err === "object" && "message" in err
+          ? String(err.message)
+          : "Failed to send message";
         console.error("[MessagesPage] Failed to send message:", errorMsg);
         setError(errorMsg);
       }
@@ -1781,17 +1839,234 @@ export default function MessagesPage() {
   const closePricingDialog = () => {
     setShowPricingDialog(false);
     setSelectedPlan(null);
+    setCustomPrice("");
   };
 
   const handlePlanSelect = (plan: string) => {
     setSelectedPlan(plan);
   };
 
-  const handleSendPricing = () => {
-    if (selectedPlan) {
-      // Handle sending the selected pricing plan
-      console.log("Sending pricing plan:", selectedPlan);
+  const handleSendPricing = async () => {
+    if (!selectedPlan || !selectedChat) return;
+    
+    const currentUserId = userId || user?.id || fallbackUserId;
+    if (!currentUserId) return;
+    
+    // Prevent multiple rapid clicks or if already sending
+    if (sending) {
+      console.log("[handleSendPricing] Already sending, skipping");
+      return;
+    }
+    
+    // Check if we're already processing a pricing send
+    const isProcessing = Array.from(sendingPricingRef.current).length > 0;
+    if (isProcessing) {
+      console.log("[handleSendPricing] Already processing a pricing send, skipping");
+      return;
+    }
+    
+    // Get the selected room to find the receiver ID
+    const room = rooms.find((r) => r.id === selectedChat);
+    if (!room) return;
+    
+    // Find the receiver ID
+    let receiverId: string | undefined;
+    if (room.type === "direct" && room.participants) {
+      const otherParticipant = room.participants.find((p) => {
+        const pId = extractParticipantId(p);
+        return pId && pId !== currentUserId;
+      });
+      receiverId = otherParticipant
+        ? extractParticipantId(otherParticipant) || undefined
+        : undefined;
+    }
+    
+    if (!receiverId) return;
+    
+    // Format the pricing message based on selected plan
+    let pricingContent = "";
+    let pricingData: any = null;
+    
+    if (selectedPlan === "custom-price" && customPrice) {
+      // Send custom price as a single pricing card
+      pricingContent = `💰 Custom Pricing: ${Number(customPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH`;
+      pricingData = { 
+        type: "custom", 
+        amount: customPrice,
+        currency: "APH"
+      };
+    } else if (userPricing && selectedPlan !== "custom-price") {
+      // Get the selected plan's pricing
+      const plan = selectedPlan as "shortTime" | "overnight" | "weekend";
+      const pricing = userPricing[plan];
+      
+      if (pricing && (pricing.incall || pricing.outcall)) {
+        const planName = plan === "shortTime" ? "Short Time" : plan === "overnight" ? "Overnight" : "Weekend";
+        const incall = pricing.incall ? Number(pricing.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
+        const outcall = pricing.outcall ? Number(pricing.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
+        const currency = pricing.currency || "APH";
+        
+        // Format content with pricing details so it can be parsed
+        pricingContent = `💰 ${planName} Pricing\nIncall: ${incall} ${currency}\nOutcall: ${outcall} ${currency}`;
+        
+        pricingData = {
+          type: plan,
+          incall: pricing.incall,
+          outcall: pricing.outcall,
+          currency: currency
+        };
+      } else {
+        // If selected plan has no pricing, send all available plans
+        const plans: any[] = [];
+        
+        if (userPricing.shortTime && (userPricing.shortTime.incall || userPricing.shortTime.outcall)) {
+          plans.push({
+            type: "shortTime",
+            incall: userPricing.shortTime.incall,
+            outcall: userPricing.shortTime.outcall,
+            currency: userPricing.shortTime.currency || "APH"
+          });
+        }
+        
+        if (userPricing.overnight && (userPricing.overnight.incall || userPricing.overnight.outcall)) {
+          plans.push({
+            type: "overnight",
+            incall: userPricing.overnight.incall,
+            outcall: userPricing.overnight.outcall,
+            currency: userPricing.overnight.currency || "APH"
+          });
+        }
+        
+        if (userPricing.weekend && (userPricing.weekend.incall || userPricing.weekend.outcall)) {
+          plans.push({
+            type: "weekend",
+            incall: userPricing.weekend.incall,
+            outcall: userPricing.weekend.outcall,
+            currency: userPricing.weekend.currency || "APH"
+          });
+        }
+        
+        if (plans.length > 0) {
+          pricingContent = "💰 My Pricing Plans";
+          pricingData = {
+            allPlans: plans,
+            type: plans[0].type,
+            incall: plans[0].incall,
+            outcall: plans[0].outcall,
+            currency: plans[0].currency
+          };
+        }
+      }
+    }
+    
+    if (!pricingData) {
+      console.error("No pricing data to send");
+      return;
+    }
+    
+    // Generate unique tempId with timestamp and random component to prevent duplicates
+    const tempId = `temp_pricing_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Check if we're already sending this exact message (prevent duplicate sends)
+    if (sendingPricingRef.current.has(tempId)) {
+      console.log("[handleSendPricing] Already sending this message, skipping duplicate");
+      return;
+    }
+    
+    // Add to sending set immediately to prevent duplicate sends
+    sendingPricingRef.current.add(tempId);
+    
+    // Close dialog immediately for better UX
       closePricingDialog();
+    setCustomPrice("");
+    
+    // Try WebSocket first if connected, otherwise fallback to REST API
+    if (socketConnected && socket) {
+      try {
+        console.log("[handleSendPricing] Sending via WebSocket, waiting for messageDelivered");
+        sendSocketMessage({
+          receiverId: receiverId,
+          roomId: selectedChat,
+          content: pricingContent,
+          type: "text",
+          tempId: tempId,
+          metadata: pricingData ? { pricing: pricingData } : undefined,
+        });
+        // WebSocket will emit messageDelivered event, which will add the message to UI
+      } catch (err) {
+        console.error("Error sending via WebSocket, falling back to REST API:", err);
+        sendingPricingRef.current.delete(tempId);
+        // Fallback to REST API
+        sendViaRestAPI();
+      }
+    } else {
+      console.log("[handleSendPricing] WebSocket not connected, using REST API");
+      // Fallback to REST API
+      sendViaRestAPI();
+    }
+
+    async function sendViaRestAPI() {
+      try {
+        const result = await sendMessageMutation({
+          receiverId: receiverId!,
+          content: pricingContent,
+          type: "text",
+          tempId: tempId,
+          metadata: pricingData ? { pricing: pricingData } : undefined,
+        }).unwrap();
+        
+        // Remove from sending set
+        sendingPricingRef.current.delete(tempId);
+        
+        if (result && receiverId && selectedChat && currentUserId) {
+          // Preserve metadata from the original message
+          const sentMessage: ChatMessage = {
+            ...result,
+            senderId: (result.senderId && typeof result.senderId === "string") ? result.senderId : currentUserId,
+            receiverId: (result.receiverId && typeof result.receiverId === "string") ? result.receiverId : receiverId,
+            roomId: (result.roomId && typeof result.roomId === "string") ? result.roomId : selectedChat,
+            // Preserve metadata - use result metadata if available, otherwise use original
+            metadata: result.metadata && Object.keys(result.metadata).length > 0 
+              ? result.metadata 
+              : (pricingData ? { pricing: pricingData } : undefined),
+          };
+          
+          // Add message to real-time messages (no optimistic message, just add the real one)
+          setRealtimeMessages((prev) => {
+            // Check if message already exists to prevent duplicates
+            const exists = prev.some((msg) => msg.id === sentMessage.id);
+            if (exists) {
+              return prev;
+            }
+            return [...prev, sentMessage];
+          });
+          
+          if (selectedChat) {
+            setRoomLastMessages((prev) => {
+              const updated = new Map(prev);
+              updated.set(selectedChat, sentMessage);
+              return updated;
+            });
+          }
+          
+          refetchRooms();
+        }
+      } catch (err) {
+        console.error("Error sending pricing message via REST API:", err);
+        sendingPricingRef.current.delete(tempId);
+        const errorMsg =
+          err &&
+          typeof err === "object" &&
+          "data" in err &&
+          err.data &&
+          typeof err.data === "object" &&
+          "message" in err.data
+            ? String(err.data.message)
+            : err && typeof err === "object" && "message" in err
+            ? String(err.message)
+            : "Failed to send pricing message";
+        setError(errorMsg);
+      }
     }
   };
 
@@ -2132,7 +2407,7 @@ export default function MessagesPage() {
     if (!message.content || message.content.trim() === "") {
       return "No messages yet";
     }
-    
+
     // Handle different message types
     if (message.type === "text") {
       return message.content.length > 50
@@ -2188,66 +2463,250 @@ export default function MessagesPage() {
       messageContent: apiMessage.content?.substring(0, 20),
     });
 
+    // Check if message has pricing metadata
+    const pricingMetadata = apiMessage.metadata?.pricing as {
+      type?: string;
+      incall?: number;
+      outcall?: number;
+      currency?: string;
+      amount?: string;
+      allPlans?: Array<{
+        type: string;
+        incall?: number;
+        outcall?: number;
+        currency?: string;
+      }>;
+    } | undefined;
+    
+    // Also check if content suggests it's a pricing message (fallback detection)
+    const content = apiMessage.content || "";
+    const isPricingContent = 
+      content.includes("💰") || 
+      content.includes("My Pricing Plans") ||
+      content.includes("Short Time Pricing") ||
+      content.includes("Overnight Pricing") ||
+      content.includes("Weekend Pricing") ||
+      content.includes("Custom Pricing");
+    
+    // Determine message type - if it has pricing metadata OR pricing content pattern, it's a pricing message
+    let messageType: "text" | "audio" | "video" | "image" | "pricing" = apiMessage.type as "text" | "audio" | "video" | "image" | "pricing";
+    if (pricingMetadata || isPricingContent) {
+      messageType = "pricing";
+    }
+
     return {
       id: apiMessage.id,
       sender: isOwn ? "me" : "other",
-      type: apiMessage.type as "text" | "audio" | "video" | "image" | "pricing",
+      type: messageType,
       content: apiMessage.content,
       timestamp: formatTime(apiMessage.createdAt),
       duration: apiMessage.metadata?.duration as string | undefined,
       videoThumbnail:
         (apiMessage.metadata?.imageUrl as string) ||
         apiMessage.attachments?.[0],
+      pricing: pricingMetadata ? {
+        shortTime: pricingMetadata.type === "shortTime" ? {
+          incall: pricingMetadata.incall?.toString() || "",
+          outcall: pricingMetadata.outcall?.toString() || "",
+        } : undefined,
+        overnight: pricingMetadata.type === "overnight" ? {
+          incall: pricingMetadata.incall?.toString() || "",
+          outcall: pricingMetadata.outcall?.toString() || "",
+        } : undefined,
+        weekend: pricingMetadata.type === "weekend" ? {
+          incall: pricingMetadata.incall?.toString() || "",
+          outcall: pricingMetadata.outcall?.toString() || "",
+        } : undefined,
+      } : undefined,
+      pricingMetadata: pricingMetadata || (isPricingContent ? {
+        // If no metadata but content suggests pricing, create a basic metadata structure
+        type: content.includes("Short Time") ? "shortTime" : 
+              content.includes("Overnight") ? "overnight" :
+              content.includes("Weekend") ? "weekend" : 
+              content.includes("Custom") ? "custom" : "all",
+        // Try to parse pricing from content if it's a single plan message
+        ...(content.includes("Incall:") && content.includes("Outcall:") ? {
+          incall: parseFloat(content.match(/Incall:\s*([\d,]+\.?\d*)/)?.[1]?.replace(/,/g, '') || '0'),
+          outcall: parseFloat(content.match(/Outcall:\s*([\d,]+\.?\d*)/)?.[1]?.replace(/,/g, '') || '0'),
+          currency: content.match(/(APH|USD|NGN)/)?.[1] || "APH",
+        } : {}),
+      } : undefined),
     };
   };
 
   const renderMessage = (message: Message) => {
     const isOwnMessage = message.sender === "me";
 
-    if (message.type === "pricing" && message.pricing) {
+    // Check if message is a pricing message (by type or content)
+    const isPricingMessage = message.type === "pricing" || 
+      message.content?.includes("💰") ||
+      message.content?.includes("My Pricing Plans") ||
+      message.content?.includes("Short Time Pricing") ||
+      message.content?.includes("Overnight Pricing") ||
+      message.content?.includes("Weekend Pricing");
+
+    // Check if message has pricing metadata
+    if (isPricingMessage && message.pricingMetadata) {
+      const pricing = message.pricingMetadata;
+      const currency = pricing.currency || "APH";
+      
+      // If allPlans exists, render all pricing plans
+      if (pricing.allPlans && pricing.allPlans.length > 0) {
       return (
         <div className="space-y-3">
-          {/* Short Time Card */}
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
+            {pricing.allPlans.map((plan, index) => {
+              const planName = plan.type === "shortTime" ? "Short Time" : plan.type === "overnight" ? "Overnight" : "Weekend";
+              const incall = plan.incall ? Number(plan.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
+              const outcall = plan.outcall ? Number(plan.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
+              const buttonText = plan.type === "shortTime" ? "Book short time" : plan.type === "overnight" ? "Book overnight" : "Book weekend";
+              
+              return (
+                <div key={index} className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col justify-between">
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-white text-[20px]">Incall</span>
+                      <div className="flex items-center gap-1">
+                        <Wallet className="h-5 w-5 text-yellow-400" />
                 <span className="text-white font-semibold text-[20px]">
-                  50,000.00 APH
+                          {incall} {plan.currency || currency}
                 </span>
+                      </div>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-white text-[20px]">Outcall</span>
+                      <div className="flex items-center gap-1">
+                        <Wallet className="h-5 w-5 text-yellow-400" />
                 <span className="text-white font-semibold text-[20px]">
-                  70,000.00 APH
+                          {outcall} {plan.currency || currency}
                 </span>
+                      </div>
+                    </div>
+                  </div>
+                  <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium mt-4">
+                    {buttonText}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+      
+      // Render based on pricing type (single plan or custom)
+      if (pricing.type === "custom" && pricing.amount) {
+        // Custom pricing
+        return (
+          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col">
+            <div className="space-y-3 mb-4">
+              <div className="flex justify-between items-center">
+                <span className="text-white text-[20px]">Custom Price</span>
+                <div className="flex items-center gap-1">
+                  <Wallet className="h-5 w-5 text-yellow-400" />
+                  <span className="text-white font-semibold text-[20px]">
+                    {Number(pricing.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
+                  </span>
+                </div>
               </div>
             </div>
             <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium">
-              Book short time
+              Book now
             </button>
           </div>
-
-          {/* Overnight Card */}
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
+        );
+      } else if (pricing.type === "shortTime" || pricing.type === "overnight" || pricing.type === "weekend") {
+        // Single pricing plan
+        const planName = pricing.type === "shortTime" ? "Short Time" : pricing.type === "overnight" ? "Overnight" : "Weekend";
+        const incall = pricing.incall ? Number(pricing.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
+        const outcall = pricing.outcall ? Number(pricing.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
+        const buttonText = pricing.type === "shortTime" ? "Book short time" : pricing.type === "overnight" ? "Book overnight" : "Book weekend";
+        
+        return (
+          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col justify-between">
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-white text-[20px]">Incall</span>
+                <div className="flex items-center gap-1">
+                  <Wallet className="h-5 w-5 text-yellow-400" />
                 <span className="text-white font-semibold text-[20px]">
-                  70,000.00 APH
+                    {incall} {currency}
                 </span>
+                </div>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-white text-[20px]">Outcall</span>
+                <div className="flex items-center gap-1">
+                  <Wallet className="h-5 w-5 text-yellow-400" />
                 <span className="text-white font-semibold text-[20px]">
-                  100,000.00 APH
+                    {outcall} {currency}
                 </span>
               </div>
             </div>
-            <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium">
-              Book overnight
+            </div>
+            <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium mt-4">
+              {buttonText}
             </button>
           </div>
+        );
+      }
+    }
+    
+    // Fallback: if message type is pricing but no metadata, try to render from content or pricing object
+    if (isPricingMessage && !message.pricingMetadata && message.pricing) {
+      const cards = [];
+      
+      if (message.pricing.shortTime) {
+        cards.push({
+          name: "Short Time",
+          buttonText: "Book short time",
+          ...message.pricing.shortTime,
+        });
+      }
+      
+      if (message.pricing.overnight) {
+        cards.push({
+          name: "Overnight",
+          buttonText: "Book overnight",
+          ...message.pricing.overnight,
+        });
+      }
+      
+      if (message.pricing.weekend) {
+        cards.push({
+          name: "Weekend",
+          buttonText: "Book weekend",
+          ...message.pricing.weekend,
+        });
+      }
+      
+      return (
+        <div className="space-y-3">
+          {cards.map((card, index) => (
+            <div key={index} className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-white text-[20px]">Incall</span>
+                  <div className="flex items-center gap-1">
+                    <Wallet className="h-5 w-5 text-yellow-400" />
+                    <span className="text-white font-semibold text-[20px]">
+                      {Number(card.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                    </span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white text-[20px]">Outcall</span>
+                  <div className="flex items-center gap-1">
+                    <Wallet className="h-5 w-5 text-yellow-400" />
+                    <span className="text-white font-semibold text-[20px]">
+                      {Number(card.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium mt-4">
+                {card.buttonText}
+              </button>
+            </div>
+          ))}
         </div>
       );
     }
@@ -2256,29 +2715,29 @@ export default function MessagesPage() {
       return (
         <div
           className={`flex items-center gap-3 rounded-lg p-3 max-w-xs ${
-            isOwnMessage ? "bg-white" : "bg-[#FA266D]"
+            isOwnMessage ? "bg-[#FA266D]" : "bg-white"
           }`}
         >
           <button
             className={`w-8 h-8 rounded-full flex items-center justify-center ${
-              isOwnMessage ? "bg-gray-200" : "bg-white/20"
+              isOwnMessage ? "bg-white/20" : "bg-gray-200"
             }`}
           >
             <Play
               className={`h-4 w-4 ${
-                isOwnMessage ? "text-gray-600" : "text-white"
+                isOwnMessage ? "text-white" : "text-gray-600"
               }`}
             />
           </button>
           <div className="flex-1">
             <div
               className={`w-32 h-2 rounded-full ${
-                isOwnMessage ? "bg-gray-300" : "bg-white/30"
+                isOwnMessage ? "bg-white/30" : "bg-gray-300"
               }`}
             ></div>
             <div
               className={`flex justify-between text-xs mt-1 ${
-                isOwnMessage ? "text-gray-500" : "text-white/80"
+                isOwnMessage ? "text-white/80" : "text-gray-500"
               }`}
             >
               <span>{message.duration}</span>
@@ -2287,8 +2746,8 @@ export default function MessagesPage() {
           </div>
           {isOwnMessage && (
             <div className="flex items-center gap-1">
-              <CheckCheck className="h-3 w-3 text-blue-500" />
-              <span className="text-xs text-gray-500">Sent</span>
+              <CheckCheck className="h-3 w-3 text-white" />
+              <span className="text-xs text-white/80">Sent</span>
             </div>
           )}
         </div>
@@ -2299,7 +2758,7 @@ export default function MessagesPage() {
       return (
         <div
           className={`rounded-lg p-2 max-w-xs ${
-            isOwnMessage ? "bg-white" : "bg-[#FA266D]/10"
+            isOwnMessage ? "bg-[#FA266D]/10" : "bg-white"
           }`}
         >
           <div
@@ -2326,12 +2785,12 @@ export default function MessagesPage() {
           >
             <span
               className={`text-xs ${
-                isOwnMessage ? "text-gray-500" : "text-white/80"
+                isOwnMessage ? "text-white/80" : "text-gray-500"
               }`}
             >
               {message.timestamp}
             </span>
-            {isOwnMessage && <CheckCheck className="h-3 w-3 text-blue-500" />}
+            {isOwnMessage && <CheckCheck className="h-3 w-3 text-white" />}
           </div>
         </div>
       );
@@ -2341,7 +2800,7 @@ export default function MessagesPage() {
       return (
         <div
           className={`rounded-lg p-2 max-w-xs ${
-            isOwnMessage ? "bg-white" : "bg-[#FA266D]/10"
+            isOwnMessage ? "bg-[#FA266D]/10" : "bg-white"
           }`}
         >
           <div
@@ -2363,31 +2822,92 @@ export default function MessagesPage() {
           >
             <span
               className={`text-xs ${
-                isOwnMessage ? "text-gray-500" : "text-white/80"
+                isOwnMessage ? "text-white/80" : "text-gray-500"
               }`}
             >
               {message.timestamp}
             </span>
-            {isOwnMessage && <CheckCheck className="h-3 w-3 text-blue-500" />}
+            {isOwnMessage && <CheckCheck className="h-3 w-3 text-white" />}
           </div>
         </div>
       );
     }
 
+    // Final check: if message content suggests pricing, parse and render as card
+    if (isPricingMessage) {
+      const content = message.content || "";
+      
+      // Try to parse pricing from content like "Short Time Pricing Incall: 50,000.00 APH Outcall: 80,000.00 APH"
+      const incallMatch = content.match(/Incall:\s*([\d,]+\.?\d*)/i);
+      const outcallMatch = content.match(/Outcall:\s*([\d,]+\.?\d*)/i);
+      const currencyMatch = content.match(/(APH|USD|NGN)/i);
+      
+      if (incallMatch || outcallMatch) {
+        const incall = incallMatch ? parseFloat(incallMatch[1].replace(/,/g, '')) : null;
+        const outcall = outcallMatch ? parseFloat(outcallMatch[1].replace(/,/g, '')) : null;
+        const currency = currencyMatch ? currencyMatch[1] : "APH";
+        const planType = content.includes("Short Time") ? "shortTime" : 
+                        content.includes("Overnight") ? "overnight" :
+                        content.includes("Weekend") ? "weekend" : "custom";
+        const buttonText = planType === "shortTime" ? "Book short time" : 
+                          planType === "overnight" ? "Book overnight" : 
+                          planType === "weekend" ? "Book weekend" : "Book now";
+        
+        return (
+          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-white text-[20px]">Incall</span>
+                <div className="flex items-center gap-1">
+                  <Wallet className="h-5 w-5 text-yellow-400" />
+                  <span className="text-white font-semibold text-[20px]">
+                    {incall ? Number(incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---"} {currency}
+                  </span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-white text-[20px]">Outcall</span>
+                <div className="flex items-center gap-1">
+                  <Wallet className="h-5 w-5 text-yellow-400" />
+                  <span className="text-white font-semibold text-[20px]">
+                    {outcall ? Number(outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---"} {currency}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium mt-4">
+              {buttonText}
+            </button>
+          </div>
+        );
+      }
+      
+      // If it's "My Pricing Plans" but no parseable data, show a placeholder card
+      if (content.includes("My Pricing Plans") || content.includes("💰")) {
+        return (
+          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col items-center justify-center min-h-[180px]">
+            <Wallet className="h-12 w-12 text-yellow-400 mb-2" />
+            <span className="text-white text-[18px] font-semibold">Pricing Plans</span>
+            <span className="text-white/60 text-sm mt-1">Available pricing information</span>
+          </div>
+        );
+      }
+    }
+
     return (
       <div
         className={`rounded-lg p-3 max-w-xs ${
-          isOwnMessage ? "bg-white text-gray-800" : "bg-[#FA266D] text-white"
+          isOwnMessage ? "bg-[#FA266D] text-white" : "bg-white text-black"
         }`}
       >
         <p className="text-sm">{message.content}</p>
         <div
           className={`flex items-center justify-end gap-1 mt-1 ${
-            isOwnMessage ? "text-gray-500" : "text-pink-100"
+            isOwnMessage ? "text-white/80" : "text-gray-500"
           }`}
         >
           <span className="text-xs">{message.timestamp}</span>
-          {isOwnMessage && <CheckCheck className="h-3 w-3" />}
+          {isOwnMessage && <CheckCheck className="h-3 w-3 text-white" />}
         </div>
       </div>
     );
@@ -2397,7 +2917,7 @@ export default function MessagesPage() {
     <div className="flex h-full bg-[#1F1B2C] overflow-hidden">
       {/* Left Sidebar - Chat List */}
       {isSidebarOpen && (
-        <div className="w-[360px] bg-[#1F1B2C] border-r border-white/10 flex flex-col h-full">
+      <div className="w-[360px] bg-[#1F1B2C] border-r border-white/10 flex flex-col h-full">
         {/* Header */}
         <div className="p-6 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
@@ -2553,7 +3073,7 @@ export default function MessagesPage() {
               ))
           )}
         </div>
-        </div>
+      </div>
       )}
 
       {/* Right Section - Chat Area */}
@@ -2906,28 +3426,23 @@ export default function MessagesPage() {
 
               {/* 2x2 + 1 Grid Layout */}
               <div className="grid grid-cols-2 gap-4 mb-4">
-                {/* Plan 1 - Short Time Incall */}
+                {/* Plan 1 - Short Time */}
                 <div
-                  onClick={() => handlePlanSelect("short-time")}
+                  onClick={() => handlePlanSelect("shortTime")}
                   className={`bg-gray-800/50 rounded-[20px] p-6 cursor-pointer border-2 transition-all ${
-                    selectedPlan === "short-time"
+                    selectedPlan === "shortTime"
                       ? "border-[#FA266D] bg-[#FA266D]/10"
                       : "border-transparent hover:border-white/20"
                   }`}
                 >
-                  {/* <div className="flex items-center justify-between mb-2">
-                    {selectedPlan === "short-incall" && (
-                      <div className="w-6 h-6 bg-[#FA266D] rounded-full flex items-center justify-center">
-                        <Check className="h-4 w-4 text-white" />
-                      </div>
-                    )}
-                  </div> */}
                   <div className="flex items-center justify-between mb-4">
                     <p className="font-semibold text-white text-[20px]">
                       Incall
                     </p>
                     <p className="text-[16px] font-medium text-white">
-                      50,000.00 APH
+                      {userPricing?.shortTime?.incall 
+                        ? `${Number(userPricing.shortTime.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.shortTime.currency || 'APH'}`
+                        : "---"}
                     </p>
                   </div>
                   <div className="flex items-center justify-between">
@@ -2935,7 +3450,9 @@ export default function MessagesPage() {
                       Outcall
                     </p>
                     <p className="text-[16px] font-medium text-white">
-                      70,000.00 APH
+                      {userPricing?.shortTime?.outcall 
+                        ? `${Number(userPricing.shortTime.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.shortTime.currency || 'APH'}`
+                        : "---"}
                     </p>
                   </div>
 
@@ -2953,23 +3470,14 @@ export default function MessagesPage() {
                       : "border-transparent hover:border-white/20"
                   }`}
                 >
-                  {/* <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-white font-semibold text-lg">
-                      Short Time
-                    </h3>
-                    {selectedPlan === "short-outcall" && (
-                      <div className="w-6 h-6 bg-[#FA266D] rounded-full flex items-center justify-center">
-                        <Check className="h-4 w-4 text-white" />
-                      </div>
-                    )}
-                  </div> */}
-
                   <div className="flex items-center justify-between mb-4">
                     <p className="font-semibold text-white text-[20px]">
                       Incall
                     </p>
                     <p className="text-[16px] font-medium text-white">
-                      50,000.00 APH
+                      {userPricing?.overnight?.incall 
+                        ? `${Number(userPricing.overnight.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.overnight.currency || 'APH'}`
+                        : "---"}
                     </p>
                   </div>
                   <div className="flex items-center justify-between">
@@ -2977,7 +3485,9 @@ export default function MessagesPage() {
                       Outcall
                     </p>
                     <p className="text-[16px] font-medium text-white">
-                      70,000.00 APH
+                      {userPricing?.overnight?.outcall 
+                        ? `${Number(userPricing.overnight.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.overnight.currency || 'APH'}`
+                        : "---"}
                     </p>
                   </div>
 
@@ -2986,7 +3496,7 @@ export default function MessagesPage() {
                   </button>
                 </div>
 
-                {/* Plan 3 - Overnight Incall */}
+                {/* Plan 3 - Weekend */}
                 <div
                   onClick={() => handlePlanSelect("weekend")}
                   className={`bg-gray-800/50 rounded-[20px] p-6 cursor-pointer border-2 transition-all ${
@@ -2995,28 +3505,24 @@ export default function MessagesPage() {
                       : "border-transparent hover:border-white/20"
                   }`}
                 >
-                  {/* <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-white font-semibold text-lg">
-                      Overnight
-                    </h3>
-                    {selectedPlan === "overnight-incall" && (
-                      <div className="w-6 h-6 bg-[#FA266D] rounded-full flex items-center justify-center">
-                        <Check className="h-4 w-4 text-white" />
-                      </div>
-                    )}
-                  </div> */}
                   <div className="flex items-center justify-between mb-4">
                     <p className="font-semibold text-white text-[20px]">
                       Incall
                     </p>
-                    <p className="text-[16px] font-medium text-white">---</p>
+                    <p className="text-[16px] font-medium text-white">
+                      {userPricing?.weekend?.incall 
+                        ? `${Number(userPricing.weekend.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.weekend.currency || 'APH'}`
+                        : "---"}
+                    </p>
                   </div>
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-white text-[20px]">
                       Outcall
                     </p>
                     <p className="text-[16px] font-medium text-white">
-                      70,000.00 APH
+                      {userPricing?.weekend?.outcall 
+                        ? `${Number(userPricing.weekend.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.weekend.currency || 'APH'}`
+                        : "---"}
                     </p>
                   </div>
 
@@ -3025,7 +3531,7 @@ export default function MessagesPage() {
                   </button>
                 </div>
 
-                {/* Plan 4 - Overnight Outcall */}
+                {/* Plan 4 - Custom Price */}
                 <div
                   onClick={() => handlePlanSelect("custom-price")}
                   className={`bg-gray-800/50 rounded-[20px] p-6 cursor-pointer border-2 transition-all ${
@@ -3035,13 +3541,20 @@ export default function MessagesPage() {
                   }`}
                 >
                   {/* input price */}
-                  <div className="relative">
+                  <div className="relative" onClick={(e) => e.stopPropagation()}>
                     {/* Briefcase inside input */}
                     <Briefcase className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
 
                     <input
                       type="number"
                       placeholder="Input price here"
+                      value={customPrice}
+                      onChange={(e) => {
+                        setCustomPrice(e.target.value);
+                        if (e.target.value) {
+                          handlePlanSelect("custom-price");
+                        }
+                      }}
                       className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
@@ -3061,15 +3574,19 @@ export default function MessagesPage() {
                   Cancel
                 </button> */}
                 <button
-                  onClick={handleSendPricing}
-                  disabled={!selectedPlan}
-                  className={`flex-1 py-3 rounded-[40px] font-semibold transition-colors ${
-                    selectedPlan
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSendPricing();
+                  }}
+                  disabled={!selectedPlan || (selectedPlan === "custom-price" && !customPrice.trim()) || loadingProfile || sending || Array.from(sendingPricingRef.current).length > 0}
+                  className={`flex-1 py-3 rounded-[40px] font-semibold transition-colors cursor-pointer ${
+                    selectedPlan && (selectedPlan !== "custom-price" || customPrice.trim()) && !loadingProfile && !sending && Array.from(sendingPricingRef.current).length === 0
                       ? "bg-[#FA266D] text-white hover:bg-pink-600"
                       : "bg-gray-700 text-gray-500 cursor-not-allowed"
                   }`}
                 >
-                  Send Pricing
+                  {loadingProfile ? "Loading..." : sending || Array.from(sendingPricingRef.current).length > 0 ? "Sending..." : "Send Pricing"}
                 </button>
               </div>
             </div>
