@@ -13,13 +13,13 @@ export const profileApiSlice = apiSlice.injectEndpoints({
       invalidatesTags: ['Profile'],
     }),
     updateProfile: builder.mutation({
-      query: ({ id, ...data }) => {
+      query: ({ id, data }) => {
         const url = endpoints.PROFILE_UPDATE(id);
         console.log("UpdateProfile mutation - URL:", url, "Body:", data, "ID:", id);
         return {
           url,
           method: "PUT",
-          body: data, // id is NOT included in body, only in URL
+          body: data,
         };
       },
       extraOptions: { serviceKey: "us" },

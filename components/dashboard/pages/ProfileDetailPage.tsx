@@ -65,6 +65,15 @@ export default function ProfileDetailPage() {
   const profile = useMemo<Profile | null>(() => {
     if (!enrichedProfile) return null;
 
+    console.log('[ProfileDetailPage] Mapping enrichedProfile to profile:', {
+      enrichedProfile,
+      gender: enrichedProfile.gender,
+      ethnicity: enrichedProfile.ethnicity,
+      sexualOrientation: enrichedProfile.sexualOrientation,
+      bodyBuild: enrichedProfile.bodyBuild,
+      looks: enrichedProfile.looks,
+    });
+
     // Get first valid media item or use placeholder
     // Filter out placeholder strings like "string" and empty strings
     // Only keep valid HTTP/HTTPS URLs
@@ -421,23 +430,23 @@ export default function ProfileDetailPage() {
             <div className="space-y-4">
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Gender</p>
-                <p className="text-white">{profile.gender}</p>
+                <p className="text-white">{profile.gender || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Sexual Orientation</p>
-                <p className="text-white">{profile.sexualOrientation}</p>
+                <p className="text-white">{profile.sexualOrientation || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Looks</p>
-                <p className="text-white">{profile.looks}</p>
+                <p className="text-white">{profile.looks || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Education</p>
-                <p className="text-white">{profile.education}</p>
+                <p className="text-white">{profile.education || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">City</p>
-                <p className="text-white">{profile.city}</p>
+                <p className="text-white">{profile.city || 'Not specified'}</p>
               </div>
             </div>
 
@@ -445,23 +454,23 @@ export default function ProfileDetailPage() {
             <div className="space-y-4">
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Ethnicity</p>
-                <p className="text-white">{profile.ethnicity}</p>
+                <p className="text-white">{profile.ethnicity || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Body Build</p>
-                <p className="text-white">{profile.bodyBuild}</p>
+                <p className="text-white">{profile.bodyBuild || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Smoker</p>
-                <p className="text-white">{profile.smoker}</p>
+                <p className="text-white">{profile.smoker || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Country</p>
-                <p className="text-white">{profile.country}</p>
+                <p className="text-white">{profile.country || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Last Seen</p>
-                <p className="text-white">{profile.lastSeen}</p>
+                <p className="text-white">{profile.lastSeen || 'Not available'}</p>
               </div>
             </div>
 
@@ -469,19 +478,19 @@ export default function ProfileDetailPage() {
             <div className="space-y-4">
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Nationality</p>
-                <p className="text-white">{profile.nationality}</p>
+                <p className="text-white">{profile.nationality || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Bust Size</p>
-                <p className="text-white">{profile.bustSize}</p>
+                <p className="text-white">{profile.bustSize || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">Occupation</p>
-                <p className="text-white">{profile.occupation}</p>
+                <p className="text-white">{profile.occupation || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
                 <p className="text-pink-500 pb-4 font-semibold">State</p>
-                <p className="text-white">{profile.state}</p>
+                <p className="text-white">{profile.state || 'Not specified'}</p>
               </div>
             </div>
           </div>

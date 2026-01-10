@@ -253,8 +253,8 @@ export default function ProfilePage() {
       console.log('Profile ID:', profileId);
       
       const result = await updateProfile({
-        id: String(profileId),
-        ...cleanedPayload,
+        id: profileId,
+        data: cleanedPayload,
       }).unwrap();
 
       console.log('Profile update result:', result);
@@ -814,11 +814,11 @@ export default function ProfilePage() {
               </div>
               <div className="flex-col pt-2 sm:pt-3 justify-between">
                 <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Sexual Orientation</p>
-                <p className="text-white text-sm sm:text-base">Null</p>
+                <p className="text-white text-sm sm:text-base">{profile?.sexualOrientation || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-2 sm:pt-3 justify-between">
                 <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Looks</p>
-                <p className="text-white text-sm sm:text-base">Null</p>
+                <p className="text-white text-sm sm:text-base">{profile?.looks || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-2 sm:pt-3 justify-between">
                 <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Education</p>
@@ -834,11 +834,11 @@ export default function ProfilePage() {
             <div className="space-y-3 sm:space-y-4">
               <div className="flex-col pt-2 sm:pt-3 justify-between">
                 <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Ethnicity</p>
-                <p className="text-white text-sm sm:text-base">Null</p>
+                <p className="text-white text-sm sm:text-base">{profile?.ethnicity || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-2 sm:pt-3 justify-between">
                 <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Body Build</p>
-                <p className="text-white text-sm sm:text-base">Null</p>
+                <p className="text-white text-sm sm:text-base">{profile?.bodyBuild || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-2 sm:pt-3 justify-between">
                 <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Smoker</p>
@@ -862,7 +862,7 @@ export default function ProfilePage() {
               </div>
               <div className="flex-col pt-2 sm:pt-3 justify-between">
                 <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Bust Size</p>
-                <p className="text-white text-sm sm:text-base">Null</p>
+                <p className="text-white text-sm sm:text-base">{profile?.bustSize || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-2 sm:pt-3 justify-between">
                 <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Occupation</p>
