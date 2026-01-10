@@ -6,7 +6,7 @@ import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
 import { useUpdateProfileMutation, useUpdateProfileMediaMutation, useCreateProfileServiceMutation } from "@/feature/profile/profileApiSlice";
-import { useCreatePricingMutation, useCreateServiceMutation } from "@/app/api/apiSlice";
+import { useCreatePricingMutation, useUpdatePricingMutation, useCreateServiceMutation, useAddCustomCategoryMutation } from "@/app/api/apiSlice";
 import { ProfilePageSkeleton } from "@/components/ui/Skeleton";
 
 // Mock reviews data
@@ -77,6 +77,8 @@ export default function ProfilePage() {
     duration: "7 days",
   });
   const [createPricing, { isLoading: isCreatingPricing }] = useCreatePricingMutation();
+  const [updatePricing, { isLoading: isUpdatingPricing }] = useUpdatePricingMutation();
+  const [addCustomCategory, { isLoading: isAddingCustomCategory }] = useAddCustomCategoryMutation();
   const [createService, { isLoading: isCreatingServiceCustom }] = useCreateServiceMutation();
   const [currentFormStep, setCurrentFormStep] = useState(1);
   const [activeTab, setActiveTab] = useState("About");
@@ -1065,6 +1067,51 @@ export default function ProfilePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Custom Pricing Categories */}
+              {profile?.pricing?.customCategories && profile.pricing.customCategories.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="text-lg font-semibold text-pink-500 mb-4">Custom Pricing</h4>
+                  <div className="grid md:grid-cols-3 gap-6">
+                    {profile.pricing.customCategories.map((category: any, index: number) => (
+                      <div key={index} className="bg-gradient-to-br from-pink-500 to-purple-500 rounded-lg p-6 border border-white/10">
+                        <div className="text-white text-[20px] font-bold mb-2">
+                          {category.categoryName}
+                        </div>
+                        <div className="text-white/80 text-sm mb-4">{category.duration}</div>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">Incall</span>
+                            {category.incall ? (
+                              <div className="flex items-center gap-1">
+                                <Coins className="w-4 h-4 text-yellow-400" />
+                                <span className="text-white font-semibold">
+                                  {Number(category.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-white/60">---</span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">Outcall</span>
+                            {category.outcall ? (
+                              <div className="flex items-center gap-1">
+                                <Coins className="w-4 h-4 text-yellow-400" />
+                                <span className="text-white font-semibold">
+                                  {Number(category.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-white/60">---</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1842,39 +1889,28 @@ export default function ProfilePage() {
                     }
                     
                     try {
-                      const pricingData = {
-                        profileId: profile.id,
-                        shortTime: {
-                          incall: editingPricingType === 'shortTime' 
-                            ? Number(editPricingForm.incall) || 0 
-                            : Number(profile.pricing?.shortTime?.incall) || 0,
-                          outcall: editingPricingType === 'shortTime' 
-                            ? Number(editPricingForm.outcall) || 0 
-                            : Number(profile.pricing?.shortTime?.outcall) || 0,
-                          currency: "APH",
-                        },
-                        overnight: {
-                          incall: editingPricingType === 'overnight' 
-                            ? Number(editPricingForm.incall) || 0 
-                            : Number(profile.pricing?.overnight?.incall) || 0,
-                          outcall: editingPricingType === 'overnight' 
-                            ? Number(editPricingForm.outcall) || 0 
-                            : Number(profile.pricing?.overnight?.outcall) || 0,
-                          currency: "APH",
-                        },
-                        weekend: {
-                          incall: editingPricingType === 'weekend' 
-                            ? Number(editPricingForm.incall) || 0 
-                            : Number(profile.pricing?.weekend?.incall) || 0,
-                          outcall: editingPricingType === 'weekend' 
-                            ? Number(editPricingForm.outcall) || 0 
-                            : Number(profile.pricing?.weekend?.outcall) || 0,
-                          currency: "APH",
-                        },
-                      };
+                      // Only send the category being updated
+                      const pricingData: any = {};
                       
-                      console.log("Submitting pricing data:", pricingData);
-                      const result = await createPricing({ id: profile.id, data: pricingData }).unwrap();
+                      if (editingPricingType === 'shortTime') {
+                        pricingData.shortTime = {
+                          incall: Number(editPricingForm.incall) || undefined,
+                          outcall: Number(editPricingForm.outcall) || undefined,
+                        };
+                      } else if (editingPricingType === 'overnight') {
+                        pricingData.overnight = {
+                          incall: Number(editPricingForm.incall) || undefined,
+                          outcall: Number(editPricingForm.outcall) || undefined,
+                        };
+                      } else if (editingPricingType === 'weekend') {
+                        pricingData.weekend = {
+                          incall: Number(editPricingForm.incall) || undefined,
+                          outcall: Number(editPricingForm.outcall) || undefined,
+                        };
+                      }
+                      
+                      console.log("Updating pricing data:", pricingData);
+                      const result = await updatePricing({ id: profile.id, data: pricingData }).unwrap();
                       console.log("Pricing update result:", result);
                       
                       await refetch();
@@ -1888,10 +1924,10 @@ export default function ProfilePage() {
                       alert(`Error: ${errorMessage}`);
                     }
                   }}
-                  disabled={isCreatingPricing}
+                  disabled={isUpdatingPricing}
                   className="px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
                 >
-                  {isCreatingPricing ? 'Saving...' : 'Submit'}
+                  {isUpdatingPricing ? 'Saving...' : 'Submit'}
                 </button>
               </div>
             </div>
@@ -2005,39 +2041,17 @@ export default function ProfilePage() {
                     }
                     
                     try {
-                      // Calculate duration in minutes
-                      let durationMinutes = 60; // default 1 hour
-                      if (customPricingForm.duration.includes('hour')) {
-                        const hours = parseInt(customPricingForm.duration);
-                        durationMinutes = hours * 60;
-                      } else if (customPricingForm.duration.includes('day')) {
-                        const days = parseInt(customPricingForm.duration);
-                        durationMinutes = days * 24 * 60;
-                      } else if (customPricingForm.duration.includes('week')) {
-                        const weeks = parseInt(customPricingForm.duration);
-                        durationMinutes = weeks * 7 * 24 * 60;
-                      } else if (customPricingForm.duration.includes('month')) {
-                        const months = parseInt(customPricingForm.duration);
-                        durationMinutes = months * 30 * 24 * 60;
-                      }
-                      
-                      // Create custom service
-                      const serviceData = {
-                        profileId: profile.id,
-                        name: customPricingForm.categoryName,
-                        description: `Custom pricing for ${customPricingForm.duration}`,
-                        durationMinutes: durationMinutes,
-                        active: true,
+                      // Create custom pricing category
+                      const categoryData = {
+                        categoryName: customPricingForm.categoryName,
+                        duration: customPricingForm.duration,
+                        incall: Number(customPricingForm.incallPrice) || undefined,
+                        outcall: Number(customPricingForm.outcallPrice) || undefined,
                       };
                       
-                      console.log("Creating custom service:", serviceData);
-                      const serviceResult = await createService({ id: profile.id, data: serviceData }).unwrap();
-                      console.log("Service creation result:", serviceResult);
-                      
-                      // Note: Custom pricing prices (incallPrice/outcallPrice) would need to be stored
-                      // as part of the service or in a separate pricing structure.
-                      // For now, we're just creating the service. The pricing can be added later
-                      // if the backend supports custom pricing per service.
+                      console.log("Creating custom pricing category:", categoryData);
+                      const result = await addCustomCategory({ id: profile.id, data: categoryData }).unwrap();
+                      console.log("Custom category creation result:", result);
                       
                       await refetch();
                       setIsCustomPricingModalOpen(false);
@@ -2047,17 +2061,17 @@ export default function ProfilePage() {
                         outcallPrice: "",
                         duration: "7 days",
                       });
-                      alert("Custom service created successfully!");
+                      alert("Custom pricing category created successfully!");
                     } catch (error: any) {
                       console.error("Error creating custom pricing:", error);
-                      const errorMessage = error?.data?.message || error?.message || "Failed to create custom service. Please try again.";
+                      const errorMessage = error?.data?.message || error?.message || "Failed to create custom pricing. Please try again.";
                       alert(`Error: ${errorMessage}`);
                     }
                   }}
-                  disabled={isCreatingServiceCustom || isCreatingPricing}
+                  disabled={isAddingCustomCategory}
                   className="px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
                 >
-                  {isCreatingServiceCustom || isCreatingPricing ? 'Submitting...' : 'Submit'}
+                  {isAddingCustomCategory ? 'Submitting...' : 'Submit'}
                 </button>
               </div>
             </div>

@@ -45,12 +45,18 @@ export default function LoginPage() {
       let loginData;
       if (loginMethod === 'email') {
         console.log('[LoginPage] Attempting email login for:', formData.email);
-        loginData = { email: formData.email, password: formData.password };
+        loginData = { 
+          email: formData.email, 
+          password: formData.password 
+        };
       } else {
-        // For phone login, we need to send both phone number and country code with password
-        const phoneWithCode = `${formData.countryCode}${formData.phone}`;
-        console.log('[LoginPage] Attempting phone login for:', phoneWithCode);
-        loginData = { email: phoneWithCode, password: formData.password };
+        // For phone login, send phoneNumber and countryCode as separate fields
+        console.log('[LoginPage] Attempting phone login for:', formData.countryCode, formData.phone);
+        loginData = { 
+          phoneNumber: formData.phone,
+          countryCode: formData.countryCode,
+          password: formData.password 
+        };
       }
 
       const result = await login(loginData).unwrap();
