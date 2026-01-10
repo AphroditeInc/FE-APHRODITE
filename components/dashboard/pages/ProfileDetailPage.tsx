@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, MapPin, Star, Check, Users, Calendar as CalendarIcon, Heart, BookOpen, MessageCircle, UserPlus, Info, Coins, Play, ThumbsUp, ThumbsDown, ChevronDown } from "lucide-react";
+import { ArrowLeft, MapPin, Star, Check, Users, Calendar as CalendarIcon, Heart, BookOpen, MessageCircle, UserPlus, Info, Coins, Play, ThumbsUp, ThumbsDown, ChevronDown, Plus } from "lucide-react";
 import { type Profile } from "@/lib/data/profiles";
 import { useGetProfileByIdQuery } from "@/feature/profile/profileApiSlice";
 import type { EnrichedProfile } from "@/lib/types/auth.types";
 import { ProfileDetailSkeleton } from "@/components/ui/Skeleton";
+import CustomPricingModal from "../modals/CustomPricingModal";
 
 // Array of background images
 const backgroundImages = [
@@ -37,6 +38,7 @@ export default function ProfileDetailPage() {
   const [reviewText, setReviewText] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
+  const [isCustomPricingModalOpen, setIsCustomPricingModalOpen] = useState(false);
 
   // Fetch profile from API
   const { data: profileResponse, isLoading, error } = useGetProfileByIdQuery(profileId, {
@@ -508,9 +510,20 @@ export default function ProfileDetailPage() {
             {/* Pricing Section - Use pricing from enrichedProfile.pricing */}
             {enrichedProfile?.pricing && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <h3 className="text-2xl font-bold text-pink-500">Pricing</h3>
-                <Info className="w-5 h-5 text-white/60" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-2xl font-bold text-pink-500">Pricing</h3>
+                  <Info className="w-5 h-5 text-white/60" />
+                </div>
+                
+                {/* Add Custom Pricing Button */}
+                <button
+                  onClick={() => setIsCustomPricingModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full border-2 border-pink-500 text-pink-500 hover:bg-pink-500 hover:text-white transition-all"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span className="font-medium">Add Custom Pricing</span>
+                </button>
               </div>
               
               <div className="grid md:grid-cols-3 gap-6">
@@ -630,6 +643,51 @@ export default function ProfileDetailPage() {
                 </div>
                   )}
             </div>
+
+              {/* Custom Categories Section */}
+              {enrichedProfile.pricing.customCategories && enrichedProfile.pricing.customCategories.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="text-xl font-semibold text-white mb-4">Custom Pricing Categories</h4>
+                  <div className="grid md:grid-cols-3 gap-6">
+                    {enrichedProfile.pricing.customCategories.map((category, index) => (
+                      <div key={index} className="bg-white/5 rounded-lg p-6 border border-white/10">
+                        <div className="bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-2">
+                          {category.categoryName}
+                        </div>
+                        <div className="text-center text-white/60 text-sm mb-4">{category.duration}</div>
+                        <div className="space-y-3">
+                          {category.incall !== undefined && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-white">Incall</span>
+                              <div className="flex items-center gap-1">
+                                <Coins className="w-4 h-4 text-yellow-400" />
+                                <span className="text-white font-semibold">
+                                  {typeof category.incall === 'number' 
+                                    ? category.incall.toLocaleString() 
+                                    : category.incall} APH
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                          {category.outcall !== undefined && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-white">Outcall</span>
+                              <div className="flex items-center gap-1">
+                                <Coins className="w-4 h-4 text-yellow-400" />
+                                <span className="text-white font-semibold">
+                                  {typeof category.outcall === 'number' 
+                                    ? category.outcall.toLocaleString() 
+                                    : category.outcall} APH
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               </div>
             )}
             {!enrichedProfile?.pricing && (
@@ -847,6 +905,13 @@ export default function ProfileDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Custom Pricing Modal */}
+      <CustomPricingModal
+        isOpen={isCustomPricingModalOpen}
+        onClose={() => setIsCustomPricingModalOpen(false)}
+        profileId={profileId}
+      />
     </div>
   );
 }

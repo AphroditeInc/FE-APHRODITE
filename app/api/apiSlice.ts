@@ -52,6 +52,8 @@ import type {
   CreateProfilePayload,
   UpdateProfilePayload,
   CreatePricingPayload,
+  UpdatePricingPayload,
+  AddCustomCategoryPayload,
   CreateServicePayload,
   VideoProofPayload,
   AddMediaPayload,
@@ -857,6 +859,22 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: (result, error, { id }) => [{ type: 'Profile', id }],
     }),
+    updatePricing: builder.mutation<ApiResponse<any>, { id: string; data: UpdatePricingPayload }>({
+      query: ({ id, data }) => ({
+        url: `/profiles/${id}/pricing`,
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'Profile', id }],
+    }),
+    addCustomCategory: builder.mutation<ApiResponse<any>, { id: string; data: AddCustomCategoryPayload }>({
+      query: ({ id, data }) => ({
+        url: `/profiles/${id}/pricing/custom`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'Profile', id }],
+    }),
     createService: builder.mutation<ApiResponse<any>, { id: string; data: CreateServicePayload }>({
       query: ({ id, data }) => ({
         url: `/profiles/${id}/services`,
@@ -1179,6 +1197,8 @@ export const {
   useUpdateProfileMutation,
   useToggleFollowMutation,
   useCreatePricingMutation,
+  useUpdatePricingMutation,
+  useAddCustomCategoryMutation,
   useCreateServiceMutation,
   useUploadVideoProofMutation,
   useAddMediaMutation,

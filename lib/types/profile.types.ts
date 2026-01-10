@@ -29,6 +29,14 @@ export interface UpdateProfilePayload {
   services?: string[];
 }
 
+export interface CustomPricingCategory {
+  categoryName: string;
+  duration: string;
+  incall: number;
+  outcall: number;
+  currency?: string;
+}
+
 export interface CreatePricingPayload {
   profileId: string;
   shortTime: {
@@ -46,6 +54,34 @@ export interface CreatePricingPayload {
     outcall: number;
     currency?: string;
   };
+  customCategories?: CustomPricingCategory[];
+}
+
+export interface UpdatePricingPayload {
+  shortTime?: {
+    incall: number;
+    outcall: number;
+    currency?: string;
+  };
+  overnight?: {
+    incall: number;
+    outcall: number;
+    currency?: string;
+  };
+  weekend?: {
+    incall: number;
+    outcall: number;
+    currency?: string;
+  };
+  customCategories?: CustomPricingCategory[];
+}
+
+export interface AddCustomCategoryPayload {
+  categoryName: string;
+  duration: string;
+  incall: number;
+  outcall: number;
+  currency?: string;
 }
 
 export interface CreateServicePayload {

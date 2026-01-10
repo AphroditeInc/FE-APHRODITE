@@ -347,6 +347,13 @@ export interface Pricing {
     incall?: string | number;
     outcall?: string | number;
   };
+  customCategories?: Array<{
+    categoryName: string;
+    duration: string;
+    incall: string | number;
+    outcall: string | number;
+    currency?: string;
+  }>;
   custom?: {
     price?: string | number;
   };
