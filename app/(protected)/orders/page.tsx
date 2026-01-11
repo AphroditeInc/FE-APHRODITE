@@ -7,8 +7,14 @@ import { useAuthProfile } from "@/lib/hooks";
 import { useMemo } from "react";
 export default function OrdersPage() {
   const { user } = useAuthProfile();
-  const { data: walletBalanceData, isLoading: isLoadingBalance, refetch: refetchBalance } = useGetWalletBalanceQuery();
-  const { data: transactionsData, isLoading: isLoadingTransactions, refetch: refetchTransactions } = useGetTransactionsQuery({ limit: 50 });
+  const { data: walletBalanceData, isLoading: isLoadingBalance, refetch: refetchBalance } = useGetWalletBalanceQuery(undefined, {
+    pollingInterval: 30000, // Poll every 30 seconds
+    refetchOnMountOrArgChange: true,
+  });
+  const { data: transactionsData, isLoading: isLoadingTransactions, refetch: refetchTransactions } = useGetTransactionsQuery({ limit: 50 }, {
+    pollingInterval: 30000, // Poll every 30 seconds
+    refetchOnMountOrArgChange: true,
+  });
   const [fundWallet, { isLoading: isFundingWallet }] = useFundWalletMutation();
   const [verifyPayment, { isLoading: isVerifyingPayment }] = useVerifyPaymentMutation();
   
@@ -31,45 +37,7 @@ export default function OrdersPage() {
     if (transactionsData?.success && transactionsData?.data && Array.isArray(transactionsData.data) && transactionsData.data.length > 0) {
       return transactionsData.data;
     }
-    // Dummy data for design purposes
-    return [
-      {
-        type: 'credit' as const,
-        amount: 50000,
-        nairaAmount: 62500,
-        description: 'Wallet funding',
-        reference: 'TXN_001',
-        status: 'successful',
-        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
-      },
-      {
-        type: 'debit' as const,
-        amount: 15000,
-        nairaAmount: 18750,
-        description: 'Payout request',
-        reference: 'TXN_002',
-        status: 'pending',
-        createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-      },
-      {
-        type: 'credit' as const,
-        amount: 25000,
-        nairaAmount: 31250,
-        description: 'Wallet funding',
-        reference: 'TXN_003',
-        status: 'successful',
-        createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days ago
-      },
-      {
-        type: 'debit' as const,
-        amount: 10000,
-        nairaAmount: 12500,
-        description: 'Service payment',
-        reference: 'TXN_004',
-        status: 'failed',
-        createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days ago
-      },
-    ];
+    return [];
   }, [transactionsData]);
 
   // Calculate APH equivalent (1 APH = 1.25 NGN)
@@ -112,7 +80,10 @@ export default function OrdersPage() {
     const trxref = urlParams.get('trxref');
     const paymentRef = reference || trxref;
     
+    console.log('Payment verification check:', { reference, trxref, paymentRef, isSuccessModalOpen, isVerifyingPayment });
+    
     if (paymentRef && !isSuccessModalOpen && !isVerifyingPayment) {
+      console.log('Initiating payment verification for reference:', paymentRef);
       handleVerifyPayment(paymentRef);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,18 +102,21 @@ export default function OrdersPage() {
 
     try {
       const ngnAmount = parseFloat(fundAmount);
-      const aphAmount = calculateAPH(ngnAmount);
+      const aphEquivalent = calculateAPH(ngnAmount);
+      const aphAfterFee = calculateAfterFee(aphEquivalent);
       
-      // Validate minimum funding amount (100 APH)
-      if (aphAmount < 100) {
-        alert("Minimum funding amount is 100 APH. Please enter a higher amount.");
+      // Validate minimum funding amount (100 APH = ₦125)
+      if (aphEquivalent < 100) {
+        alert(`Minimum funding amount is 100 APH (₦${(100 * 1.25).toFixed(2)}). Please enter a higher amount.`);
         return;
       }
       
+      // Send the FULL amount (before fee) to the backend
+      // Backend will handle the 5% fee deduction and credit the after-fee amount
       const result = await fundWallet({
-        amount: aphAmount,
+        amount: aphEquivalent, // Send full amount, backend will deduct fee
         email: user.email,
-        callbackUrl: `${window.location.origin}/orders?reference=`,
+        callbackUrl: `${window.location.origin}/orders`, // Paystack will append ?trxref=REFERENCE
       }).unwrap();
 
       if (result.success && result.data?.authorization_url) {
@@ -319,12 +293,20 @@ export default function OrdersPage() {
           <h2 className="text-[16px] font-medium text-white font-urbanist">Transaction History</h2>
           
           {isLoadingTransactions ? (
-            <div className="text-center py-12">
-              <div className="text-white/60">Loading transactions...</div>
+            <div className="rounded-[24px] bg-[#FFFFFF0F] backdrop-blur-[68px] p-8 text-center">
+              <div className="animate-pulse">
+                <div className="h-4 bg-white/20 rounded w-1/2 mx-auto mb-2"></div>
+                <div className="h-4 bg-white/20 rounded w-1/3 mx-auto"></div>
+              </div>
+              <p className="text-white/60 mt-4">Loading transactions...</p>
             </div>
           ) : transactions.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-white/60">No transactions yet</div>
+            <div className="rounded-[24px] bg-[#FFFFFF0F] backdrop-blur-[68px] p-12 text-center">
+              <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4">
+                <Wallet className="w-8 h-8 text-white/40" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">No transactions yet</h3>
+              <p className="text-white/60">Your transaction history will appear here once you fund your wallet or make a payout.</p>
             </div>
           ) : (
             <div className="space-y-[24px]">

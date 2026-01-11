@@ -202,7 +202,7 @@ const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
 
 export const apiSlice = createApi({
   baseQuery,
-  tagTypes: ['User', 'Profile', 'Chat', 'Room'],
+  tagTypes: ['User', 'Profile', 'Chat', 'Room', 'Wallet', 'Transactions'],
   endpoints: (builder) => ({
     // Auth Endpoints
     registerUser: builder.mutation<ApiResponse<User>, AuthPayload>({
@@ -920,7 +920,7 @@ export const apiSlice = createApi({
     // Wallet Endpoints
     getWalletBalance: builder.query<ApiResponse<WalletBalance>, void>({
       query: () => "/wallet/balance",
-      providesTags: ['User'],
+      providesTags: ['Wallet'],
     }),
     fundWallet: builder.mutation<ApiResponse<FundWalletResponse>, FundWalletPayload>({
       query: (body) => ({
@@ -928,7 +928,7 @@ export const apiSlice = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ['User'],
+      invalidatesTags: ['Wallet'],
     }),
     verifyPayment: builder.mutation<ApiResponse<VerifyPaymentResponse>, VerifyPaymentPayload>({
       query: (body) => ({
@@ -936,11 +936,11 @@ export const apiSlice = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ['User'],
+      invalidatesTags: ['Wallet', 'Transactions'],
     }),
     getTransactions: builder.query<ApiResponse<Transaction[]>, { limit?: number }>({
       query: ({ limit = 50 }) => `/wallet/transactions?limit=${limit}`,
-      providesTags: ['User'],
+      providesTags: ['Transactions'],
     }),
     addWithdrawalAccount: builder.mutation<ApiResponse<WithdrawalAccount>, AddWithdrawalAccountPayload>({
       query: (body) => ({

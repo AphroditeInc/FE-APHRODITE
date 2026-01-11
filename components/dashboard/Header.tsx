@@ -16,6 +16,9 @@ export default function Header({ onMenuToggle }: HeaderProps) {
   const { profile: enrichedProfile } = useEnrichedProfile(user?.id || null);
   const { data: walletBalanceData, isLoading: isLoadingBalance } = useGetWalletBalanceQuery(undefined, {
     skip: !user, // Skip query if user is not loaded
+    pollingInterval: 30000, // Poll every 30 seconds for real-time updates
+    refetchOnMountOrArgChange: true, // Refetch when component mounts or user changes
+    refetchOnFocus: true, // Refetch when window regains focus
   });
   const [imageError, setImageError] = useState(false);
   
