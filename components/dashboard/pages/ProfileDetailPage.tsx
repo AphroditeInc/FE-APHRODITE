@@ -49,11 +49,15 @@ export default function ProfileDetailPage() {
   const enrichedProfile = useMemo<EnrichedProfile | null>(() => {
     if (!profileResponse) return null;
 
+    console.log('[ProfileDetailPage] Raw profileResponse:', profileResponse);
+
     // Handle API response structure: { success: true, data: EnrichedProfile } or direct EnrichedProfile
     if (profileResponse && typeof profileResponse === 'object') {
       if ('success' in profileResponse && profileResponse.success && 'data' in profileResponse) {
+        console.log('[ProfileDetailPage] Found nested data structure, user field:', (profileResponse.data as any)?.user);
         return profileResponse.data as EnrichedProfile;
       } else if ('id' in profileResponse) {
+        console.log('[ProfileDetailPage] Found direct profile structure, user field:', (profileResponse as any)?.user);
         return profileResponse as EnrichedProfile;
       }
     }
@@ -336,9 +340,11 @@ export default function ProfileDetailPage() {
                 <button 
                   onClick={() => {
                     // Get the actual user ID from enrichedProfile (not profile ID)
-                    const targetUserId = enrichedProfile?.user?.id;
+                    console.log('[ProfileDetailPage] Chat button clicked, enrichedProfile:', enrichedProfile);
+                    const targetUserId = enrichedProfile?.user?.id || enrichedProfile?.userId;
+                    console.log('[ProfileDetailPage] Target userId:', targetUserId);
                     if (!targetUserId) {
-                      console.error('User ID not available for chat');
+                      console.error('User ID not available for chat. EnrichedProfile:', enrichedProfile);
                       alert('Unable to start chat: User information not available');
                       return;
                     }

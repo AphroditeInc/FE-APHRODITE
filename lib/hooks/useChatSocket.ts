@@ -90,6 +90,7 @@ interface MessageDeliveredData {
 interface UseChatSocketReturn {
   socket: Socket | null;
   connected: boolean;
+  reconnecting: boolean;
   sendMessage: (data: SendMessageData) => void;
   joinRoom: (roomId: string) => void;
   leaveRoom: (roomId: string) => void;
@@ -97,12 +98,15 @@ interface UseChatSocketReturn {
   markAsRead: (roomId: string, messageIds: string[]) => void;
   getUnreadCount: (roomId: string) => void;
   getUserRooms: () => void;
+  getRoomList: () => void;
+  getAllUnreadCounts: () => void;
 }
 
 export const useChatSocket = (): UseChatSocketReturn => {
   const { accessToken, isAuthenticated } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -141,18 +145,24 @@ export const useChatSocket = (): UseChatSocketReturn => {
     newSocket.on('connect', () => {
       console.log('[useChatSocket] Socket connected:', newSocket.id);
       setConnected(true);
+      setReconnecting(false);
       reconnectAttempts.current = 0;
     });
 
     newSocket.on('connected', (data) => {
       console.log('[useChatSocket] Server confirmed connection:', data);
       setConnected(true);
+      setReconnecting(false);
       reconnectAttempts.current = 0;
     });
 
     newSocket.on('disconnect', (reason) => {
       console.log('[useChatSocket] Socket disconnected:', reason);
       setConnected(false);
+      if (reason === 'io server disconnect') {
+        // Server disconnected, need manual reconnect
+        setReconnecting(true);
+      }
     });
 
     newSocket.on('error', (error) => {
@@ -169,10 +179,12 @@ export const useChatSocket = (): UseChatSocketReturn => {
         context: (error as any).context,
       });
       setConnected(false);
+      setReconnecting(true);
       
       // Don't retry on authentication errors
       if (error.message?.includes('Authentication') || error.message?.includes('Unauthorized')) {
         console.error('[useChatSocket] Authentication failed - check token validity');
+        setReconnecting(false);
         return;
       }
       
@@ -191,7 +203,14 @@ export const useChatSocket = (): UseChatSocketReturn => {
         }, delay);
       } else {
         console.error('[useChatSocket] Max reconnection attempts reached');
+        setReconnecting(false);
       }
+    });
+
+    // Add ping/pong for heartbeat
+    newSocket.on('ping', (data) => {
+      // Respond to server ping
+      newSocket.emit('pong', { timestamp: new Date() });
     });
 
     setSocket(newSocket);
@@ -205,6 +224,7 @@ export const useChatSocket = (): UseChatSocketReturn => {
       newSocket.close();
       setSocket(null);
       setConnected(false);
+      setReconnecting(false);
     };
   }, [isAuthenticated, accessToken]);
 
@@ -280,9 +300,30 @@ export const useChatSocket = (): UseChatSocketReturn => {
     socket.emit('getUserRooms');
   }, [socket, connected]);
 
+  const getRoomList = useCallback(() => {
+    if (!socket || !connected) {
+      console.warn('[useChatSocket] Cannot get room list: socket not connected');
+      return;
+    }
+
+    console.log('[useChatSocket] Requesting room list');
+    socket.emit('getRoomList');
+  }, [socket, connected]);
+
+  const getAllUnreadCounts = useCallback(() => {
+    if (!socket || !connected) {
+      console.warn('[useChatSocket] Cannot get all unread counts: socket not connected');
+      return;
+    }
+
+    console.log('[useChatSocket] Requesting all unread counts');
+    socket.emit('getAllUnreadCounts');
+  }, [socket, connected]);
+
   return {
     socket,
     connected,
+    reconnecting,
     sendMessage,
     joinRoom,
     leaveRoom,
@@ -290,6 +331,8 @@ export const useChatSocket = (): UseChatSocketReturn => {
     markAsRead,
     getUnreadCount,
     getUserRooms,
+    getRoomList,
+    getAllUnreadCounts,
   };
 };
 

@@ -24,10 +24,19 @@ export const saveAuthTokens = (tokens: AuthTokens): void => {
  */
 export const getAuthTokens = (): AuthTokens | null => {
   try {
-    const tokens = localStorage.getItem(STORAGE_KEYS.AUTH_TOKENS);
-    const parsed = tokens ? JSON.parse(tokens) : null;
-    console.log('[Storage] Retrieved auth tokens:', parsed ? 'Present' : 'Not found');
-    return parsed;
+    // authSlice stores tokens with keys 'accessToken' and 'refreshToken'
+    // not as a single 'auth_tokens' object
+    const accessToken = localStorage.getItem('accessToken');
+    const refreshToken = localStorage.getItem('refreshToken');
+    
+    if (accessToken && refreshToken) {
+      const tokens = { accessToken, refreshToken };
+      console.log('[Storage] Retrieved auth tokens:', 'Present');
+      return tokens;
+    }
+    
+    console.log('[Storage] Retrieved auth tokens:', 'Not found');
+    return null;
   } catch (error) {
     console.error('[Storage] Failed to get auth tokens:', error);
     return null;

@@ -2,6 +2,7 @@ import { apiSlice } from "../../app/api/apiSlice";
 import endpoints from "../../app/utils/endpoints";
 
 export const profileApiSlice = apiSlice.injectEndpoints({
+  overrideExisting: true, // Allow overriding existing endpoints in development
   endpoints: (builder) => ({
     createProfile: builder.mutation({
       query: (data) => ({

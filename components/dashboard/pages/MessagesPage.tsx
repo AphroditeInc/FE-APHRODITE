@@ -21,6 +21,14 @@ import {
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth, useChatSocket } from "@/lib/hooks";
+import { useChatContext } from "@/lib/contexts/ChatContext";
+import {
+  ConnectionStatus,
+  AvatarWithStatus,
+  UnreadBadge,
+  TypingIndicator,
+  MessageStatusIcon,
+} from "@/components/chat";
 import {
   useGetRoomMessagesQuery,
   useMarkRoomAsReadMutation,
@@ -193,16 +201,29 @@ export default function MessagesPage() {
   const userPricing = profileData?.success && profileData?.data?.pricing 
     ? profileData.data.pricing 
     : null;
-  // Use getUserRooms instead of getConversations to get all rooms (matches Swagger: /chat/rooms returns 3, /chat/conversations returns 2)
+  
+  // Use ChatContext for real-time room data instead of REST API
   const {
-    data: roomsData,
-    isLoading: loadingRooms,
-    error: roomsError,
-    refetch: refetchRooms,
-  } = useGetUserRoomsQuery(
-    { limit: 50, offset: 0 },
-    { skip: !currentUserId || authLoading }
-  );
+    rooms: contextRooms,
+    connected: chatConnected,
+    reconnecting: chatReconnecting,
+    loading: roomsLoading,
+    isUserOnline,
+    getUnreadCount,
+    isUserTyping: isUserTypingInRoom,
+    refreshRooms,
+  } = useChatContext();
+
+  // Rooms are now managed by ChatContext - no REST API calls needed!
+  const rooms = contextRooms;
+  const loadingRooms = roomsLoading;
+  const roomsError = null; // Errors handled by ChatContext
+
+  // Find selected chat data to get roomId
+  const selectedChatData = rooms.find((room) => room.id === selectedChat);
+  
+  // Use roomId for API calls and WebSocket (not the MongoDB _id)
+  const roomIdForApi = selectedChatData?.roomId || selectedChat;
 
   const {
     data: messagesData,
@@ -210,9 +231,9 @@ export default function MessagesPage() {
     error: messagesError,
     refetch: refetchMessages,
   } = useGetRoomMessagesQuery(
-    { roomId: selectedChat || "", query: { limit: 50 } },
+    { roomId: roomIdForApi || "", query: { limit: 50 } },
     { 
-      skip: !selectedChat || !selectedChat.trim(),
+      skip: !roomIdForApi || !roomIdForApi.trim(),
       // Don't refetch if we already have data for this room
       refetchOnMountOrArgChange: true,
     }
@@ -230,6 +251,7 @@ export default function MessagesPage() {
     sendMessage: sendSocketMessage,
     joinRoom: joinSocketRoom,
     leaveRoom: leaveSocketRoom,
+    setTyping,
   } = useChatSocket();
 
   // Local state for real-time messages (merged with API messages)
@@ -247,256 +269,15 @@ export default function MessagesPage() {
     console.log("[MessagesPage] Sidebar state changed:", isSidebarOpen);
   }, [isSidebarOpen]);
 
-  // Convert API data to component state
-  // According to Swagger: GET /chat/rooms returns { success: true, data: [...] }
-  // Each room has participants as array of objects with userId property
-  const rooms = useMemo(() => {
-    if (!roomsData) {
-      console.log("[MessagesPage] No roomsData yet");
-      return [];
-    }
-
-    console.log("[MessagesPage] roomsData:", roomsData);
-    console.log(
-      "[MessagesPage] roomsData type:",
-      typeof roomsData,
-      "isArray:",
-      Array.isArray(roomsData)
-    );
-
-    // transformResponse should already extract the array, so roomsData should be ChatRoom[]
-    let roomsArray: ChatRoom[] = [];
-
-    if (Array.isArray(roomsData)) {
-      console.log(
-        "[MessagesPage] roomsData is array (expected), length:",
-        roomsData.length
-      );
-      roomsArray = roomsData;
-    } else {
-      console.warn(
-        "[MessagesPage] roomsData is not an array (unexpected):",
-        roomsData
-      );
-      return [];
-    }
-
-    // Transform rooms to match ChatRoom type
-    // According to Swagger, participants is an array of objects: [{ userId: "...", ... }, ...]
-    const transformedRooms = roomsArray
-      .map((room: any) => {
-        const roomId = room.roomId || room._id || room.id;
-        if (!roomId) {
-          console.warn("[MessagesPage] Room missing roomId:", room);
-          return null;
-        }
-
-        // Extract participant IDs and names from objects with userId property
-        const participants: string[] = [];
-        const participantNamesFromRoom: Map<string, string> = new Map();
-
-        console.log(
-          "[MessagesPage] Processing room:",
-          roomId,
-          "participants:",
-          room.participants
-        );
-
-        if (room.participants && Array.isArray(room.participants)) {
-          room.participants.forEach((p: any, index: number) => {
-            console.log(
-              `[MessagesPage] Participant ${index}:`,
-              p,
-              "type:",
-              typeof p,
-              "keys:",
-              typeof p === "object" ? Object.keys(p) : "N/A"
-            );
-
-            // Handle both formats: object with userId, or string
-            const participantId =
-              typeof p === "string" ? p : p.userId || p._id || p.id;
-            if (
-              participantId &&
-              typeof participantId === "string" &&
-              !participants.includes(participantId)
-            ) {
-              participants.push(participantId);
-
-              // Extract name if available in participant object
-              if (typeof p === "object" && p !== null) {
-                const name =
-                  p.firstName && p.lastName
-                    ? `${p.firstName} ${p.lastName}`.trim()
-                    : p.firstName || p.lastName || p.username || p.name || null;
-
-                console.log(
-                  "[MessagesPage] Extracted name for",
-                  participantId,
-                  ":",
-                  name
-                );
-
-                if (name && typeof name === "string") {
-                  participantNamesFromRoom.set(participantId, name);
-                }
-              }
-            }
-          });
-        }
-
-        console.log(
-          "[MessagesPage] Extracted participant names:",
-          Array.from(participantNamesFromRoom.entries())
-        );
-
-        // Cache participant names for later use
-        if (participantNamesFromRoom.size > 0) {
-          setParticipantNames((prev) => {
-            const newMap = new Map(prev);
-            participantNamesFromRoom.forEach((name, id) => {
-              if (!newMap.has(id)) {
-                newMap.set(id, name);
-              }
-            });
-            return newMap;
-          });
-        }
-
-        // Transform lastMessage if present
-        let lastMessage: ChatMessage | undefined;
-        if (room.lastMessage) {
-          // lastMessage might be a string ID or an object
-          if (typeof room.lastMessage === "string") {
-            // If it's just an ID, we can't create a full ChatMessage
-            // We'll need to fetch it separately or skip it
-            console.log(
-              "[MessagesPage] Room has lastMessage as ID only:",
-              room.lastMessage
-            );
-          } else if (
-            typeof room.lastMessage === "object" &&
-            room.lastMessage !== null
-          ) {
-            const msg = room.lastMessage;
-            const messageId = msg._id || msg.id;
-            if (messageId && typeof messageId === "string") {
-              // Extract senderId - can be string or object with _id
-              let senderId = '';
-              if (typeof msg.senderId === 'string') {
-                senderId = msg.senderId;
-              } else if (msg.senderId && typeof msg.senderId === 'object' && '_id' in msg.senderId) {
-                senderId = String(msg.senderId._id);
-              } else if (msg.senderId && typeof msg.senderId === 'object' && 'id' in msg.senderId) {
-                senderId = String(msg.senderId.id);
-              }
-              
-              // Extract receiverId - can be string or object with _id
-              let receiverId = '';
-              if (typeof msg.receiverId === 'string') {
-                receiverId = msg.receiverId;
-              } else if (msg.receiverId && typeof msg.receiverId === 'object' && '_id' in msg.receiverId) {
-                receiverId = String(msg.receiverId._id);
-              } else if (msg.receiverId && typeof msg.receiverId === 'object' && 'id' in msg.receiverId) {
-                receiverId = String(msg.receiverId.id);
-              }
-              
-              lastMessage = {
-                id: messageId,
-                senderId: senderId,
-                receiverId: receiverId,
-                roomId: msg.roomId || roomId,
-                content: msg.content || "",
-                type: (msg.type || "text") as ChatMessage["type"],
-                status: (msg.status || "sent") as ChatMessage["status"],
-                createdAt: msg.createdAt || new Date().toISOString(),
-                updatedAt: msg.updatedAt || new Date().toISOString(),
-                metadata: msg.metadata,
-                attachments: msg.attachments || [],
-                readAt: msg.readAt,
-                deliveredAt: msg.deliveredAt,
-                replyTo: msg.replyTo,
-              };
-            }
-          }
-        }
-
-        // Check if we have an updated lastMessage from WebSocket for this room
-        const wsLastMessage = roomLastMessages.get(roomId);
-        const finalLastMessage = wsLastMessage || lastMessage;
-
-        const chatRoom: ChatRoom = {
-          id: roomId,
-          roomId: roomId,
-          type: (room.type || "direct") as ChatRoom["type"],
-          participants: participants,
-          createdAt: room.createdAt || new Date().toISOString(),
-          updatedAt: room.updatedAt || new Date().toISOString(),
-          lastMessage: finalLastMessage,
-          unreadCount: room.unreadCount || 0,
-        };
-
-        return chatRoom;
-      })
-      .filter((room): room is ChatRoom => room !== null);
-
-    // Deduplicate rooms by participant combination - keep the most recent room for each unique set
-    const deduplicatedRooms = transformedRooms.reduce((acc, room) => {
-      // Sort participant IDs to create a consistent key
-      const participantKey = [...room.participants].sort().join("_");
-
-      // Check if we already have a room with these participants
-      const existingRoom = acc.find((r) => {
-        const existingKey = [...r.participants].sort().join("_");
-        return existingKey === participantKey;
-      });
-
-      if (existingRoom) {
-        // Keep the room with the most recent updatedAt
-        const existingIndex = acc.indexOf(existingRoom);
-        const existingDate = new Date(existingRoom.updatedAt).getTime();
-        const newDate = new Date(room.updatedAt).getTime();
-
-        if (newDate > existingDate) {
-          console.log(
-            "[MessagesPage] Replacing duplicate room",
-            existingRoom.roomId,
-            "with newer",
-            room.roomId
-          );
-          acc[existingIndex] = room;
-        } else {
-          console.log(
-            "[MessagesPage] Skipping duplicate room",
-            room.roomId,
-            "keeping",
-            existingRoom.roomId
-          );
-        }
-      } else {
-        acc.push(room);
-      }
-
-      return acc;
-    }, [] as ChatRoom[]);
-
-    console.log(
-      "[MessagesPage] Transformed",
-      transformedRooms.length,
-      "rooms from",
-      roomsArray.length,
-      "raw rooms, deduplicated to",
-      deduplicatedRooms.length,
-      "rooms"
-    );
-    return deduplicatedRooms;
-  }, [roomsData, roomLastMessages]);
+  // Rooms are provided by ChatContext - no transformation needed!
+  // Old REST API approach with useMemo has been removed
 
   const messages = useMemo(() => {
     console.log("[MessagesPage] Processing messagesData:", messagesData);
     console.log(
       "[MessagesPage] messagesData type:",
       typeof messagesData,
+
       "isArray:",
       Array.isArray(messagesData)
     );
@@ -765,7 +546,7 @@ export default function MessagesPage() {
       socket.off("messageDelivered", handleMessageDelivered);
       socket.off("roomMessage", handleRoomMessage);
     };
-  }, [socket, socketConnected, selectedChat, refetchMessages, refetchRooms]);
+  }, [socket, socketConnected, selectedChat, refetchMessages, refreshRooms]);
 
   // Join/leave room via WebSocket when chat selection changes
   useEffect(() => {
@@ -775,8 +556,14 @@ export default function MessagesPage() {
     }
 
     if (selectedChat) {
-      console.log("[MessagesPage] Joining room via WebSocket:", selectedChat);
-      joinSocketRoom(selectedChat);
+      // Find the room to get the roomId
+      const room = rooms.find((r) => r.id === selectedChat);
+      if (room && room.roomId) {
+        console.log("[MessagesPage] Joining room via WebSocket:", room.roomId, "(room.id:", selectedChat, ")");
+        joinSocketRoom(room.roomId);
+      } else {
+        console.error("[MessagesPage] Cannot join room: roomId not found for selected chat:", selectedChat);
+      }
       
       // Clear real-time messages for other rooms when switching chats
       setRealtimeMessages((prev) => 
@@ -787,24 +574,19 @@ export default function MessagesPage() {
     // Cleanup: leave room when component unmounts or chat changes
     return () => {
       if (selectedChat && socket && socketConnected) {
-        console.log("[MessagesPage] Leaving room via WebSocket:", selectedChat);
-        leaveSocketRoom(selectedChat);
+        const room = rooms.find((r) => r.id === selectedChat);
+        if (room && room.roomId) {
+          console.log("[MessagesPage] Leaving room via WebSocket:", room.roomId);
+          leaveSocketRoom(room.roomId);
+        }
       }
     };
-  }, [selectedChat, socket, socketConnected, joinSocketRoom, leaveSocketRoom]);
+  }, [selectedChat, socket, socketConnected, joinSocketRoom, leaveSocketRoom, rooms]);
 
   const loading = loadingRooms || loadingMessages;
   const messagesLoading = loadingMessages;
-  const apiError = roomsError
-    ? "data" in roomsError &&
-      roomsError.data &&
-      typeof roomsError.data === "object" &&
-      "message" in roomsError.data
-      ? String(roomsError.data.message)
-      : "message" in roomsError
-      ? String(roomsError.message)
-      : "Failed to fetch conversations"
-    : null;
+  // Errors are now handled by ChatContext - no need for apiError processing
+  const apiError = null;
 
   // Local state for UI
   const [localError, setLocalError] = useState<string | null>(null);
@@ -825,6 +607,7 @@ export default function MessagesPage() {
   };
 
   // Helper to safely extract participant ID (handles both strings and objects)
+  // ChatContext rooms now have participants as string[] already, or as objects with populated userId
   const extractParticipantId = (
     participant: string | Participant | null | undefined
   ): string | null => {
@@ -833,7 +616,7 @@ export default function MessagesPage() {
       return null;
     }
 
-    // Handle string directly
+    // Handle string directly - this is the normal case now with ChatContext
     if (typeof participant === "string") {
       // Validate it's not the object string representation
       if (participant === "[object Object]" || participant.trim() === "") {
@@ -842,9 +625,31 @@ export default function MessagesPage() {
       return participant;
     }
 
-    // Handle objects - NEVER convert to string directly as it becomes [object Object]
+    // Handle objects
     if (participant && typeof participant === "object") {
-      // Try to get id or _id property
+      // First check if this is a RoomParticipant object with a userId field
+      if ('userId' in participant && participant.userId) {
+        const userIdValue = participant.userId;
+        
+        // If userId is an object (populated), get the _id from it
+        if (typeof userIdValue === 'object' && userIdValue !== null) {
+          const userIdObj = userIdValue as any;
+          const id = userIdObj._id || userIdObj.id;
+          if (id && typeof id === 'string') {
+            return id;
+          }
+        }
+        
+        // If userId is a string, return it
+        if (typeof userIdValue === 'string') {
+          if (userIdValue === "[object Object]" || userIdValue.trim() === "") {
+            return null;
+          }
+          return userIdValue;
+        }
+      }
+      
+      // Try to get id or _id property directly
       const id = participant.id || participant._id;
 
       if (id !== null && id !== undefined) {
@@ -1015,6 +820,7 @@ export default function MessagesPage() {
         const existingRoom = rooms.find((room) => {
           if (!room.participants || room.type !== "direct") return false;
 
+          // Extract participant IDs - participants might be objects with userId field
           const participantIds = room.participants
             .map((p) => extractParticipantId(p))
             .filter((id): id is string => id !== null);
@@ -1026,7 +832,9 @@ export default function MessagesPage() {
           if (hasBothParticipants) {
             console.log(
               "[createRoomWithUser] Found existing room:",
-              room.id || room.roomId
+              room.id || room.roomId,
+              "participantIds:",
+              participantIds
             );
           }
 
@@ -1077,8 +885,9 @@ export default function MessagesPage() {
             );
 
             // Refetch to get the latest rooms including the existing one
-            const refetchResult = await refetchRooms();
-            const freshRooms = refetchResult?.data || rooms;
+            await refreshRooms();
+            // refreshRooms updates the ChatContext, so just use the rooms from context
+            const freshRooms = rooms;
 
             console.log(
               "[createRoomWithUser] Searching in",
@@ -1237,7 +1046,7 @@ export default function MessagesPage() {
 
         // Wait a bit then refetch rooms to get the new room
         setTimeout(() => {
-          refetchRooms();
+          refreshRooms();
         }, 500);
 
         setProcessingUserId(null);
@@ -1302,99 +1111,12 @@ export default function MessagesPage() {
       invalidUserIds,
       router,
       createRoomMutation,
-      refetchRooms,
+      refreshRooms,
       rooms,
     ]
   );
 
-  // Extract participant names from rooms data
-  // Note: /chat/rooms doesn't include user names, so we'll need to fetch them separately
-  // This effect is kept for backward compatibility but won't extract names from rooms
-  useEffect(() => {
-    if (roomsData && Array.isArray(roomsData)) {
-      // Rooms from /chat/rooms don't have sender/receiver info
-      // We'll need to fetch participant names separately using their userIds
-      console.log(
-        "[MessagesPage] Rooms data loaded, participant names will be fetched separately"
-      );
-    }
-  }, [roomsData]);
-  
-  // Fetch last message for rooms that have lastMessage as just an ID
-  // Only fetch for the first 5 rooms to avoid too many API calls
-  useEffect(() => {
-    if (!roomsData || !Array.isArray(roomsData)) return;
-    
-    const roomsNeedingLastMessage = roomsData
-      .filter((room: any) => {
-        const roomId = room.roomId || room._id || room.id;
-        // Check if lastMessage is just a string ID (not an object)
-        return room.lastMessage && typeof room.lastMessage === "string" && roomId;
-      })
-      .slice(0, 5); // Only fetch for first 5 rooms
-    
-    if (roomsNeedingLastMessage.length === 0) return;
-    
-    // Fetch last message for each room in parallel
-    const fetchLastMessages = async () => {
-      const promises = roomsNeedingLastMessage.map(async (room: any) => {
-        const roomId = room.roomId || room._id || room.id;
-        if (!roomId) return;
-        
-        try {
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL || "https://be-aphrodite-8wrp.onrender.com"}/chat/rooms/${roomId}/messages?limit=1`,
-            {
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-              },
-            }
-          );
-          
-          if (response.ok) {
-            const data = await response.json();
-            const messages = data?.data || data || [];
-            if (Array.isArray(messages) && messages.length > 0) {
-              const lastMsg = messages[messages.length - 1];
-              // Normalize the message
-              const normalizedMessage: ChatMessage = {
-                id: lastMsg._id || lastMsg.id || "",
-                senderId: typeof lastMsg.senderId === "string" 
-                  ? lastMsg.senderId 
-                  : (lastMsg.senderId?._id || lastMsg.senderId?.id || ""),
-                receiverId: typeof lastMsg.receiverId === "string"
-                  ? lastMsg.receiverId
-                  : (lastMsg.receiverId?._id || lastMsg.receiverId?.id || ""),
-                roomId: lastMsg.roomId || roomId,
-                content: lastMsg.content || "",
-                type: (lastMsg.type || "text") as ChatMessage["type"],
-                status: (lastMsg.status || "sent") as ChatMessage["status"],
-                createdAt: lastMsg.createdAt || new Date().toISOString(),
-                updatedAt: lastMsg.updatedAt || new Date().toISOString(),
-                metadata: lastMsg.metadata,
-                attachments: lastMsg.attachments || [],
-                readAt: lastMsg.readAt,
-                deliveredAt: lastMsg.deliveredAt,
-                replyTo: lastMsg.replyTo,
-              };
-              
-              setRoomLastMessages((prev) => {
-                const updated = new Map(prev);
-                updated.set(roomId, normalizedMessage);
-                return updated;
-              });
-            }
-          }
-        } catch (error) {
-          console.error(`[MessagesPage] Error fetching last message for room ${roomId}:`, error);
-        }
-      });
-      
-      await Promise.all(promises);
-    };
-    
-    fetchLastMessages();
-  }, [roomsData]);
+  // Rooms and participant data come from ChatContext - no separate fetching needed
 
   // Handle userId query parameter - find or create room with that user
   // Use a ref to track the last processed userId to prevent unnecessary runs
@@ -1683,7 +1405,13 @@ export default function MessagesPage() {
     // Get the selected room to find the receiver ID
     const room = rooms.find((r) => r.id === selectedChat);
     if (!room) {
-      console.error("Room not found");
+      console.error("Room not found for selectedChat:", selectedChat, "available rooms:", rooms.map(r => ({ id: r.id, roomId: r.roomId })));
+      return;
+    }
+    
+    // Ensure room has a valid roomId
+    if (!room.roomId || typeof room.roomId !== 'string') {
+      console.error("Room found but has invalid roomId:", room);
       return;
     }
 
@@ -1734,7 +1462,7 @@ export default function MessagesPage() {
         // WebSocket will emit messageDelivered event, which will add the message to UI
         // Refetch rooms after a delay to update last message
         setTimeout(() => {
-          refetchRooms();
+          refreshRooms();
         }, 1000);
       } catch (err) {
         console.error("[MessagesPage] Error sending via WebSocket, falling back to REST API:", err);
@@ -1794,7 +1522,7 @@ export default function MessagesPage() {
           }
 
         // RTK Query will automatically refetch messages and rooms due to invalidatesTags
-        refetchRooms();
+        refreshRooms();
       }
     } catch (err: unknown) {
         console.error("[MessagesPage] Error sending message via REST API:", err);
@@ -2049,7 +1777,7 @@ export default function MessagesPage() {
             });
           }
           
-          refetchRooms();
+          refreshRooms();
         }
       } catch (err) {
         console.error("Error sending pricing message via REST API:", err);
@@ -2159,8 +1887,6 @@ export default function MessagesPage() {
       setShowNewChatDialog(true); // Reopen dialog on error so user can see the error and try again
     }
   };
-
-  const selectedChatData = rooms.find((room) => room.id === selectedChat);
 
   // Get the other participant's user ID for profile navigation
   const getOtherParticipantId = useCallback((): string | null => {
@@ -2308,6 +2034,19 @@ export default function MessagesPage() {
         const pId = extractParticipantId(p);
         return pId && pId !== currentUserId;
       });
+
+      // Check if participant.userId is populated (will be an object with name, userName, etc.)
+      if (otherParticipant && typeof otherParticipant === "object") {
+        // Check if userId is populated with user data
+        if (otherParticipant.userId && typeof otherParticipant.userId === "object") {
+          const userData = otherParticipant.userId as any;
+          const displayName = userData.name || userData.userName || userData.email;
+          if (displayName) {
+            console.log("[getRoomDisplayName] Using populated user data:", displayName);
+            return displayName;
+          }
+        }
+      }
 
       // Debug logging
       if (otherParticipant && typeof otherParticipant === "object") {
@@ -2922,7 +2661,9 @@ export default function MessagesPage() {
         <div className="p-6 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-white text-xl font-semibold">Messages</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {/* WebSocket Connection Status */}
+              <ConnectionStatus />
               {/* <button
                 onClick={() => setShowNewChatDialog(true)}
                 className="bg-[#FA266D] hover:bg-pink-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -2965,7 +2706,7 @@ export default function MessagesPage() {
             <div className="p-4 text-center">
               <p className="text-red-400 mb-2">{error}</p>
               <button
-                onClick={() => refetchRooms()}
+                onClick={() => refreshRooms()}
                 className="px-4 py-2 bg-[#FA266D] text-white rounded-lg hover:bg-pink-600"
               >
                 Retry
