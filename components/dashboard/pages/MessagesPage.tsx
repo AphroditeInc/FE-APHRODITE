@@ -158,7 +158,6 @@ export default function MessagesPage() {
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
           if (parsedUser?.id) {
-            console.log("Found user ID in localStorage:", parsedUser.id);
             setFallbackUserId(parsedUser.id);
           }
         }
@@ -266,25 +265,14 @@ export default function MessagesPage() {
   
   // Debug: Log sidebar state changes
   useEffect(() => {
-    console.log("[MessagesPage] Sidebar state changed:", isSidebarOpen);
   }, [isSidebarOpen]);
 
   // Rooms are provided by ChatContext - no transformation needed!
   // Old REST API approach with useMemo has been removed
 
   const messages = useMemo(() => {
-    console.log("[MessagesPage] Processing messagesData:", messagesData);
-    console.log(
-      "[MessagesPage] messagesData type:",
-      typeof messagesData,
-
-      "isArray:",
-      Array.isArray(messagesData)
-    );
-
     // transformResponse should already extract the array, so messagesData should be ChatMessage[]
     if (!messagesData) {
-      console.log("[MessagesPage] No messagesData, returning empty array");
       return [];
     }
 
@@ -292,10 +280,6 @@ export default function MessagesPage() {
     let messagesArray: ChatMessage[] = [];
 
     if (Array.isArray(messagesData)) {
-      console.log(
-        "[MessagesPage] messagesData is array (expected), length:",
-        messagesData.length
-      );
       messagesArray = messagesData;
     } else {
       // Fallback: if transformResponse didn't work, try to extract manually
@@ -326,18 +310,6 @@ export default function MessagesPage() {
       }
     }
 
-    console.log(
-      "[MessagesPage] Final messagesArray length:",
-      messagesArray.length
-    );
-    if (messagesArray.length > 0) {
-      console.log("[MessagesPage] First message:", messagesArray[0]);
-      console.log(
-        "[MessagesPage] Last message:",
-        messagesArray[messagesArray.length - 1]
-      );
-    }
-
     // Create a copy of the array before sorting (RTK Query returns frozen arrays)
     // Sort messages by createdAt (oldest first)
     const sorted = [...messagesArray].sort((a, b) => {
@@ -346,7 +318,6 @@ export default function MessagesPage() {
       return dateA - dateB;
     });
 
-    console.log("[MessagesPage] Sorted messages length:", sorted.length);
     
     // Merge with real-time messages for the selected chat
     if (selectedChat) {
@@ -394,42 +365,33 @@ export default function MessagesPage() {
   // Note: selectedChatData is defined later, so we'll add another useEffect after it
   useEffect(() => {
     if (selectedChat) {
-      console.log("[MessagesPage] Selected chat:", selectedChat);
-      console.log("[MessagesPage] Messages data:", messagesData);
       console.log(
         "[MessagesPage] Messages data type:",
         typeof messagesData,
         "isArray:",
         Array.isArray(messagesData)
       );
-      console.log("[MessagesPage] Loading messages:", loadingMessages);
-      console.log("[MessagesPage] Messages error:", messagesError);
       console.log(
         "[MessagesPage] Processed messages array length:",
         messages.length
       );
     } else {
-      console.log("[MessagesPage] No chat selected");
     }
   }, [selectedChat, messagesData, loadingMessages, messagesError, messages]);
 
   // WebSocket event listeners for real-time messages
   useEffect(() => {
     if (!socket || !socketConnected) {
-      console.log("[MessagesPage] Socket not connected, skipping event listeners");
       return;
     }
 
-    console.log("[MessagesPage] Setting up WebSocket event listeners");
 
     const handleNewMessage = (data: { message: ChatMessage }) => {
-      console.log("[MessagesPage] Received newMessage via WebSocket:", data.message);
       const newMessage = data.message;
       
       // Skip if this is a message we just sent (it will be handled by messageDelivered)
       const currentUserId = userId || user?.id || fallbackUserId;
       if (currentUserId && newMessage.senderId === currentUserId) {
-        console.log("[MessagesPage] Skipping newMessage for our own message, will be handled by messageDelivered");
         return;
       }
       
@@ -448,17 +410,14 @@ export default function MessagesPage() {
           // Check if message already exists (avoid duplicates)
           const exists = prev.some((msg) => msg.id === newMessage.id);
           if (exists) {
-            console.log("[MessagesPage] Message already exists, updating:", newMessage.id);
             return prev.map((msg) => (msg.id === newMessage.id ? newMessage : msg));
           }
-          console.log("[MessagesPage] Adding new real-time message:", newMessage.id);
           return [...prev, newMessage];
         });
       }
     };
 
     const handleMessageDelivered = (data: { tempId?: string; message: ChatMessage }) => {
-      console.log("[MessagesPage] Received messageDelivered via WebSocket:", data);
       const deliveredMessage = data.message;
       
       // Remove from sending set
@@ -490,7 +449,6 @@ export default function MessagesPage() {
           : false;
         
         if (existsInApi) {
-          console.log("[MessagesPage] Message already exists in API messages, skipping realtimeMessages to prevent duplicate");
           return;
         }
         
@@ -518,13 +476,11 @@ export default function MessagesPage() {
     };
 
     const handleRoomMessage = (data: { message: ChatMessage }) => {
-      console.log("[MessagesPage] Received roomMessage via WebSocket:", data.message);
       const roomMessage = data.message;
       
       // Skip if this is a message we just sent (it will be handled by messageDelivered)
       const currentUserId = userId || user?.id || fallbackUserId;
       if (currentUserId && roomMessage.senderId === currentUserId) {
-        console.log("[MessagesPage] Skipping roomMessage for our own message, will be handled by messageDelivered");
         return;
       }
       
@@ -537,11 +493,9 @@ export default function MessagesPage() {
     socket.on("messageDelivered", handleMessageDelivered);
     socket.on("roomMessage", handleRoomMessage);
 
-    console.log("[MessagesPage] WebSocket event listeners registered");
 
     // Cleanup
     return () => {
-      console.log("[MessagesPage] Cleaning up WebSocket event listeners");
       socket.off("newMessage", handleNewMessage);
       socket.off("messageDelivered", handleMessageDelivered);
       socket.off("roomMessage", handleRoomMessage);
@@ -551,7 +505,6 @@ export default function MessagesPage() {
   // Join/leave room via WebSocket when chat selection changes
   useEffect(() => {
     if (!socket || !socketConnected) {
-      console.log("[MessagesPage] Socket not connected, cannot join room");
       return;
     }
 
@@ -559,7 +512,6 @@ export default function MessagesPage() {
       // Find the room to get the roomId
       const room = rooms.find((r) => r.id === selectedChat);
       if (room && room.roomId) {
-        console.log("[MessagesPage] Joining room via WebSocket:", room.roomId, "(room.id:", selectedChat, ")");
         joinSocketRoom(room.roomId);
       } else {
         console.error("[MessagesPage] Cannot join room: roomId not found for selected chat:", selectedChat);
@@ -576,7 +528,6 @@ export default function MessagesPage() {
       if (selectedChat && socket && socketConnected) {
         const room = rooms.find((r) => r.id === selectedChat);
         if (room && room.roomId) {
-          console.log("[MessagesPage] Leaving room via WebSocket:", room.roomId);
           leaveSocketRoom(room.roomId);
         }
       }
@@ -736,13 +687,11 @@ export default function MessagesPage() {
 
       // Check if this ID was already marked as invalid
       if (invalidUserIds.has(targetUserId)) {
-        console.log("Skipping invalid userId:", targetUserId);
         router.replace("/chat");
         return;
       }
 
       if (processingUserId === targetUserId) {
-        console.log("Already processing this userId, skipping...");
         return;
       }
 
@@ -1177,7 +1126,6 @@ export default function MessagesPage() {
 
     // Skip if this userId was already marked as invalid
     if (targetUserId && invalidUserIds.has(targetUserId)) {
-      console.log("Skipping invalid userId:", targetUserId);
       // Only replace URL if there are actually query params to clear
       if (searchParams.toString()) {
         router.replace("/chat", { scroll: false });
@@ -1195,7 +1143,6 @@ export default function MessagesPage() {
       !authLoading &&
       !processingUserId
     ) {
-      console.log("Processing userId:", targetUserId, "Current rooms:", rooms);
 
       // Validate MongoDB ObjectId format before processing
       if (!isValidMongoObjectId(targetUserId)) {
@@ -1240,7 +1187,6 @@ export default function MessagesPage() {
       });
 
       if (existingRoom) {
-        console.log("Found existing room:", existingRoom.id);
         setSelectedChat(existingRoom.id);
         // Mark as processed before navigation to prevent re-running
         hasProcessedQueryParams.current = true;
@@ -1250,7 +1196,6 @@ export default function MessagesPage() {
           router.replace("/chat", { scroll: false });
         }
       } else {
-        console.log("No existing room found, creating new one...");
         // Mark as processed to prevent re-running during room creation
         hasProcessedQueryParams.current = true;
         lastProcessedUserId.current = targetUserId;
@@ -1450,7 +1395,6 @@ export default function MessagesPage() {
     // Wait for WebSocket response instead of showing optimistic message
     if (socketConnected && socket) {
       try {
-        console.log("[MessagesPage] Sending message via WebSocket, waiting for messageDelivered");
         sendSocketMessage({
           receiverId: receiverId,
           roomId: selectedChat,
@@ -1470,7 +1414,6 @@ export default function MessagesPage() {
         sendViaRestAPI();
       }
     } else {
-      console.log("[MessagesPage] WebSocket not connected, using REST API");
       // Fallback to REST API
       sendViaRestAPI();
     }
@@ -1500,7 +1443,6 @@ export default function MessagesPage() {
             roomId: (result.roomId && typeof result.roomId === "string") ? result.roomId : selectedChat,
           };
 
-          console.log("[MessagesPage] Message sent successfully via REST API:", sentMessage);
           
           // Add message to real-time messages (no optimistic message, just add the real one)
           setRealtimeMessages((prev) => {
@@ -1582,14 +1524,12 @@ export default function MessagesPage() {
     
     // Prevent multiple rapid clicks or if already sending
     if (sending) {
-      console.log("[handleSendPricing] Already sending, skipping");
       return;
     }
     
     // Check if we're already processing a pricing send
     const isProcessing = Array.from(sendingPricingRef.current).length > 0;
     if (isProcessing) {
-      console.log("[handleSendPricing] Already processing a pricing send, skipping");
       return;
     }
     
@@ -1697,7 +1637,6 @@ export default function MessagesPage() {
     
     // Check if we're already sending this exact message (prevent duplicate sends)
     if (sendingPricingRef.current.has(tempId)) {
-      console.log("[handleSendPricing] Already sending this message, skipping duplicate");
       return;
     }
     
@@ -1836,7 +1775,6 @@ export default function MessagesPage() {
     }
 
     if (processingUserId === targetUserId) {
-      console.log("[handleStartNewChat] Already processing this userId");
       return;
     }
 
@@ -1958,7 +1896,6 @@ export default function MessagesPage() {
           const profileId = data?.data?.id || data?.id;
           
           if (profileId) {
-            console.log("[MessagesPage] Preloaded profile ID:", profileId);
             setPreloadedProfileId(profileId);
           }
         }
@@ -1975,7 +1912,6 @@ export default function MessagesPage() {
   useEffect(() => {
     if (selectedChat && selectedChatData) {
       const currentUserId = userId || user?.id || fallbackUserId;
-      console.log("[MessagesPage] Selected room data:", selectedChatData);
       console.log(
         "[MessagesPage] Current user ID:",
         currentUserId,
@@ -2046,16 +1982,6 @@ export default function MessagesPage() {
             return displayName;
           }
         }
-      }
-
-      // Debug logging
-      if (otherParticipant && typeof otherParticipant === "object") {
-        console.log(
-          "Found otherParticipant object:",
-          otherParticipant,
-          "keys:",
-          Object.keys(otherParticipant)
-        );
       }
 
       const otherParticipantId = otherParticipant
@@ -2191,16 +2117,6 @@ export default function MessagesPage() {
       senderIdStr !== "" &&
       currentUserIdStr !== "" &&
       senderIdStr === currentUserIdStr;
-
-    // Debug logging for message conversion
-    console.log("convertToUIMessage:", {
-      apiMessageSenderId: apiMessage.senderId,
-      senderIdStr,
-      currentUserId,
-      currentUserIdStr,
-      isOwn,
-      messageContent: apiMessage.content?.substring(0, 20),
-    });
 
     // Check if message has pricing metadata
     const pricingMetadata = apiMessage.metadata?.pricing as {
@@ -2674,7 +2590,6 @@ export default function MessagesPage() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log("[MessagesPage] Hamburger menu clicked, closing sidebar");
                   setIsSidebarOpen(false);
                 }}
                 className="text-[#FA266D] hover:text-pink-400 transition-colors cursor-pointer p-1 z-10 relative"
@@ -2956,17 +2871,6 @@ export default function MessagesPage() {
                     apiMessage.id ||
                     message.id ||
                     `msg-${index}-${apiMessage.createdAt || Date.now()}`;
-
-                  // Debug: Log message alignment
-                  console.log("Rendering message:", {
-                    id: message.id,
-                    apiMessageId: apiMessage.id,
-                    uniqueKey,
-                    sender: message.sender,
-                    isOwnMessage,
-                    content: message.content?.substring(0, 20),
-                    alignment: isOwnMessage ? "right" : "left",
-                  });
 
                   return (
                     <div

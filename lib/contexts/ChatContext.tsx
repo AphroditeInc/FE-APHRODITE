@@ -60,14 +60,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!socket || !connected) return;
 
     const handleFocus = () => {
-      console.log('[ChatContext] Window focused - marking user as active');
       rooms.forEach(room => {
         socket.emit('userPresence', { roomId: room.roomId, isActive: true });
       });
     };
 
     const handleBlur = () => {
-      console.log('[ChatContext] Window blurred - marking user as away');
       rooms.forEach(room => {
         socket.emit('userPresence', { roomId: room.roomId, isActive: false });
       });
@@ -85,14 +83,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Request room list when connected
   useEffect(() => {
     if (connected && socket && isAuthenticated) {
-      console.log('[ChatContext] Socket connected, requesting room list');
       
       // Check if this is a reconnection (not first connection)
       const now = Date.now();
       const isReconnection = lastRoomsFetchTime.current > 0 && (now - lastRoomsFetchTime.current) > 5000;
       
       if (isReconnection) {
-        console.log('[ChatContext] Reconnection detected - syncing missed updates');
         // Request full room list to catch up on missed messages
         getRoomList();
         getAllUnreadCounts();
@@ -112,7 +108,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!socket) return;
 
     const handleRoomListUpdate = (data: { rooms: ChatRoom[]; timestamp: string }) => {
-      console.log('[ChatContext] Room list update received:', data.rooms.length, 'rooms');
       
       // Sort rooms by last activity (most recent first)
       const sortedRooms = [...data.rooms].sort((a, b) => {
@@ -145,7 +140,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const handleUnreadCountUpdate = (data: { roomId: string; unreadCount: number }) => {
-      console.log('[ChatContext] Unread count update:', data);
       setUnreadCounts(prev => {
         const updated = new Map(prev);
         updated.set(data.roomId, data.unreadCount);
@@ -154,7 +148,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const handleAllUnreadCounts = (data: { unreadCounts: Record<string, number> }) => {
-      console.log('[ChatContext] All unread counts received:', data.unreadCounts);
       const newUnreadCounts = new Map<string, number>();
       Object.entries(data.unreadCounts).forEach(([roomId, count]) => {
         newUnreadCounts.set(roomId, count);
@@ -163,7 +156,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const handleUserPresenceChanged = (data: { roomId: string; userId: string; isOnline: boolean }) => {
-      console.log('[ChatContext] User presence changed:', data);
       if (data.userId !== userId) {
         setOnlineUsers(prev => {
           const updated = new Map(prev);
@@ -225,7 +217,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const handleNewMessage = (data: { message: ChatMessage }) => {
-      console.log('[ChatContext] New message received:', data.message);
       // Refresh room list to update last message and unread count
       getRoomList();
       
@@ -241,7 +232,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const handleMessageDelivered = (data: { message: ChatMessage; tempId?: string }) => {
-      console.log('[ChatContext] Message delivered:', data);
       setMessageStatuses(prev => {
         const updated = new Map(prev);
         if (data.tempId) {
@@ -253,7 +243,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const handleMessagesRead = (data: { roomId: string; messageIds: string[]; readBy: string }) => {
-      console.log('[ChatContext] Messages read:', data);
       setMessageStatuses(prev => {
         const updated = new Map(prev);
         data.messageIds.forEach(messageId => {

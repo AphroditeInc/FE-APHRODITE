@@ -114,15 +114,12 @@ export const useChatSocket = (): UseChatSocketReturn => {
   useEffect(() => {
     // Only connect if authenticated and have token
     if (!isAuthenticated || !accessToken) {
-      console.log('[useChatSocket] Not authenticated or no token, skipping connection');
       return;
     }
 
     const wsUrl = getWebSocketUrl();
     // Socket.IO automatically handles the /chat namespace
     const socketUrl = `${wsUrl}/chat`;
-    console.log('[useChatSocket] Connecting to WebSocket:', socketUrl);
-    console.log('[useChatSocket] Using access token:', accessToken ? `${accessToken.substring(0, 20)}...` : 'none');
 
     const newSocket = io(socketUrl, {
       withCredentials: true,
@@ -143,21 +140,18 @@ export const useChatSocket = (): UseChatSocketReturn => {
 
     // Connection events
     newSocket.on('connect', () => {
-      console.log('[useChatSocket] Socket connected:', newSocket.id);
       setConnected(true);
       setReconnecting(false);
       reconnectAttempts.current = 0;
     });
 
     newSocket.on('connected', (data) => {
-      console.log('[useChatSocket] Server confirmed connection:', data);
       setConnected(true);
       setReconnecting(false);
       reconnectAttempts.current = 0;
     });
 
     newSocket.on('disconnect', (reason) => {
-      console.log('[useChatSocket] Socket disconnected:', reason);
       setConnected(false);
       if (reason === 'io server disconnect') {
         // Server disconnected, need manual reconnect
@@ -192,7 +186,6 @@ export const useChatSocket = (): UseChatSocketReturn => {
       reconnectAttempts.current += 1;
       if (reconnectAttempts.current < maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-        console.log(`[useChatSocket] Will retry connection in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
         
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
@@ -220,7 +213,6 @@ export const useChatSocket = (): UseChatSocketReturn => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      console.log('[useChatSocket] Cleaning up socket connection');
       newSocket.close();
       setSocket(null);
       setConnected(false);
@@ -234,7 +226,6 @@ export const useChatSocket = (): UseChatSocketReturn => {
       return;
     }
 
-    console.log('[useChatSocket] Sending message:', data);
     socket.emit('sendMessage', {
       receiverId: data.receiverId,
       roomId: data.roomId,
@@ -251,7 +242,6 @@ export const useChatSocket = (): UseChatSocketReturn => {
       return;
     }
 
-    console.log('[useChatSocket] Joining room:', roomId);
     socket.emit('joinRoom', { roomId });
   }, [socket, connected]);
 
@@ -261,7 +251,6 @@ export const useChatSocket = (): UseChatSocketReturn => {
       return;
     }
 
-    console.log('[useChatSocket] Leaving room:', roomId);
     socket.emit('leaveRoom', { roomId });
   }, [socket, connected]);
 
@@ -306,7 +295,6 @@ export const useChatSocket = (): UseChatSocketReturn => {
       return;
     }
 
-    console.log('[useChatSocket] Requesting room list');
     socket.emit('getRoomList');
   }, [socket, connected]);
 
@@ -316,7 +304,6 @@ export const useChatSocket = (): UseChatSocketReturn => {
       return;
     }
 
-    console.log('[useChatSocket] Requesting all unread counts');
     socket.emit('getAllUnreadCounts');
   }, [socket, connected]);
 
