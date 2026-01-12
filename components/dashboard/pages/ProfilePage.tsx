@@ -2045,8 +2045,8 @@ export default function ProfilePage() {
                       const categoryData = {
                         categoryName: customPricingForm.categoryName,
                         duration: customPricingForm.duration,
-                        incall: Number(customPricingForm.incallPrice) || undefined,
-                        outcall: Number(customPricingForm.outcallPrice) || undefined,
+                        incall: Number(customPricingForm.incallPrice) || 0,
+                        outcall: Number(customPricingForm.outcallPrice) || 0,
                       };
                       
                       console.log("Creating custom pricing category:", categoryData);

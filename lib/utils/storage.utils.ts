@@ -28,7 +28,8 @@ export const getAuthTokens = (): AuthTokens | null => {
     const refreshToken = localStorage.getItem('refreshToken');
     
     if (accessToken && refreshToken) {
-      const tokens = { accessToken, refreshToken };
+      const expiresIn = localStorage.getItem('expiresIn') || '';
+      const tokens = { accessToken, refreshToken, expiresIn };
       return tokens;
     }
     

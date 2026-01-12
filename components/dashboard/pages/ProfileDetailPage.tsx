@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, MapPin, Star, Check, Users, Calendar as CalendarIcon, Heart, BookOpen, MessageCircle, UserPlus, Info, Coins, Play, ThumbsUp, ThumbsDown, ChevronDown, Plus } from "lucide-react";
 import { type Profile } from "@/lib/data/profiles";
-import { useGetProfileByIdQuery } from "@/feature/profile/profileApiSlice";
+import { useGetProfileByIdQuery, useGetEnrichedProfileQuery } from "@/feature/profile/profileApiSlice";
 import type { EnrichedProfile } from "@/lib/types/auth.types";
 import { ProfileDetailSkeleton } from "@/components/ui/Skeleton";
 import CustomPricingModal from "../modals/CustomPricingModal";
@@ -32,7 +32,7 @@ const backgroundImages = [
 export default function ProfileDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const profileId = params.id as string;
+  const idFromRoute = params.id as string;
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("About");
   const [reviewText, setReviewText] = useState("");
@@ -40,30 +40,51 @@ export default function ProfileDetailPage() {
   const [isLiked, setIsLiked] = useState(false);
   const [isCustomPricingModalOpen, setIsCustomPricingModalOpen] = useState(false);
 
-  // Fetch profile from API
-  const { data: profileResponse, isLoading, error } = useGetProfileByIdQuery(profileId, {
-    skip: !profileId,
+  // Try user endpoint first (since MessagesPage passes userId)
+  const { 
+    data: userProfileResponse, 
+    isLoading: isLoadingUserProfile, 
+    error: userProfileError 
+  } = useGetEnrichedProfileQuery(idFromRoute, {
+    skip: !idFromRoute,
   });
+
+  // Try profile endpoint as fallback (in case it's actually a profile ID)
+  const { 
+    data: profileResponse, 
+    isLoading: isLoadingProfile, 
+    error: profileError 
+  } = useGetProfileByIdQuery(idFromRoute, {
+    skip: !idFromRoute || !!userProfileResponse, // Skip if user endpoint succeeded
+  });
+
+  // Use whichever response succeeded
+  const profileResponseToUse = userProfileResponse || profileResponse;
+  const isLoading = isLoadingUserProfile || isLoadingProfile;
+  const error = userProfileError || profileError;
 
   // Extract EnrichedProfile from response
   const enrichedProfile = useMemo<EnrichedProfile | null>(() => {
-    if (!profileResponse) return null;
+    if (!profileResponseToUse) return null;
 
-    console.log('[ProfileDetailPage] Raw profileResponse:', profileResponse);
+    console.log('[ProfileDetailPage] Raw profileResponse:', profileResponseToUse, {
+      isFromUserEndpoint: !!userProfileResponse,
+      isFromProfileEndpoint: !!profileResponse
+    });
 
     // Handle API response structure: { success: true, data: EnrichedProfile } or direct EnrichedProfile
-    if (profileResponse && typeof profileResponse === 'object') {
-      if ('success' in profileResponse && profileResponse.success && 'data' in profileResponse) {
-        console.log('[ProfileDetailPage] Found nested data structure, user field:', (profileResponse.data as any)?.user);
-        return profileResponse.data as EnrichedProfile;
-      } else if ('id' in profileResponse) {
-        console.log('[ProfileDetailPage] Found direct profile structure, user field:', (profileResponse as any)?.user);
-        return profileResponse as EnrichedProfile;
+    if (profileResponseToUse && typeof profileResponseToUse === 'object') {
+      if ('success' in profileResponseToUse && profileResponseToUse.success && 'data' in profileResponseToUse) {
+        console.log('[ProfileDetailPage] Found nested data structure, user field:', (profileResponseToUse.data as any)?.user);
+        return profileResponseToUse.data as EnrichedProfile;
+      } else if ('id' in profileResponseToUse) {
+        console.log('[ProfileDetailPage] Found direct profile structure, user field:', (profileResponseToUse as any)?.user);
+        return profileResponseToUse as EnrichedProfile;
       }
     }
 
     return null;
-  }, [profileResponse]);
+  }, [profileResponseToUse, userProfileResponse, profileResponse]);
 
   // Map EnrichedProfile to Profile type
   const profile = useMemo<Profile | null>(() => {
@@ -218,7 +239,7 @@ export default function ProfileDetailPage() {
       <div className="flex items-center justify-between p-6">
         <button 
           onClick={handleBack}
-          className="flex items-center gap-2 text-white hover:text-pink-300 transition-colors"
+          className="flex items-center gap-2 text-white hover:text-[#FA266D] transition-colors"
         >
           <ArrowLeft className="h-5 w-5" />
           <span>Back</span>
@@ -228,109 +249,149 @@ export default function ProfileDetailPage() {
 
       {/* Main Profile Section */}
       <div className="px-12 pb-6">
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Profile Image */}
-          <div className="lg:w-1/3">
-            <div className="relative min-h-[500px]">
-              <div 
-                className="w-full h-full min-h-[500px] rounded-2xl overflow-hidden bg-cover bg-center transition-all duration-1000"
-                style={{ 
-                  backgroundImage: profileMedia.length > 0 
-                    ? `url(${profileMedia[currentImageIndex]})` 
-                    : `url(/images/intimate-couple.svg)`,
-                  backgroundColor: profileMedia.length === 0 ? '#2D2D2D' : 'transparent'
-                }}
-              >
-                <div className="absolute inset-0  "></div>
-              </div>
-              {/* Image carousel dots - only show if there are multiple images */}
-              {profileMedia.length > 1 && (
-              <div className="flex justify-center gap-2 mt-4">
-                  {profileMedia.slice(0, Math.min(profileMedia.length, 10)).map((_, index) => (
-                  <div 
-                    key={index}
-                    className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                        index === (currentImageIndex % profileMedia.length) ? 'bg-pink-500' : 'bg-white/30'
-                    }`}
-                  ></div>
-                ))}
-              </div>
+        <div className="flex flex-col lg:flex-row gap-6 sm:gap-8">
+          {/* Profile Image/Media */}
+          <div className="lg:w-1/2">
+            <div className="relative">
+              {/* Display media from profileMedia array */}
+              {profileMedia && Array.isArray(profileMedia) && profileMedia.length > 0 ? (
+                <div className="w-full h-64 sm:h-80 lg:h-96 bg-gray-700 rounded-xl sm:rounded-2xl overflow-hidden relative">
+                  {/* Show current media item based on currentImageIndex */}
+                  {(() => {
+                    const currentMedia = profileMedia[currentImageIndex] || profileMedia[0];
+                    const isVideo = /\.(mp4|webm|ogg|avi|mov|wmv|flv|mkv)$/i.test(currentMedia);
+                    
+                    return isVideo ? (
+                      <video 
+                        src={currentMedia} 
+                        className="w-full h-full object-cover"
+                        controls
+                        key={currentImageIndex} // Key to force re-render on change
+                      />
+                    ) : (
+                      <img 
+                        src={currentMedia} 
+                        alt={`Profile media ${currentImageIndex + 1}`}
+                        className="w-full h-full object-cover transition-opacity duration-500"
+                        key={currentImageIndex} // Key to force re-render on change
+                      />
+                    );
+                  })()}
+                  
+                  {/* Media count badge */}
+                  {profileMedia.length > 1 && (
+                    <div className="absolute top-2 right-2 bg-black/60 text-white px-2 py-1 rounded-full text-xs font-medium">
+                      {currentImageIndex + 1} / {profileMedia.length}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="w-full h-64 sm:h-80 lg:h-96 bg-gray-700 rounded-xl sm:rounded-2xl overflow-hidden">
+                  <img 
+                    src="/images/intimate-couple.svg" 
+                    alt="Profile" 
+                    className="w-full h-full object-cover"
+                  />
+                </div>
               )}
             </div>
+            {/* Image carousel dots - show if there are multiple media items */}
+            {profileMedia && Array.isArray(profileMedia) && profileMedia.length > 1 && (
+              <div className="flex justify-center gap-2 mt-3 sm:mt-4">
+                {profileMedia.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setCurrentImageIndex(index)}
+                    className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-all cursor-pointer ${
+                      index === currentImageIndex 
+                        ? 'bg-[#FA266D] w-6 sm:w-8' 
+                        : 'bg-white/30 hover:bg-white/50'
+                    }`}
+                    aria-label={`Go to media ${index + 1}`}
+                  ></button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Profile Details */}
-          <div className="lg:w-2/3 flex flex-col">
-            {/* Top Section - Profile Info */}
-            <div className="space-y-3">
-              {/* Name with verification */}
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold text-white">{profile.name}</h1>
-                <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                  <Check className="w-4 h-4 text-white" />
+          <div className="lg:w-2/3 space-y-3 sm:space-y-4">
+            {/* Name with verification */}
+            <div className="flex items-center justify-between gap-2 sm:gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">
+                  {profile.name}
+                </h1>
+                <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
                 </div>
               </div>
-
+              <button 
+                onClick={handleLike}
+                className="transition-colors"
+              >
+                <Heart 
+                  className={`w-6 h-6 ${
+                    isLiked ? 'text-[#FA266D] fill-current' : 'text-gray-400'
+                  }`} 
+                />
+              </button>
+            </div>
+            
+            {/* Location and Rating on one line */}
+            <div className="flex items-center gap-4">
               {/* Location */}
               <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-pink-500" />
-                <span className="text-white">{profile.location}</span>
+                <div className="relative">
+                  <MapPin className="w-[17.75px] h-[20.5px] text-[#FA266D] fill-[#FA266D]" />
+                  <div className="absolute top-[5px] left-1/2 -translate-x-1/2 w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-black"></div>
+                </div>
+                <span className="text-[#FFFFFF99] text-[16px] font-normal sm:text-base">
+                  {profile.location}
+                </span>
               </div>
 
               {/* Rating */}
               <div className="flex items-center gap-2">
-                <div className="flex">
+                <div className="flex gap-1">
                   {[...Array(5)].map((_, i) => (
                     <Star 
                       key={i} 
-                      className={`w-5 h-5 ${i < Math.floor(profile.rating) ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
+                      className={`w-[11.41px] h-[10.9px] ${i < Math.floor(profile.rating || 0) ? 'text-[#FFDC18] fill-[#FFDC18]' : 'text-[#FFDC18]'}`} 
                     />
                   ))}
                 </div>
-                <span className="text-white font-semibold">{profile.rating}</span>
-                <button 
-                  onClick={handleLike}
-                  className="transition-colors ml-2"
-                >
-                  <Heart 
-                    className={`w-6 h-6 ${
-                      profile.isLiked ? 'text-[#FA266D] fill-current' : 'text-gray-400'
-                    }`} 
-                  />
-                </button>
-              </div>
-
-              {/* Bio */}
-              <div className="space-y-2 text-white">
-                <p className="text-lg">{profile.bio}</p>
-                <p className="text-sm text-pink-300">NB: check my price and Tfare validates our appointment</p>
-                <p className="text-sm">
-                  Think silk sheets, whispered cravings, and nights that blur into morning. I don&apos;t offer moments. I offer experiences unforgettable, unfiltered, and all about you. Discretion is guaranteed. Satisfaction is not optional 💋
-                </p>
-                <p className="text-sm">
-                  Touch Me with Your Eyes First. Then the Rest. I&apos;m naughty by Nature. Classy by Choice.
-                </p>
-              </div>
-
-              {/* Joined Date and Followers/Following */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <CalendarIcon className="w-5 h-5 text-pink-500" />
-                  <span className="text-white">Joined {profile.joinedDate}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-pink-500" />
-                  <span className="text-white">{profile.following} Following</span>
-                  <span className="text-white/60">•</span>
-                  <span className="text-white">{profile.followers} Followers</span>
-                </div>
+                <span className="text-white italic font-normal text-[14px] sm:text-base">
+                  {profile.rating ? profile.rating.toFixed(1) : '0.0'}
+                </span>
               </div>
             </div>
 
-            {/* Bottom Section - Action Buttons */}
+            {/* Bio */}
+            <div className="space-y-2 sm:space-y-3 text-white">
+              <p className="text-base sm:text-lg">{profile.bio || 'No bio available'}</p>
+            </div>
+
+            {/* Joined Date */}
+            <div className="flex items-center gap-2">
+              <CalendarIcon className="w-[24px] h-[24px] sm:w-5 sm:h-5 text-[#FFFFFF99]" />
+              <span className="text-[#FFFFFF99] font-medium text-[15px] sm:text-base">
+                Joined {profile.joinedDate || 'Unknown'}
+              </span>
+            </div>
+
+            {/* Followers/Following */}
+            <div className="flex items-center gap-2">
+              <Users className="w-[24px] h-[24px] sm:w-5 sm:h-5 text-[#FFFFFF99]" />
+              <span className="text-white text-[15px] font-black sm:text-base">{profile.followers || 0} <span className="text-[#FFFFFF99] font-medium text-[15px] sm:text-base">Followers</span></span>
+              <span className="text-white/60 text-sm sm:text-base">•</span>
+              <span className="text-white text-[15px] font-black sm:text-base">{profile.following || 0} <span className="text-[#FFFFFF99] font-medium text-[15px] sm:text-base">Following</span></span>
+            </div>
+
+            {/* Action Buttons */}
             <div className="flex flex-col gap-3 mt-6">
               {/* Book Now Button */}
-              <button className="w-full bg-[#FA266D] hover:bg-[#E91E63] text-white font-semibold py-3 px-6 rounded-lg flex items-center justify-center gap-2 transition-colors">
+              <button className="w-full h-[56px] rounded-[30px] bg-[#FA266D] hover:bg-[#E91E63] text-white font-semibold flex items-center justify-center gap-2 transition-colors">
                 <BookOpen className="w-5 h-5" />
                 Book Now
               </button>
@@ -356,13 +417,13 @@ export default function ProfileDetailPage() {
                     });
                     router.push(`/chat?${queryParams.toString()}`);
                   }}
-                  className="flex-1 bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                  className="flex-1 h-[56px] rounded-[30px] border border-[#FFFFFF1A]  hover:bg-white/20 text-white font-semibold flex items-center justify-center gap-2 transition-colors"
                   disabled={!enrichedProfile?.user?.id}
                 >
                   <MessageCircle className="w-5 h-5" />
                   Chat
                 </button>
-                <button className="flex-1 bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                <button className="flex-1 h-[56px] rounded-[30px] border border-[#FFFFFF1A]  hover:bg-white/20 text-white font-semibold flex items-center justify-center gap-2 transition-colors">
                   <UserPlus className="w-5 h-5" />
                   Follow
                 </button>
@@ -379,7 +440,7 @@ export default function ProfileDetailPage() {
             onClick={() => setActiveTab("About")}
             className={`pb-4 px-1 font-semibold transition-colors ${
               activeTab === "About" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -389,7 +450,7 @@ export default function ProfileDetailPage() {
             onClick={() => setActiveTab("Services")}
             className={`pb-4 px-1 font-semibold transition-colors ${
               activeTab === "Services" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -399,7 +460,7 @@ export default function ProfileDetailPage() {
             onClick={() => setActiveTab("Media")}
             className={`pb-4 px-1 font-semibold transition-colors ${
               activeTab === "Media" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -409,7 +470,7 @@ export default function ProfileDetailPage() {
             onClick={() => setActiveTab("Reviews")}
             className={`pb-4 px-1 font-semibold transition-colors ${
               activeTab === "Reviews" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -419,7 +480,7 @@ export default function ProfileDetailPage() {
             onClick={() => setActiveTab("Posts")}
             className={`pb-4 px-1 font-semibold transition-colors ${
               activeTab === "Posts" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -435,23 +496,23 @@ export default function ProfileDetailPage() {
             {/* Left Column */}
             <div className="space-y-4">
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Gender</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Gender</p>
                 <p className="text-white">{profile.gender || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Sexual Orientation</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Sexual Orientation</p>
                 <p className="text-white">{profile.sexualOrientation || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Looks</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Looks</p>
                 <p className="text-white">{profile.looks || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Education</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Education</p>
                 <p className="text-white">{profile.education || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">City</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">City</p>
                 <p className="text-white">{profile.city || 'Not specified'}</p>
               </div>
             </div>
@@ -459,23 +520,23 @@ export default function ProfileDetailPage() {
             {/* Middle Column */}
             <div className="space-y-4">
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Ethnicity</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Ethnicity</p>
                 <p className="text-white">{profile.ethnicity || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Body Build</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Body Build</p>
                 <p className="text-white">{profile.bodyBuild || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Smoker</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Smoker</p>
                 <p className="text-white">{profile.smoker || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Country</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Country</p>
                 <p className="text-white">{profile.country || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Last Seen</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Last Seen</p>
                 <p className="text-white">{profile.lastSeen || 'Not available'}</p>
               </div>
             </div>
@@ -483,19 +544,19 @@ export default function ProfileDetailPage() {
             {/* Right Column */}
             <div className="space-y-4">
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Nationality</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Nationality</p>
                 <p className="text-white">{profile.nationality || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Bust Size</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Bust Size</p>
                 <p className="text-white">{profile.bustSize || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">Occupation</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">Occupation</p>
                 <p className="text-white">{profile.occupation || 'Not specified'}</p>
               </div>
               <div className="flex-col pt-3 justify-between">
-                <p className="text-pink-500 pb-4 font-semibold">State</p>
+                <p className="text-[#FA266D] pb-4 font-semibold">State</p>
                 <p className="text-white">{profile.state || 'Not specified'}</p>
               </div>
             </div>
@@ -527,14 +588,14 @@ export default function ProfileDetailPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-2xl font-bold text-pink-500">Pricing</h3>
+                  <h3 className="text-2xl font-bold text-[#FA266D]">Pricing</h3>
                   <Info className="w-5 h-5 text-white/60" />
                 </div>
                 
                 {/* Add Custom Pricing Button */}
                 <button
                   onClick={() => setIsCustomPricingModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full border-2 border-pink-500 text-pink-500 hover:bg-pink-500 hover:text-white transition-all"
+                  className="flex items-center gap-2 px-4 py-2 rounded-full border-2 border-[#FA266D] text-[#FA266D] hover:bg-[#FA266D] hover:text-white transition-all"
                 >
                   <Plus className="w-5 h-5" />
                   <span className="font-medium">Add Custom Pricing</span>
@@ -545,7 +606,7 @@ export default function ProfileDetailPage() {
                 {/* Short Time Card */}
                   {enrichedProfile.pricing.shortTime && (
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
+                  <div className="bg-[#FA266D] text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
                     Short Time
                   </div>
                   <div className="space-y-3">
@@ -582,7 +643,7 @@ export default function ProfileDetailPage() {
                 {/* Overnight Card */}
                   {enrichedProfile.pricing.overnight && (
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
+                  <div className="bg-[#FA266D] text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
                     Overnight
                   </div>
                   <div className="space-y-3">
@@ -619,7 +680,7 @@ export default function ProfileDetailPage() {
                 {/* Weekend Card */}
                   {enrichedProfile.pricing.weekend && (
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
+                  <div className="bg-[#FA266D] text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
                     Weekend
                   </div>
                   <div className="space-y-3">
@@ -666,7 +727,7 @@ export default function ProfileDetailPage() {
                   <div className="grid md:grid-cols-3 gap-6">
                     {enrichedProfile.pricing.customCategories.map((category, index) => (
                       <div key={index} className="bg-white/5 rounded-lg p-6 border border-white/10">
-                        <div className="bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-2">
+                        <div className="bg-gradient-to-r from-[#FA266D] to-purple-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-2">
                           {category.categoryName}
                         </div>
                         <div className="text-center text-white/60 text-sm mb-4">{category.duration}</div>
@@ -790,7 +851,7 @@ export default function ProfileDetailPage() {
                 <div key={review.id || reviewId} className="p-6">
                   <div className="flex items-start gap-4">
                     {/* Avatar */}
-                    <div className={`w-12 h-12 bg-pink-500 rounded-full flex items-center justify-center text-white font-semibold text-lg`}>
+                    <div className={`w-12 h-12 bg-[#FA266D] rounded-full flex items-center justify-center text-white font-semibold text-lg`}>
                       {initials}
                     </div>
                     
@@ -837,7 +898,7 @@ export default function ProfileDetailPage() {
 
             {/* Show More Reviews */}
             <div className="text-left">
-              <button className="flex items-center gap-2 text-pink-500 hover:text-pink-400 transition-colors">
+              <button className="flex items-center gap-2 text-[#FA266D] hover:text-[#FA266D] transition-colors">
                 <span>Show more reviews</span>
                 <ChevronDown className="w-4 h-4" />
               </button>
@@ -853,7 +914,7 @@ export default function ProfileDetailPage() {
                   value={reviewText}
                   onChange={(e) => setReviewText(e.target.value)}
                   placeholder="Describe your experience here (optional)"
-                  className="w-full h-14 bg-transparent border border-[#FFFFFF1A] rounded-[32px] px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:border-pink-500 transition-colors resize-none"
+                  className="w-full h-14 bg-transparent border border-[#FFFFFF1A] rounded-[32px] px-4 py-3 text-white placeholder-white/60 focus:outline-none focus:border-[#FA266D] transition-colors resize-none"
                   style={{  height: '56px' }}
                 />
               </div>
@@ -925,7 +986,7 @@ export default function ProfileDetailPage() {
       <CustomPricingModal
         isOpen={isCustomPricingModalOpen}
         onClose={() => setIsCustomPricingModalOpen(false)}
-        profileId={profileId}
+        profileId={idFromRoute}
       />
     </div>
   );

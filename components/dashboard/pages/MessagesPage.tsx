@@ -181,7 +181,6 @@ export default function MessagesPage() {
   const [participantAvatars, setParticipantAvatars] = useState<
     Map<string, string>
   >(new Map());
-  const [preloadedProfileId, setPreloadedProfileId] = useState<string | null>(null);
   const hasProcessedQueryParams = useRef(false);
   const sendingPricingRef = useRef<Set<string>>(new Set());
 
@@ -560,7 +559,8 @@ export default function MessagesPage() {
   // Helper to safely extract participant ID (handles both strings and objects)
   // ChatContext rooms now have participants as string[] already, or as objects with populated userId
   const extractParticipantId = (
-    participant: string | Participant | null | undefined
+    participant: string | Participant | null | undefined,
+    context?: string // Track where extraction is happening
   ): string | null => {
     // Handle null/undefined
     if (participant === null || participant === undefined) {
@@ -573,11 +573,31 @@ export default function MessagesPage() {
       if (participant === "[object Object]" || participant.trim() === "") {
         return null;
       }
+      if (context) {
+        console.log(`[extractParticipantId] Extracted string ID from ${context}:`, participant);
+      }
       return participant;
     }
 
     // Handle objects
     if (participant && typeof participant === "object") {
+      const participantObj = participant as any;
+      
+      // Log the object structure for debugging
+      if (context) {
+        console.log(`[extractParticipantId] Extracting from object (${context}):`, {
+          hasUserId: 'userId' in participant,
+          userIdType: typeof participantObj.userId,
+          userIdValue: participantObj.userId,
+          hasId: 'id' in participant,
+          idValue: participantObj.id,
+          has_id: '_id' in participant,
+          _idValue: participantObj._id,
+          allKeys: Object.keys(participant),
+          fullObject: JSON.stringify(participant, null, 2)
+        });
+      }
+
       // First check if this is a RoomParticipant object with a userId field
       if ('userId' in participant && participant.userId) {
         const userIdValue = participant.userId;
@@ -587,6 +607,9 @@ export default function MessagesPage() {
           const userIdObj = userIdValue as any;
           const id = userIdObj._id || userIdObj.id;
           if (id && typeof id === 'string') {
+            if (context) {
+              console.log(`[extractParticipantId] Extracted from populated userId object (${context}):`, id);
+            }
             return id;
           }
         }
@@ -595,6 +618,9 @@ export default function MessagesPage() {
         if (typeof userIdValue === 'string') {
           if (userIdValue === "[object Object]" || userIdValue.trim() === "") {
             return null;
+          }
+          if (context) {
+            console.log(`[extractParticipantId] Extracted userId string (${context}):`, userIdValue);
           }
           return userIdValue;
         }
@@ -608,6 +634,9 @@ export default function MessagesPage() {
         if (typeof id === "string") {
           if (id === "[object Object]" || id.trim() === "") {
             return null;
+          }
+          if (context) {
+            console.log(`[extractParticipantId] Extracted id/_id (${context}):`, id);
           }
           return id;
         }
@@ -1238,23 +1267,81 @@ export default function MessagesPage() {
     }
   }, [selectedChat, markRoomAsReadMutation]);
 
+  // Track ongoing fetches to prevent duplicate calls
+  const fetchingRef = useRef<Set<string>>(new Set());
+
   // Fetch participant names from /profiles/user/{userId} endpoint
+  // Only fetches valid MongoDB ObjectIds to prevent 404 errors
   const fetchParticipantName = async (
-    participantId: string | Participant
+    participantId: string | Participant,
+    sourceContext?: string // Track where the call is coming from
   ): Promise<string | null> => {
+    // Log the original participant object to understand its structure
+    console.log(`[fetchParticipantName] Called from: ${sourceContext || 'unknown'}`, {
+      originalParticipant: participantId,
+      participantType: typeof participantId,
+      isString: typeof participantId === 'string',
+      isObject: typeof participantId === 'object' && participantId !== null,
+      participantKeys: typeof participantId === 'object' && participantId !== null 
+        ? Object.keys(participantId as object) 
+        : null,
+      fullParticipant: typeof participantId === 'object' ? JSON.stringify(participantId, null, 2) : null
+    });
+
     const normalizedId = extractParticipantId(participantId);
+
+    console.log(`[fetchParticipantName] Extracted ID:`, {
+      normalizedId,
+      sourceContext: sourceContext || 'unknown',
+      extractionMethod: typeof participantId === 'object' 
+        ? (participantId as any)?.userId 
+          ? 'userId field' 
+          : (participantId as any)?._id 
+            ? '_id field' 
+            : (participantId as any)?.id 
+              ? 'id field' 
+              : 'string conversion'
+        : 'direct string'
+    });
 
     if (
       !normalizedId ||
       typeof normalizedId !== "string" ||
       normalizedId === "[object Object]"
     ) {
+      console.warn(`[fetchParticipantName] Invalid normalized ID:`, normalizedId);
       return null;
     }
 
+    // Validate MongoDB ObjectId format (24 hex characters) before fetching
+    // This prevents 404 errors from invalid IDs
+    if (!/^[0-9a-fA-F]{24}$/.test(normalizedId)) {
+      console.warn("[fetchParticipantName] Invalid MongoDB ObjectId format, skipping fetch:", {
+        id: normalizedId,
+        sourceContext: sourceContext || 'unknown',
+        length: normalizedId.length
+      });
+      return null;
+    }
+
+    // Check cache first
     if (participantNames.has(normalizedId)) {
       return participantNames.get(normalizedId) || null;
     }
+
+    // Prevent duplicate fetches for the same ID
+    if (fetchingRef.current.has(normalizedId)) {
+      console.log(`[fetchParticipantName] Already fetching for ID: ${normalizedId}, skipping duplicate call`);
+      return null;
+    }
+
+    // Mark as fetching
+    fetchingRef.current.add(normalizedId);
+
+    console.log(`[fetchParticipantName] Fetching profile for userId: ${normalizedId}`, {
+      sourceContext: sourceContext || 'unknown',
+      url: `${process.env.NEXT_PUBLIC_API_BASE_URL || "https://be-aphrodite-8wrp.onrender.com"}/profiles/user/${normalizedId}`
+    });
 
     // Fetch from /profiles/user/{userId} endpoint
     try {
@@ -1324,11 +1411,44 @@ export default function MessagesPage() {
             });
           }
 
+          console.log(`[fetchParticipantName] Successfully fetched profile for userId: ${normalizedId}`, {
+            name,
+            hasAvatar: !!avatar,
+            sourceContext: sourceContext || 'unknown'
+          });
+
+          fetchingRef.current.delete(normalizedId);
           return name;
         }
+      } else if (response.status === 404) {
+        // Profile not found - don't retry
+        console.warn(`[fetchParticipantName] Profile not found for userId: ${normalizedId}`, {
+          sourceContext: sourceContext || 'unknown',
+          originalParticipant: participantId,
+          extractedId: normalizedId,
+          participantStructure: typeof participantId === 'object' 
+            ? {
+                hasUserId: !!(participantId as any)?.userId,
+                hasId: !!(participantId as any)?.id,
+                has_id: !!(participantId as any)?._id,
+                userIdValue: (participantId as any)?.userId,
+                idValue: (participantId as any)?.id,
+                _idValue: (participantId as any)?._id,
+                allKeys: Object.keys(participantId as object)
+              }
+            : null
+        });
+        fetchingRef.current.delete(normalizedId);
+        return null;
       }
     } catch (err) {
-      console.error("Error fetching participant profile:", err);
+      console.error("Error fetching participant profile:", err, {
+        userId: normalizedId,
+        sourceContext: sourceContext || 'unknown'
+      });
+    } finally {
+      // Always remove from fetching set
+      fetchingRef.current.delete(normalizedId);
     }
 
     return null;
@@ -1829,84 +1949,86 @@ export default function MessagesPage() {
   // Get the other participant's user ID for profile navigation
   const getOtherParticipantId = useCallback((): string | null => {
     if (!selectedChatData || !currentUserId) {
+      console.log("[getOtherParticipantId] Missing selectedChatData or currentUserId", {
+        hasSelectedChatData: !!selectedChatData,
+        currentUserId
+      });
       return null;
     }
 
     // For direct messages, find the other participant
     if (selectedChatData.type === "direct" && selectedChatData.participants) {
+      console.log("[getOtherParticipantId] Processing participants:", {
+        participants: selectedChatData.participants,
+        participantsLength: selectedChatData.participants.length,
+        currentUserId,
+        participantStructures: selectedChatData.participants.map((p: any) => ({
+          type: typeof p,
+          isString: typeof p === 'string',
+          isObject: typeof p === 'object',
+          keys: typeof p === 'object' && p !== null ? Object.keys(p) : null,
+          userId: typeof p === 'object' && p !== null ? (p as any).userId : null,
+          id: typeof p === 'object' && p !== null ? (p as any).id : null,
+          _id: typeof p === 'object' && p !== null ? (p as any)._id : null,
+          fullObject: typeof p === 'object' ? JSON.stringify(p, null, 2) : p
+        }))
+      });
+
       const otherParticipant = selectedChatData.participants.find((p) => {
-        const pId = extractParticipantId(p);
+        const pId = extractParticipantId(p, 'getOtherParticipantId-find');
         return pId && pId !== currentUserId;
       });
       
+      console.log("[getOtherParticipantId] Found otherParticipant:", {
+        otherParticipant,
+        otherParticipantType: typeof otherParticipant,
+        otherParticipantKeys: otherParticipant && typeof otherParticipant === 'object' 
+          ? Object.keys(otherParticipant) 
+          : null,
+        otherParticipantFull: otherParticipant && typeof otherParticipant === 'object'
+          ? JSON.stringify(otherParticipant, null, 2)
+          : otherParticipant
+      });
+      
       if (otherParticipant) {
-        const otherParticipantId = extractParticipantId(otherParticipant);
+        const otherParticipantId = extractParticipantId(otherParticipant, 'getOtherParticipantId-extract');
+        console.log("[getOtherParticipantId] Extracted ID:", {
+          otherParticipantId,
+          idType: typeof otherParticipantId,
+          isString: typeof otherParticipantId === 'string',
+          willReturn: otherParticipantId && typeof otherParticipantId === "string"
+        });
         if (otherParticipantId && typeof otherParticipantId === "string") {
           return otherParticipantId;
         }
       }
     }
 
+    console.log("[getOtherParticipantId] Returning null - no valid participant ID found");
     return null;
   }, [selectedChatData, currentUserId]);
 
   const handleViewProfile = useCallback(() => {
+    console.log("[handleViewProfile] Called - getting other participant ID");
     const otherParticipantUserId = getOtherParticipantId();
+    console.log("[handleViewProfile] Got ID:", {
+      otherParticipantUserId,
+      idType: typeof otherParticipantUserId,
+      willNavigate: !!otherParticipantUserId
+    });
+    
     if (!otherParticipantUserId) {
-      console.error("[MessagesPage] Cannot view profile: other participant ID not found");
+      console.error("[handleViewProfile] Cannot view profile: other participant ID not found", {
+        selectedChatData,
+        currentUserId
+      });
       return;
     }
 
-    // If we have a preloaded profile ID, navigate immediately
-    if (preloadedProfileId) {
-      router.push(`/profile/${preloadedProfileId}`);
-      return;
-    }
-
-    // Fallback: navigate with userId if profile ID not preloaded
+    // Navigate directly with userId (no need to fetch profile ID first)
+    console.log(`[handleViewProfile] Navigating to: /profile/${otherParticipantUserId}`);
     router.push(`/profile/${otherParticipantUserId}`);
-  }, [getOtherParticipantId, router, preloadedProfileId]);
-
-  // Preload profile ID when a room is selected
-  useEffect(() => {
-    const otherParticipantUserId = getOtherParticipantId();
-    
-    // Reset preloaded profile ID when room changes
-    setPreloadedProfileId(null);
-    
-    // Only preload for direct messages
-    if (!otherParticipantUserId || !selectedChatData || selectedChatData.type !== "direct") {
-      return;
-    }
-
-    // Fetch profile in the background
-    const preloadProfile = async () => {
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL || "https://be-aphrodite-8wrp.onrender.com"}/profiles/user/${otherParticipantUserId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-            },
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          const profileId = data?.data?.id || data?.id;
-          
-          if (profileId) {
-            setPreloadedProfileId(profileId);
-          }
-        }
-      } catch (error) {
-        console.error("[MessagesPage] Error preloading profile:", error);
-        // Silently fail - we'll use userId as fallback
-      }
-    };
-
-    preloadProfile();
-  }, [selectedChat, getOtherParticipantId, selectedChatData]);
+  }, [getOtherParticipantId, router, selectedChatData, currentUserId]);
 
   // Log participant information for debugging (after selectedChatData is defined)
   useEffect(() => {
@@ -1974,8 +2096,9 @@ export default function MessagesPage() {
       // Check if participant.userId is populated (will be an object with name, userName, etc.)
       if (otherParticipant && typeof otherParticipant === "object") {
         // Check if userId is populated with user data
-        if (otherParticipant.userId && typeof otherParticipant.userId === "object") {
-          const userData = otherParticipant.userId as any;
+        const participantObj = otherParticipant as any;
+        if (participantObj.userId && typeof participantObj.userId === "object") {
+          const userData = participantObj.userId;
           const displayName = userData.name || userData.userName || userData.email;
           if (displayName) {
             console.log("[getRoomDisplayName] Using populated user data:", displayName);
@@ -1985,7 +2108,7 @@ export default function MessagesPage() {
       }
 
       const otherParticipantId = otherParticipant
-        ? extractParticipantId(otherParticipant)
+        ? extractParticipantId(otherParticipant, 'getRoomDisplayName')
         : null;
 
       // Debug logging
@@ -2025,16 +2148,20 @@ export default function MessagesPage() {
           return profileName;
         }
 
-        // Try to fetch the name if not cached (async, will update later)
+        // Only fetch name if not cached and we have a valid userId
+        // Don't fetch if we already have a name from populated user data
         if (!participantNames.has(otherParticipantId)) {
-          // Double-check before calling API
-          const safeId = extractParticipantId(otherParticipantId);
+          // Only fetch if it's a valid MongoDB ObjectId format (24 hex chars)
+          // This prevents fetching for invalid IDs that will return 404
+          // fetchParticipantName already handles duplicate prevention internally
+          // Pass the original participant object so we can see its structure in logs
           if (
-            safeId &&
-            typeof safeId === "string" &&
-            safeId !== "[object Object]"
+            otherParticipantId &&
+            typeof otherParticipantId === "string" &&
+            otherParticipantId !== "[object Object]" &&
+            /^[0-9a-fA-F]{24}$/.test(otherParticipantId) // MongoDB ObjectId format
           ) {
-            fetchParticipantName(safeId).catch((err) => {
+            fetchParticipantName(otherParticipant || otherParticipantId, 'getRoomDisplayName').catch((err) => {
               console.error("Error fetching participant name:", err);
             });
           }
@@ -2579,7 +2706,7 @@ export default function MessagesPage() {
             <h1 className="text-white text-xl font-semibold">Messages</h1>
             <div className="flex items-center gap-3">
               {/* WebSocket Connection Status */}
-              <ConnectionStatus />
+              {/* <ConnectionStatus /> */}
               {/* <button
                 onClick={() => setShowNewChatDialog(true)}
                 className="bg-[#FA266D] hover:bg-pink-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"

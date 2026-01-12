@@ -111,8 +111,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Sort rooms by last activity (most recent first)
       const sortedRooms = [...data.rooms].sort((a, b) => {
-        const timeA = new Date(a.lastActivity || a.updatedAt).getTime();
-        const timeB = new Date(b.lastActivity || b.updatedAt).getTime();
+        const timeA = new Date(a.updatedAt || a.createdAt).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt).getTime();
         return timeB - timeA;
       });
       
@@ -122,8 +122,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newOnlineUsers = new Map<string, boolean>();
       sortedRooms.forEach(room => {
         room.participants.forEach(participant => {
-          if (participant.userId && participant.userId !== userId) {
-            newOnlineUsers.set(participant.userId, participant.isOnline);
+          // Handle both string and object participants
+          if (typeof participant === 'string') {
+            // If participant is a string (userId), skip online status check
+            return;
+          } else if (typeof participant === 'object' && participant !== null) {
+            const participantObj = participant as any;
+            const participantUserId = participantObj.userId || participantObj.id || participantObj._id;
+            if (participantUserId && participantUserId !== userId) {
+              newOnlineUsers.set(String(participantUserId), participantObj.isOnline || false);
+            }
           }
         });
       });
@@ -133,7 +141,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newUnreadCounts = new Map<string, number>();
       sortedRooms.forEach(room => {
         if (room.unreadCount !== undefined) {
-          newUnreadCounts.set(room.roomId, room.unreadCount);
+          const roomKey = room.roomId || room.id;
+          if (roomKey) {
+            newUnreadCounts.set(roomKey, room.unreadCount);
+          }
         }
       });
       setUnreadCounts(newUnreadCounts);
