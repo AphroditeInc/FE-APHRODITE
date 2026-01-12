@@ -116,7 +116,10 @@ export default function Header({ onMenuToggle }: HeaderProps) {
           </button>
 
           {/* Balance Display - Hidden on mobile */}
-          <div className="hidden sm:flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2">
+          <button
+            onClick={() => router.push('/wallet')}
+            className="hidden sm:flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 hover:bg-white/5 transition-colors cursor-pointer"
+          >
             <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-400" />
             {isLoadingBalance ? (
               <span className="text-white/60 font-medium text-sm sm:text-base">Loading...</span>
@@ -130,7 +133,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
             ) : (
               <span className="text-white text-[16px] font-medium sm:text-base">0.00 APH</span>
             )}
-          </div>
+          </button>
 
           {/* User Profile and Logout */}
           <div className="flex items-center gap-2 sm:gap-3">
