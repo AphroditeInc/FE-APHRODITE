@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, MapPin, Star, Check, Users, Calendar as CalendarIcon, Heart, BookOpen, MessageCircle, UserPlus, Info, Coins, Play, ThumbsUp, ThumbsDown, ChevronDown, Plus } from "lucide-react";
 import { type Profile } from "@/lib/data/profiles";
-import { useGetProfileByIdQuery, useGetEnrichedProfileQuery } from "@/feature/profile/profileApiSlice";
+import { useGetProfileByIdQuery } from "@/feature/profile/profileApiSlice";
 import type { EnrichedProfile } from "@/lib/types/auth.types";
 import { ProfileDetailSkeleton } from "@/components/ui/Skeleton";
 import CustomPricingModal from "../modals/CustomPricingModal";
@@ -32,7 +32,7 @@ const backgroundImages = [
 export default function ProfileDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const idFromRoute = params.id as string;
+  const profileId = params.id as string;
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("About");
   const [reviewText, setReviewText] = useState("");
@@ -40,51 +40,30 @@ export default function ProfileDetailPage() {
   const [isLiked, setIsLiked] = useState(false);
   const [isCustomPricingModalOpen, setIsCustomPricingModalOpen] = useState(false);
 
-  // Try user endpoint first (since MessagesPage passes userId)
-  const { 
-    data: userProfileResponse, 
-    isLoading: isLoadingUserProfile, 
-    error: userProfileError 
-  } = useGetEnrichedProfileQuery(idFromRoute, {
-    skip: !idFromRoute,
+  // Fetch profile from API
+  const { data: profileResponse, isLoading, error } = useGetProfileByIdQuery(profileId, {
+    skip: !profileId,
   });
-
-  // Try profile endpoint as fallback (in case it's actually a profile ID)
-  const { 
-    data: profileResponse, 
-    isLoading: isLoadingProfile, 
-    error: profileError 
-  } = useGetProfileByIdQuery(idFromRoute, {
-    skip: !idFromRoute || !!userProfileResponse, // Skip if user endpoint succeeded
-  });
-
-  // Use whichever response succeeded
-  const profileResponseToUse = userProfileResponse || profileResponse;
-  const isLoading = isLoadingUserProfile || isLoadingProfile;
-  const error = userProfileError || profileError;
 
   // Extract EnrichedProfile from response
   const enrichedProfile = useMemo<EnrichedProfile | null>(() => {
-    if (!profileResponseToUse) return null;
+    if (!profileResponse) return null;
 
-    console.log('[ProfileDetailPage] Raw profileResponse:', profileResponseToUse, {
-      isFromUserEndpoint: !!userProfileResponse,
-      isFromProfileEndpoint: !!profileResponse
-    });
+    console.log('[ProfileDetailPage] Raw profileResponse:', profileResponse);
 
     // Handle API response structure: { success: true, data: EnrichedProfile } or direct EnrichedProfile
-    if (profileResponseToUse && typeof profileResponseToUse === 'object') {
-      if ('success' in profileResponseToUse && profileResponseToUse.success && 'data' in profileResponseToUse) {
-        console.log('[ProfileDetailPage] Found nested data structure, user field:', (profileResponseToUse.data as any)?.user);
-        return profileResponseToUse.data as EnrichedProfile;
-      } else if ('id' in profileResponseToUse) {
-        console.log('[ProfileDetailPage] Found direct profile structure, user field:', (profileResponseToUse as any)?.user);
-        return profileResponseToUse as EnrichedProfile;
+    if (profileResponse && typeof profileResponse === 'object') {
+      if ('success' in profileResponse && profileResponse.success && 'data' in profileResponse) {
+        console.log('[ProfileDetailPage] Found nested data structure, user field:', (profileResponse.data as any)?.user);
+        return profileResponse.data as EnrichedProfile;
+      } else if ('id' in profileResponse) {
+        console.log('[ProfileDetailPage] Found direct profile structure, user field:', (profileResponse as any)?.user);
+        return profileResponse as EnrichedProfile;
       }
     }
 
     return null;
-  }, [profileResponseToUse, userProfileResponse, profileResponse]);
+  }, [profileResponse]);
 
   // Map EnrichedProfile to Profile type
   const profile = useMemo<Profile | null>(() => {
@@ -986,7 +965,7 @@ export default function ProfileDetailPage() {
       <CustomPricingModal
         isOpen={isCustomPricingModalOpen}
         onClose={() => setIsCustomPricingModalOpen(false)}
-        profileId={idFromRoute}
+        profileId={profileId}
       />
     </div>
   );
