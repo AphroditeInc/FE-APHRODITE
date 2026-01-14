@@ -2041,12 +2041,24 @@ export default function ProfilePage() {
                     }
                     
                     try {
-                      // Create custom pricing category
+                      const incallValue = Number(customPricingForm.incallPrice);
+                      const outcallValue = Number(customPricingForm.outcallPrice);
+
+                      if (!customPricingForm.incallPrice || Number.isNaN(incallValue)) {
+                        alert("Please enter a valid incall price.");
+                        return;
+                      }
+
+                      if (!customPricingForm.outcallPrice || Number.isNaN(outcallValue)) {
+                        alert("Please enter a valid outcall price.");
+                        return;
+                      }
+
                       const categoryData = {
                         categoryName: customPricingForm.categoryName,
                         duration: customPricingForm.duration,
-                        incall: Number(customPricingForm.incallPrice) || 0,
-                        outcall: Number(customPricingForm.outcallPrice) || 0,
+                        incall: incallValue,
+                        outcall: outcallValue,
                       };
                       
                       console.log("Creating custom pricing category:", categoryData);

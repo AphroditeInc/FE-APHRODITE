@@ -16,26 +16,16 @@ import {
   CheckCheck,
   X,
   Briefcase,
-  Wallet,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth, useChatSocket } from "@/lib/hooks";
-import { useChatContext } from "@/lib/contexts/ChatContext";
-import {
-  ConnectionStatus,
-  AvatarWithStatus,
-  UnreadBadge,
-  TypingIndicator,
-  MessageStatusIcon,
-} from "@/components/chat";
 import {
   useGetRoomMessagesQuery,
   useMarkRoomAsReadMutation,
   useSendMessageMutation,
   useCreateRoomMutation,
   useGetUserRoomsQuery,
-  useGetProfileByUserIdQuery,
 } from "@/app/api/apiSlice";
 import { apiService } from "@/lib/services";
 import type { ChatRoom, ChatMessage } from "@/lib/types";
@@ -117,22 +107,8 @@ interface Message {
   duration?: string;
   videoThumbnail?: string;
   pricing?: {
-    shortTime?: { incall: string; outcall: string };
-    overnight?: { incall: string; outcall: string };
-    weekend?: { incall: string; outcall: string };
-  };
-  pricingMetadata?: {
-    type?: string;
-    incall?: number;
-    outcall?: number;
-    currency?: string;
-    amount?: string;
-    allPlans?: Array<{
-      type: string;
-      incall?: number;
-      outcall?: number;
-      currency?: string;
-    }>;
+    shortTime: { incall: string; outcall: string };
+    overnight: { incall: string; outcall: string };
   };
 }
 
@@ -158,6 +134,7 @@ export default function MessagesPage() {
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
           if (parsedUser?.id) {
+            console.log("Found user ID in localStorage:", parsedUser.id);
             setFallbackUserId(parsedUser.id);
           }
         }
@@ -175,53 +152,26 @@ export default function MessagesPage() {
   } | null>(null);
   const [showPricingDialog, setShowPricingDialog] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [customPrice, setCustomPrice] = useState<string>("");
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
   const [newChatUserId, setNewChatUserId] = useState("");
   const [participantAvatars, setParticipantAvatars] = useState<
     Map<string, string>
   >(new Map());
+  const [preloadedProfileId, setPreloadedProfileId] = useState<string | null>(null);
   const hasProcessedQueryParams = useRef(false);
-  const sendingPricingRef = useRef<Set<string>>(new Set());
 
   // RTK Query hooks
   const currentUserId = userId || user?.id || fallbackUserId;
-  
-  // Fetch user's profile pricing when dialog opens
+  // Use getUserRooms instead of getConversations to get all rooms (matches Swagger: /chat/rooms returns 3, /chat/conversations returns 2)
   const {
-    data: profileData,
-    isLoading: loadingProfile,
-  } = useGetProfileByUserIdQuery(
-    currentUserId || "",
-    { skip: !currentUserId || !showPricingDialog }
+    data: roomsData,
+    isLoading: loadingRooms,
+    error: roomsError,
+    refetch: refetchRooms,
+  } = useGetUserRoomsQuery(
+    { limit: 50, offset: 0 },
+    { skip: !currentUserId || authLoading }
   );
-  
-  const userPricing = profileData?.success && profileData?.data?.pricing 
-    ? profileData.data.pricing 
-    : null;
-  
-  // Use ChatContext for real-time room data instead of REST API
-  const {
-    rooms: contextRooms,
-    connected: chatConnected,
-    reconnecting: chatReconnecting,
-    loading: roomsLoading,
-    isUserOnline,
-    getUnreadCount,
-    isUserTyping: isUserTypingInRoom,
-    refreshRooms,
-  } = useChatContext();
-
-  // Rooms are now managed by ChatContext - no REST API calls needed!
-  const rooms = contextRooms;
-  const loadingRooms = roomsLoading;
-  const roomsError = null; // Errors handled by ChatContext
-
-  // Find selected chat data to get roomId
-  const selectedChatData = rooms.find((room) => room.id === selectedChat);
-  
-  // Use roomId for API calls and WebSocket (not the MongoDB _id)
-  const roomIdForApi = selectedChatData?.roomId || selectedChat;
 
   const {
     data: messagesData,
@@ -229,9 +179,9 @@ export default function MessagesPage() {
     error: messagesError,
     refetch: refetchMessages,
   } = useGetRoomMessagesQuery(
-    { roomId: roomIdForApi || "", query: { limit: 50 } },
+    { roomId: selectedChat || "", query: { limit: 50 } },
     { 
-      skip: !roomIdForApi || !roomIdForApi.trim(),
+      skip: !selectedChat || !selectedChat.trim(),
       // Don't refetch if we already have data for this room
       refetchOnMountOrArgChange: true,
     }
@@ -249,7 +199,6 @@ export default function MessagesPage() {
     sendMessage: sendSocketMessage,
     joinRoom: joinSocketRoom,
     leaveRoom: leaveSocketRoom,
-    setTyping,
   } = useChatSocket();
 
   // Local state for real-time messages (merged with API messages)
@@ -264,14 +213,266 @@ export default function MessagesPage() {
   
   // Debug: Log sidebar state changes
   useEffect(() => {
+    console.log("[MessagesPage] Sidebar state changed:", isSidebarOpen);
   }, [isSidebarOpen]);
 
-  // Rooms are provided by ChatContext - no transformation needed!
-  // Old REST API approach with useMemo has been removed
+  // Convert API data to component state
+  // According to Swagger: GET /chat/rooms returns { success: true, data: [...] }
+  // Each room has participants as array of objects with userId property
+  const rooms = useMemo(() => {
+    if (!roomsData) {
+      console.log("[MessagesPage] No roomsData yet");
+      return [];
+    }
+
+    console.log("[MessagesPage] roomsData:", roomsData);
+    console.log(
+      "[MessagesPage] roomsData type:",
+      typeof roomsData,
+      "isArray:",
+      Array.isArray(roomsData)
+    );
+
+    // transformResponse should already extract the array, so roomsData should be ChatRoom[]
+    let roomsArray: ChatRoom[] = [];
+
+    if (Array.isArray(roomsData)) {
+      console.log(
+        "[MessagesPage] roomsData is array (expected), length:",
+        roomsData.length
+      );
+      roomsArray = roomsData;
+    } else {
+      console.warn(
+        "[MessagesPage] roomsData is not an array (unexpected):",
+        roomsData
+      );
+      return [];
+    }
+
+    // Transform rooms to match ChatRoom type
+    // According to Swagger, participants is an array of objects: [{ userId: "...", ... }, ...]
+    const transformedRooms = roomsArray
+      .map((room: any) => {
+        const roomId = room.roomId || room._id || room.id;
+        if (!roomId) {
+          console.warn("[MessagesPage] Room missing roomId:", room);
+          return null;
+        }
+
+        // Extract participant IDs and names from objects with userId property
+        const participants: string[] = [];
+        const participantNamesFromRoom: Map<string, string> = new Map();
+
+        console.log(
+          "[MessagesPage] Processing room:",
+          roomId,
+          "participants:",
+          room.participants
+        );
+
+        if (room.participants && Array.isArray(room.participants)) {
+          room.participants.forEach((p: any, index: number) => {
+            console.log(
+              `[MessagesPage] Participant ${index}:`,
+              p,
+              "type:",
+              typeof p,
+              "keys:",
+              typeof p === "object" ? Object.keys(p) : "N/A"
+            );
+
+            // Handle both formats: object with userId, or string
+            const participantId =
+              typeof p === "string" ? p : p.userId || p._id || p.id;
+            if (
+              participantId &&
+              typeof participantId === "string" &&
+              !participants.includes(participantId)
+            ) {
+              participants.push(participantId);
+
+              // Extract name if available in participant object
+              if (typeof p === "object" && p !== null) {
+                const name =
+                  p.firstName && p.lastName
+                    ? `${p.firstName} ${p.lastName}`.trim()
+                    : p.firstName || p.lastName || p.username || p.name || null;
+
+                console.log(
+                  "[MessagesPage] Extracted name for",
+                  participantId,
+                  ":",
+                  name
+                );
+
+                if (name && typeof name === "string") {
+                  participantNamesFromRoom.set(participantId, name);
+                }
+              }
+            }
+          });
+        }
+
+        console.log(
+          "[MessagesPage] Extracted participant names:",
+          Array.from(participantNamesFromRoom.entries())
+        );
+
+        // Cache participant names for later use
+        if (participantNamesFromRoom.size > 0) {
+          setParticipantNames((prev) => {
+            const newMap = new Map(prev);
+            participantNamesFromRoom.forEach((name, id) => {
+              if (!newMap.has(id)) {
+                newMap.set(id, name);
+              }
+            });
+            return newMap;
+          });
+        }
+
+        // Transform lastMessage if present
+        let lastMessage: ChatMessage | undefined;
+        if (room.lastMessage) {
+          // lastMessage might be a string ID or an object
+          if (typeof room.lastMessage === "string") {
+            // If it's just an ID, we can't create a full ChatMessage
+            // We'll need to fetch it separately or skip it
+            console.log(
+              "[MessagesPage] Room has lastMessage as ID only:",
+              room.lastMessage
+            );
+          } else if (
+            typeof room.lastMessage === "object" &&
+            room.lastMessage !== null
+          ) {
+            const msg = room.lastMessage;
+            const messageId = msg._id || msg.id;
+            if (messageId && typeof messageId === "string") {
+              // Extract senderId - can be string or object with _id
+              let senderId = '';
+              if (typeof msg.senderId === 'string') {
+                senderId = msg.senderId;
+              } else if (msg.senderId && typeof msg.senderId === 'object' && '_id' in msg.senderId) {
+                senderId = String(msg.senderId._id);
+              } else if (msg.senderId && typeof msg.senderId === 'object' && 'id' in msg.senderId) {
+                senderId = String(msg.senderId.id);
+              }
+              
+              // Extract receiverId - can be string or object with _id
+              let receiverId = '';
+              if (typeof msg.receiverId === 'string') {
+                receiverId = msg.receiverId;
+              } else if (msg.receiverId && typeof msg.receiverId === 'object' && '_id' in msg.receiverId) {
+                receiverId = String(msg.receiverId._id);
+              } else if (msg.receiverId && typeof msg.receiverId === 'object' && 'id' in msg.receiverId) {
+                receiverId = String(msg.receiverId.id);
+              }
+              
+              lastMessage = {
+                id: messageId,
+                senderId: senderId,
+                receiverId: receiverId,
+                roomId: msg.roomId || roomId,
+                content: msg.content || "",
+                type: (msg.type || "text") as ChatMessage["type"],
+                status: (msg.status || "sent") as ChatMessage["status"],
+                createdAt: msg.createdAt || new Date().toISOString(),
+                updatedAt: msg.updatedAt || new Date().toISOString(),
+                metadata: msg.metadata,
+                attachments: msg.attachments || [],
+                readAt: msg.readAt,
+                deliveredAt: msg.deliveredAt,
+                replyTo: msg.replyTo,
+              };
+            }
+          }
+        }
+
+        // Check if we have an updated lastMessage from WebSocket for this room
+        const wsLastMessage = roomLastMessages.get(roomId);
+        const finalLastMessage = wsLastMessage || lastMessage;
+
+        const chatRoom: ChatRoom = {
+          id: roomId,
+          roomId: roomId,
+          type: (room.type || "direct") as ChatRoom["type"],
+          participants: participants,
+          createdAt: room.createdAt || new Date().toISOString(),
+          updatedAt: room.updatedAt || new Date().toISOString(),
+          lastMessage: finalLastMessage,
+          unreadCount: room.unreadCount || 0,
+        };
+
+        return chatRoom;
+      })
+      .filter((room): room is ChatRoom => room !== null);
+
+    // Deduplicate rooms by participant combination - keep the most recent room for each unique set
+    const deduplicatedRooms = transformedRooms.reduce((acc, room) => {
+      // Sort participant IDs to create a consistent key
+      const participantKey = [...room.participants].sort().join("_");
+
+      // Check if we already have a room with these participants
+      const existingRoom = acc.find((r) => {
+        const existingKey = [...r.participants].sort().join("_");
+        return existingKey === participantKey;
+      });
+
+      if (existingRoom) {
+        // Keep the room with the most recent updatedAt
+        const existingIndex = acc.indexOf(existingRoom);
+        const existingDate = new Date(existingRoom.updatedAt).getTime();
+        const newDate = new Date(room.updatedAt).getTime();
+
+        if (newDate > existingDate) {
+          console.log(
+            "[MessagesPage] Replacing duplicate room",
+            existingRoom.roomId,
+            "with newer",
+            room.roomId
+          );
+          acc[existingIndex] = room;
+        } else {
+          console.log(
+            "[MessagesPage] Skipping duplicate room",
+            room.roomId,
+            "keeping",
+            existingRoom.roomId
+          );
+        }
+      } else {
+        acc.push(room);
+      }
+
+      return acc;
+    }, [] as ChatRoom[]);
+
+    console.log(
+      "[MessagesPage] Transformed",
+      transformedRooms.length,
+      "rooms from",
+      roomsArray.length,
+      "raw rooms, deduplicated to",
+      deduplicatedRooms.length,
+      "rooms"
+    );
+    return deduplicatedRooms;
+  }, [roomsData, roomLastMessages]);
 
   const messages = useMemo(() => {
+    console.log("[MessagesPage] Processing messagesData:", messagesData);
+    console.log(
+      "[MessagesPage] messagesData type:",
+      typeof messagesData,
+      "isArray:",
+      Array.isArray(messagesData)
+    );
+
     // transformResponse should already extract the array, so messagesData should be ChatMessage[]
     if (!messagesData) {
+      console.log("[MessagesPage] No messagesData, returning empty array");
       return [];
     }
 
@@ -279,6 +480,10 @@ export default function MessagesPage() {
     let messagesArray: ChatMessage[] = [];
 
     if (Array.isArray(messagesData)) {
+      console.log(
+        "[MessagesPage] messagesData is array (expected), length:",
+        messagesData.length
+      );
       messagesArray = messagesData;
     } else {
       // Fallback: if transformResponse didn't work, try to extract manually
@@ -309,6 +514,18 @@ export default function MessagesPage() {
       }
     }
 
+    console.log(
+      "[MessagesPage] Final messagesArray length:",
+      messagesArray.length
+    );
+    if (messagesArray.length > 0) {
+      console.log("[MessagesPage] First message:", messagesArray[0]);
+      console.log(
+        "[MessagesPage] Last message:",
+        messagesArray[messagesArray.length - 1]
+      );
+    }
+
     // Create a copy of the array before sorting (RTK Query returns frozen arrays)
     // Sort messages by createdAt (oldest first)
     const sorted = [...messagesArray].sort((a, b) => {
@@ -317,8 +534,10 @@ export default function MessagesPage() {
       return dateA - dateB;
     });
 
+    console.log("[MessagesPage] Sorted messages length:", sorted.length);
     
     // Merge with real-time messages for the selected chat
+    const allMessages = [...sorted];
     if (selectedChat) {
       const roomRealtimeMessages = realtimeMessages.filter(
         (msg) => msg.roomId === selectedChat
@@ -327,22 +546,14 @@ export default function MessagesPage() {
       // Merge and deduplicate by message ID
       const messageMap = new Map<string, ChatMessage>();
       
-      // Add API messages first (from database)
+      // Add API messages first
       sorted.forEach((msg) => {
         messageMap.set(msg.id, msg);
       });
       
-      // Add/update with real-time messages
-      // The Map will automatically deduplicate by message.id
-      // API messages are added first, so real-time messages will only be added if they don't exist
-      // This prevents duplicates - if API has the message, it's already in the map
+      // Add/update with real-time messages (they take precedence)
       roomRealtimeMessages.forEach((msg) => {
-        // Only add if message doesn't exist in API messages (Map already has it from sorted.forEach above)
-        // This prevents duplicates when API refetches after WebSocket delivers
-        if (!messageMap.has(msg.id)) {
-          messageMap.set(msg.id, msg);
-        }
-        // If message already exists in map (from API), don't add it again - this prevents duplicates
+        messageMap.set(msg.id, msg);
       });
       
       // Convert back to array and sort
@@ -364,35 +575,37 @@ export default function MessagesPage() {
   // Note: selectedChatData is defined later, so we'll add another useEffect after it
   useEffect(() => {
     if (selectedChat) {
+      console.log("[MessagesPage] Selected chat:", selectedChat);
+      console.log("[MessagesPage] Messages data:", messagesData);
       console.log(
         "[MessagesPage] Messages data type:",
         typeof messagesData,
         "isArray:",
         Array.isArray(messagesData)
       );
+      console.log("[MessagesPage] Loading messages:", loadingMessages);
+      console.log("[MessagesPage] Messages error:", messagesError);
       console.log(
         "[MessagesPage] Processed messages array length:",
         messages.length
       );
     } else {
+      console.log("[MessagesPage] No chat selected");
     }
   }, [selectedChat, messagesData, loadingMessages, messagesError, messages]);
 
   // WebSocket event listeners for real-time messages
   useEffect(() => {
     if (!socket || !socketConnected) {
+      console.log("[MessagesPage] Socket not connected, skipping event listeners");
       return;
     }
 
+    console.log("[MessagesPage] Setting up WebSocket event listeners");
 
     const handleNewMessage = (data: { message: ChatMessage }) => {
+      console.log("[MessagesPage] Received newMessage via WebSocket:", data.message);
       const newMessage = data.message;
-      
-      // Skip if this is a message we just sent (it will be handled by messageDelivered)
-      const currentUserId = userId || user?.id || fallbackUserId;
-      if (currentUserId && newMessage.senderId === currentUserId) {
-        return;
-      }
       
       // Update lastMessage for this room
       if (newMessage.roomId) {
@@ -403,87 +616,55 @@ export default function MessagesPage() {
         });
       }
       
-      // Only add if it's for the currently selected chat (match old code pattern)
+      // Only add if it's for the currently selected chat
       if (selectedChat && newMessage.roomId === selectedChat) {
         setRealtimeMessages((prev) => {
           // Check if message already exists (avoid duplicates)
           const exists = prev.some((msg) => msg.id === newMessage.id);
           if (exists) {
+            console.log("[MessagesPage] Message already exists, updating:", newMessage.id);
             return prev.map((msg) => (msg.id === newMessage.id ? newMessage : msg));
           }
+          console.log("[MessagesPage] Adding new real-time message:", newMessage.id);
           return [...prev, newMessage];
         });
       }
     };
 
     const handleMessageDelivered = (data: { tempId?: string; message: ChatMessage }) => {
+      console.log("[MessagesPage] Received messageDelivered via WebSocket:", data);
       const deliveredMessage = data.message;
-      
-      // Remove from sending set
-      if (data.tempId) {
-        sendingPricingRef.current.delete(data.tempId);
-      }
       
       // Update lastMessage for this room
       if (deliveredMessage.roomId) {
         setRoomLastMessages((prev) => {
           const updated = new Map(prev);
-          // Preserve metadata in lastMessage too
-          const messageWithMetadata = {
-            ...deliveredMessage,
-            metadata: deliveredMessage.metadata || prev.get(deliveredMessage.roomId)?.metadata,
-          };
-          updated.set(deliveredMessage.roomId, messageWithMetadata);
+          updated.set(deliveredMessage.roomId, deliveredMessage);
           return updated;
         });
       }
       
-      // Only add to realtimeMessages if it's for the selected chat
-      // Check if message already exists in current API messages to prevent duplicates
-      if (selectedChat && deliveredMessage.roomId === selectedChat) {
-        // Check current API messages to see if this message already exists
-        // If it does, don't add to realtimeMessages - it will be shown from API messages
-        const existsInApi = messagesData && Array.isArray(messagesData) 
-          ? messagesData.some((msg: ChatMessage) => msg.id === deliveredMessage.id)
-          : false;
-        
-        if (existsInApi) {
-          return;
-        }
-        
+      // Update the message in real-time messages (replace temp message with real one)
+      if (data.tempId) {
         setRealtimeMessages((prev) => {
-          // Check if message already exists in realtimeMessages to prevent duplicates
+          const filtered = prev.filter((msg) => msg.tempId !== data.tempId);
+          return [...filtered, deliveredMessage];
+        });
+      } else {
+        // No tempId, just add/update the message
+        setRealtimeMessages((prev) => {
           const exists = prev.some((msg) => msg.id === deliveredMessage.id);
           if (exists) {
-            // Update existing message, preserving metadata
-            return prev.map((msg) => {
-              if (msg.id === deliveredMessage.id) {
-                return {
-                  ...deliveredMessage,
-                  metadata: deliveredMessage.metadata && Object.keys(deliveredMessage.metadata).length > 0
-                    ? deliveredMessage.metadata
-                    : msg.metadata,
-                };
-              }
-              return msg;
-            });
+            return prev.map((msg) => (msg.id === deliveredMessage.id ? deliveredMessage : msg));
           }
-          // Add new message - merge logic will deduplicate with API messages
           return [...prev, deliveredMessage];
         });
       }
     };
 
     const handleRoomMessage = (data: { message: ChatMessage }) => {
-      const roomMessage = data.message;
-      
-      // Skip if this is a message we just sent (it will be handled by messageDelivered)
-      const currentUserId = userId || user?.id || fallbackUserId;
-      if (currentUserId && roomMessage.senderId === currentUserId) {
-        return;
-      }
-      
-      // Room messages are handled the same as newMessage (for messages from others)
+      console.log("[MessagesPage] Received roomMessage via WebSocket:", data.message);
+      // Room messages are handled the same as newMessage
       handleNewMessage(data);
     };
 
@@ -492,29 +673,27 @@ export default function MessagesPage() {
     socket.on("messageDelivered", handleMessageDelivered);
     socket.on("roomMessage", handleRoomMessage);
 
+    console.log("[MessagesPage] WebSocket event listeners registered");
 
     // Cleanup
     return () => {
+      console.log("[MessagesPage] Cleaning up WebSocket event listeners");
       socket.off("newMessage", handleNewMessage);
       socket.off("messageDelivered", handleMessageDelivered);
       socket.off("roomMessage", handleRoomMessage);
     };
-  }, [socket, socketConnected, selectedChat, refetchMessages, refreshRooms]);
+  }, [socket, socketConnected, selectedChat, refetchMessages, refetchRooms]);
 
   // Join/leave room via WebSocket when chat selection changes
   useEffect(() => {
     if (!socket || !socketConnected) {
+      console.log("[MessagesPage] Socket not connected, cannot join room");
       return;
     }
 
     if (selectedChat) {
-      // Find the room to get the roomId
-      const room = rooms.find((r) => r.id === selectedChat);
-      if (room && room.roomId) {
-        joinSocketRoom(room.roomId);
-      } else {
-        console.error("[MessagesPage] Cannot join room: roomId not found for selected chat:", selectedChat);
-      }
+      console.log("[MessagesPage] Joining room via WebSocket:", selectedChat);
+      joinSocketRoom(selectedChat);
       
       // Clear real-time messages for other rooms when switching chats
       setRealtimeMessages((prev) => 
@@ -525,18 +704,24 @@ export default function MessagesPage() {
     // Cleanup: leave room when component unmounts or chat changes
     return () => {
       if (selectedChat && socket && socketConnected) {
-        const room = rooms.find((r) => r.id === selectedChat);
-        if (room && room.roomId) {
-          leaveSocketRoom(room.roomId);
-        }
+        console.log("[MessagesPage] Leaving room via WebSocket:", selectedChat);
+        leaveSocketRoom(selectedChat);
       }
     };
-  }, [selectedChat, socket, socketConnected, joinSocketRoom, leaveSocketRoom, rooms]);
+  }, [selectedChat, socket, socketConnected, joinSocketRoom, leaveSocketRoom]);
 
   const loading = loadingRooms || loadingMessages;
   const messagesLoading = loadingMessages;
-  // Errors are now handled by ChatContext - no need for apiError processing
-  const apiError = null;
+  const apiError = roomsError
+    ? "data" in roomsError &&
+      roomsError.data &&
+      typeof roomsError.data === "object" &&
+      "message" in roomsError.data
+      ? String(roomsError.data.message)
+      : "message" in roomsError
+      ? String(roomsError.message)
+      : "Failed to fetch conversations"
+    : null;
 
   // Local state for UI
   const [localError, setLocalError] = useState<string | null>(null);
@@ -546,6 +731,9 @@ export default function MessagesPage() {
   const [participantNames, setParticipantNames] = useState<Map<string, string>>(
     new Map()
   );
+  const [participantLoadingIds, setParticipantLoadingIds] = useState<
+    Set<string>
+  >(new Set());
 
   // Combined error state
   const error: string | null = apiError || localError;
@@ -557,47 +745,25 @@ export default function MessagesPage() {
   };
 
   // Helper to safely extract participant ID (handles both strings and objects)
-  // ChatContext rooms now have participants as string[] already, or as objects with populated userId
   const extractParticipantId = (
-    participant: string | Participant | null | undefined,
-    context?: string // Track where extraction is happening
+    participant: string | Participant | null | undefined
   ): string | null => {
     // Handle null/undefined
     if (participant === null || participant === undefined) {
       return null;
     }
 
-    // Handle string directly - this is the normal case now with ChatContext
+    // Handle string directly
     if (typeof participant === "string") {
       // Validate it's not the object string representation
       if (participant === "[object Object]" || participant.trim() === "") {
         return null;
-      }
-      if (context) {
-        console.log(`[extractParticipantId] Extracted string ID from ${context}:`, participant);
       }
       return participant;
     }
 
     // Handle objects
     if (participant && typeof participant === "object") {
-      const participantObj = participant as any;
-      
-      // Log the object structure for debugging
-      if (context) {
-        console.log(`[extractParticipantId] Extracting from object (${context}):`, {
-          hasUserId: 'userId' in participant,
-          userIdType: typeof participantObj.userId,
-          userIdValue: participantObj.userId,
-          hasId: 'id' in participant,
-          idValue: participantObj.id,
-          has_id: '_id' in participant,
-          _idValue: participantObj._id,
-          allKeys: Object.keys(participant),
-          fullObject: JSON.stringify(participant, null, 2)
-        });
-      }
-
       // First check if this is a RoomParticipant object with a userId field
       if ('userId' in participant && participant.userId) {
         const userIdValue = participant.userId;
@@ -607,9 +773,6 @@ export default function MessagesPage() {
           const userIdObj = userIdValue as any;
           const id = userIdObj._id || userIdObj.id;
           if (id && typeof id === 'string') {
-            if (context) {
-              console.log(`[extractParticipantId] Extracted from populated userId object (${context}):`, id);
-            }
             return id;
           }
         }
@@ -618,9 +781,6 @@ export default function MessagesPage() {
         if (typeof userIdValue === 'string') {
           if (userIdValue === "[object Object]" || userIdValue.trim() === "") {
             return null;
-          }
-          if (context) {
-            console.log(`[extractParticipantId] Extracted userId string (${context}):`, userIdValue);
           }
           return userIdValue;
         }
@@ -634,9 +794,6 @@ export default function MessagesPage() {
         if (typeof id === "string") {
           if (id === "[object Object]" || id.trim() === "") {
             return null;
-          }
-          if (context) {
-            console.log(`[extractParticipantId] Extracted id/_id (${context}):`, id);
           }
           return id;
         }
@@ -716,11 +873,13 @@ export default function MessagesPage() {
 
       // Check if this ID was already marked as invalid
       if (invalidUserIds.has(targetUserId)) {
+        console.log("Skipping invalid userId:", targetUserId);
         router.replace("/chat");
         return;
       }
 
       if (processingUserId === targetUserId) {
+        console.log("Already processing this userId, skipping...");
         return;
       }
 
@@ -798,7 +957,6 @@ export default function MessagesPage() {
         const existingRoom = rooms.find((room) => {
           if (!room.participants || room.type !== "direct") return false;
 
-          // Extract participant IDs - participants might be objects with userId field
           const participantIds = room.participants
             .map((p) => extractParticipantId(p))
             .filter((id): id is string => id !== null);
@@ -810,9 +968,7 @@ export default function MessagesPage() {
           if (hasBothParticipants) {
             console.log(
               "[createRoomWithUser] Found existing room:",
-              room.id || room.roomId,
-              "participantIds:",
-              participantIds
+              room.id || room.roomId
             );
           }
 
@@ -863,9 +1019,8 @@ export default function MessagesPage() {
             );
 
             // Refetch to get the latest rooms including the existing one
-            await refreshRooms();
-            // refreshRooms updates the ChatContext, so just use the rooms from context
-            const freshRooms = rooms;
+            const refetchResult = await refetchRooms();
+            const freshRooms = refetchResult?.data || rooms;
 
             console.log(
               "[createRoomWithUser] Searching in",
@@ -1024,7 +1179,7 @@ export default function MessagesPage() {
 
         // Wait a bit then refetch rooms to get the new room
         setTimeout(() => {
-          refreshRooms();
+          refetchRooms();
         }, 500);
 
         setProcessingUserId(null);
@@ -1089,12 +1244,99 @@ export default function MessagesPage() {
       invalidUserIds,
       router,
       createRoomMutation,
-      refreshRooms,
+      refetchRooms,
       rooms,
     ]
   );
 
-  // Rooms and participant data come from ChatContext - no separate fetching needed
+  // Extract participant names from rooms data
+  // Note: /chat/rooms doesn't include user names, so we'll need to fetch them separately
+  // This effect is kept for backward compatibility but won't extract names from rooms
+  useEffect(() => {
+    if (roomsData && Array.isArray(roomsData)) {
+      // Rooms from /chat/rooms don't have sender/receiver info
+      // We'll need to fetch participant names separately using their userIds
+      console.log(
+        "[MessagesPage] Rooms data loaded, participant names will be fetched separately"
+      );
+    }
+  }, [roomsData]);
+  
+  // Fetch last message for rooms that have lastMessage as just an ID
+  // Only fetch for the first 5 rooms to avoid too many API calls
+  useEffect(() => {
+    if (!roomsData || !Array.isArray(roomsData)) return;
+    
+    const roomsNeedingLastMessage = roomsData
+      .filter((room: any) => {
+        const roomId = room.roomId || room._id || room.id;
+        // Check if lastMessage is just a string ID (not an object)
+        return room.lastMessage && typeof room.lastMessage === "string" && roomId;
+      })
+      .slice(0, 5); // Only fetch for first 5 rooms
+    
+    if (roomsNeedingLastMessage.length === 0) return;
+    
+    // Fetch last message for each room in parallel
+    const fetchLastMessages = async () => {
+      const promises = roomsNeedingLastMessage.map(async (room: any) => {
+        const roomId = room.roomId || room._id || room.id;
+        if (!roomId) return;
+        
+        try {
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_BASE_URL || "https://be-aphrodite-8wrp.onrender.com"}/chat/rooms/${roomId}/messages?limit=1`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+              },
+            }
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            const messages = data?.data || data || [];
+            if (Array.isArray(messages) && messages.length > 0) {
+              const lastMsg = messages[messages.length - 1];
+              // Normalize the message
+              const normalizedMessage: ChatMessage = {
+                id: lastMsg._id || lastMsg.id || "",
+                senderId: typeof lastMsg.senderId === "string" 
+                  ? lastMsg.senderId 
+                  : (lastMsg.senderId?._id || lastMsg.senderId?.id || ""),
+                receiverId: typeof lastMsg.receiverId === "string"
+                  ? lastMsg.receiverId
+                  : (lastMsg.receiverId?._id || lastMsg.receiverId?.id || ""),
+                roomId: lastMsg.roomId || roomId,
+                content: lastMsg.content || "",
+                type: (lastMsg.type || "text") as ChatMessage["type"],
+                status: (lastMsg.status || "sent") as ChatMessage["status"],
+                createdAt: lastMsg.createdAt || new Date().toISOString(),
+                updatedAt: lastMsg.updatedAt || new Date().toISOString(),
+                metadata: lastMsg.metadata,
+                attachments: lastMsg.attachments || [],
+                readAt: lastMsg.readAt,
+                deliveredAt: lastMsg.deliveredAt,
+                replyTo: lastMsg.replyTo,
+              };
+              
+              setRoomLastMessages((prev) => {
+                const updated = new Map(prev);
+                updated.set(roomId, normalizedMessage);
+                return updated;
+              });
+            }
+          }
+        } catch (error) {
+          console.error(`[MessagesPage] Error fetching last message for room ${roomId}:`, error);
+        }
+      });
+      
+      await Promise.all(promises);
+    };
+    
+    fetchLastMessages();
+  }, [roomsData]);
 
   // Handle userId query parameter - find or create room with that user
   // Use a ref to track the last processed userId to prevent unnecessary runs
@@ -1155,6 +1397,7 @@ export default function MessagesPage() {
 
     // Skip if this userId was already marked as invalid
     if (targetUserId && invalidUserIds.has(targetUserId)) {
+      console.log("Skipping invalid userId:", targetUserId);
       // Only replace URL if there are actually query params to clear
       if (searchParams.toString()) {
         router.replace("/chat", { scroll: false });
@@ -1172,6 +1415,7 @@ export default function MessagesPage() {
       !authLoading &&
       !processingUserId
     ) {
+      console.log("Processing userId:", targetUserId, "Current rooms:", rooms);
 
       // Validate MongoDB ObjectId format before processing
       if (!isValidMongoObjectId(targetUserId)) {
@@ -1216,6 +1460,7 @@ export default function MessagesPage() {
       });
 
       if (existingRoom) {
+        console.log("Found existing room:", existingRoom.id);
         setSelectedChat(existingRoom.id);
         // Mark as processed before navigation to prevent re-running
         hasProcessedQueryParams.current = true;
@@ -1225,6 +1470,7 @@ export default function MessagesPage() {
           router.replace("/chat", { scroll: false });
         }
       } else {
+        console.log("No existing room found, creating new one...");
         // Mark as processed to prevent re-running during room creation
         hasProcessedQueryParams.current = true;
         lastProcessedUserId.current = targetUserId;
@@ -1267,83 +1513,34 @@ export default function MessagesPage() {
     }
   }, [selectedChat, markRoomAsReadMutation]);
 
-  // Track ongoing fetches to prevent duplicate calls
-  const fetchingRef = useRef<Set<string>>(new Set());
-
   // Fetch participant names from /profiles/user/{userId} endpoint
-  // Only fetches valid MongoDB ObjectIds to prevent 404 errors
   const fetchParticipantName = async (
-    participantId: string | Participant,
-    sourceContext?: string // Track where the call is coming from
+    participantId: string | Participant
   ): Promise<string | null> => {
-    // Log the original participant object to understand its structure
-    console.log(`[fetchParticipantName] Called from: ${sourceContext || 'unknown'}`, {
-      originalParticipant: participantId,
-      participantType: typeof participantId,
-      isString: typeof participantId === 'string',
-      isObject: typeof participantId === 'object' && participantId !== null,
-      participantKeys: typeof participantId === 'object' && participantId !== null 
-        ? Object.keys(participantId as object) 
-        : null,
-      fullParticipant: typeof participantId === 'object' ? JSON.stringify(participantId, null, 2) : null
-    });
-
     const normalizedId = extractParticipantId(participantId);
-
-    console.log(`[fetchParticipantName] Extracted ID:`, {
-      normalizedId,
-      sourceContext: sourceContext || 'unknown',
-      extractionMethod: typeof participantId === 'object' 
-        ? (participantId as any)?.userId 
-          ? 'userId field' 
-          : (participantId as any)?._id 
-            ? '_id field' 
-            : (participantId as any)?.id 
-              ? 'id field' 
-              : 'string conversion'
-        : 'direct string'
-    });
 
     if (
       !normalizedId ||
       typeof normalizedId !== "string" ||
       normalizedId === "[object Object]"
     ) {
-      console.warn(`[fetchParticipantName] Invalid normalized ID:`, normalizedId);
       return null;
     }
 
-    // Validate MongoDB ObjectId format (24 hex characters) before fetching
-    // This prevents 404 errors from invalid IDs
-    if (!/^[0-9a-fA-F]{24}$/.test(normalizedId)) {
-      console.warn("[fetchParticipantName] Invalid MongoDB ObjectId format, skipping fetch:", {
-        id: normalizedId,
-        sourceContext: sourceContext || 'unknown',
-        length: normalizedId.length
-      });
-      return null;
-    }
-
-    // Check cache first
     if (participantNames.has(normalizedId)) {
       return participantNames.get(normalizedId) || null;
     }
 
-    // Prevent duplicate fetches for the same ID
-    if (fetchingRef.current.has(normalizedId)) {
-      console.log(`[fetchParticipantName] Already fetching for ID: ${normalizedId}, skipping duplicate call`);
+    if (participantLoadingIds.has(normalizedId)) {
       return null;
     }
 
-    // Mark as fetching
-    fetchingRef.current.add(normalizedId);
-
-    console.log(`[fetchParticipantName] Fetching profile for userId: ${normalizedId}`, {
-      sourceContext: sourceContext || 'unknown',
-      url: `${process.env.NEXT_PUBLIC_API_BASE_URL || "https://be-aphrodite-8wrp.onrender.com"}/profiles/user/${normalizedId}`
+    setParticipantLoadingIds((prev) => {
+      const next = new Set(prev);
+      next.add(normalizedId);
+      return next;
     });
 
-    // Fetch from /profiles/user/{userId} endpoint
     try {
       const response = await fetch(
         `${
@@ -1411,48 +1608,89 @@ export default function MessagesPage() {
             });
           }
 
-          console.log(`[fetchParticipantName] Successfully fetched profile for userId: ${normalizedId}`, {
-            name,
-            hasAvatar: !!avatar,
-            sourceContext: sourceContext || 'unknown'
+          setParticipantLoadingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(normalizedId);
+            return next;
           });
 
-          fetchingRef.current.delete(normalizedId);
           return name;
         }
       } else if (response.status === 404) {
-        // Profile not found - don't retry
-        console.warn(`[fetchParticipantName] Profile not found for userId: ${normalizedId}`, {
-          sourceContext: sourceContext || 'unknown',
-          originalParticipant: participantId,
-          extractedId: normalizedId,
-          participantStructure: typeof participantId === 'object' 
-            ? {
-                hasUserId: !!(participantId as any)?.userId,
-                hasId: !!(participantId as any)?.id,
-                has_id: !!(participantId as any)?._id,
-                userIdValue: (participantId as any)?.userId,
-                idValue: (participantId as any)?.id,
-                _idValue: (participantId as any)?._id,
-                allKeys: Object.keys(participantId as object)
-              }
-            : null
+        const fallbackName =
+          normalizedId && typeof normalizedId === "string"
+            ? `User ${normalizedId.slice(-8)}`
+            : null;
+
+        if (fallbackName) {
+          setParticipantNames((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(normalizedId, fallbackName);
+            return newMap;
+          });
+        }
+
+        setParticipantLoadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(normalizedId);
+          return next;
         });
-        fetchingRef.current.delete(normalizedId);
-        return null;
+
+        return fallbackName;
       }
     } catch (err) {
-      console.error("Error fetching participant profile:", err, {
-        userId: normalizedId,
-        sourceContext: sourceContext || 'unknown'
+      console.error("Error fetching participant profile:", err);
+      setParticipantLoadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(normalizedId);
+        return next;
       });
-    } finally {
-      // Always remove from fetching set
-      fetchingRef.current.delete(normalizedId);
     }
 
     return null;
   };
+
+  useEffect(() => {
+    const currentUserId = userId || user?.id || fallbackUserId;
+    if (!currentUserId) return;
+    if (!Array.isArray(rooms) || rooms.length === 0) return;
+
+    const idsToFetch = new Set<string>();
+
+    rooms.forEach((room) => {
+      if (!room.participants || room.type !== "direct") return;
+
+      const otherParticipant = room.participants.find((p) => {
+        const pId = extractParticipantId(p as any);
+        return pId && pId !== currentUserId;
+      });
+
+      const otherParticipantId = otherParticipant
+        ? extractParticipantId(otherParticipant as any)
+        : null;
+
+      if (
+        otherParticipantId &&
+        typeof otherParticipantId === "string" &&
+        otherParticipantId.trim() !== "" &&
+        !participantNames.has(otherParticipantId)
+      ) {
+        idsToFetch.add(otherParticipantId);
+      }
+    });
+
+    if (idsToFetch.size === 0) return;
+
+    const fetchAll = async () => {
+      await Promise.all(
+        Array.from(idsToFetch).map((id) =>
+          fetchParticipantName(id).catch(() => null)
+        )
+      );
+    };
+
+    fetchAll();
+  }, [rooms, userId, user?.id, fallbackUserId, participantNames]);
 
   const sendMessage = async (
     e?: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent
@@ -1470,13 +1708,7 @@ export default function MessagesPage() {
     // Get the selected room to find the receiver ID
     const room = rooms.find((r) => r.id === selectedChat);
     if (!room) {
-      console.error("Room not found for selectedChat:", selectedChat, "available rooms:", rooms.map(r => ({ id: r.id, roomId: r.roomId })));
-      return;
-    }
-    
-    // Ensure room has a valid roomId
-    if (!room.roomId || typeof room.roomId !== 'string') {
-      console.error("Room found but has invalid roomId:", room);
+      console.error("Room not found");
       return;
     }
 
@@ -1508,13 +1740,38 @@ export default function MessagesPage() {
       return;
     }
     
-    // Clear input immediately for better UX
+    // Create optimistic message for immediate UI update
+    const optimisticMessage: ChatMessage = {
+      id: tempId,
+      senderId: currentUserId,
+      receiverId: receiverId,
+      roomId: selectedChat,
+      content: messageContent,
+      type: "text",
+      status: "sending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      tempId: tempId,
+    };
+
+    // Add optimistic message to real-time messages
+    setRealtimeMessages((prev) => [...prev, optimisticMessage]);
+    
+    // Update room's lastMessage immediately for optimistic UI
+    if (selectedChat) {
+      setRoomLastMessages((prev) => {
+        const updated = new Map(prev);
+        updated.set(selectedChat, optimisticMessage);
+        return updated;
+      });
+    }
+    
     setMessageInput("");
 
     // Try WebSocket first if connected, otherwise fallback to REST API
-    // Wait for WebSocket response instead of showing optimistic message
     if (socketConnected && socket) {
       try {
+        console.log("[MessagesPage] Sending message via WebSocket");
         sendSocketMessage({
           receiverId: receiverId,
           roomId: selectedChat,
@@ -1523,10 +1780,10 @@ export default function MessagesPage() {
           tempId: tempId,
         });
         
-        // WebSocket will emit messageDelivered event, which will add the message to UI
-        // Refetch rooms after a delay to update last message
+        // WebSocket will handle the messageDelivered event to update the optimistic message
+        // Only refetch rooms to update last message, not messages (we already have optimistic update)
         setTimeout(() => {
-          refreshRooms();
+          refetchRooms();
         }, 1000);
       } catch (err) {
         console.error("[MessagesPage] Error sending via WebSocket, falling back to REST API:", err);
@@ -1534,6 +1791,7 @@ export default function MessagesPage() {
         sendViaRestAPI();
       }
     } else {
+      console.log("[MessagesPage] WebSocket not connected, using REST API");
       // Fallback to REST API
       sendViaRestAPI();
     }
@@ -1542,37 +1800,35 @@ export default function MessagesPage() {
       // receiverId is already validated above, but TypeScript needs this check
       if (!receiverId) {
         console.error("[MessagesPage] Cannot send via REST API: receiverId is undefined");
-      return;
-    }
-
-    try {
-      const result = await sendMessageMutation({
+        return;
+      }
+      
+      try {
+        const result = await sendMessageMutation({
           receiverId: receiverId,
           content: messageContent,
-        type: "text",
+          type: "text",
           tempId: tempId,
-      }).unwrap();
+        }).unwrap();
 
         if (result && receiverId && selectedChat && currentUserId) {
-        // transformResponse already extracted the data, so result is the message object
+          // transformResponse already extracted the data, so result is the message object
           // Ensure senderId and receiverId are strings (not null)
           const sentMessage: ChatMessage = {
-          ...result,
+            ...result,
             senderId: (result.senderId && typeof result.senderId === "string") ? result.senderId : currentUserId,
             receiverId: (result.receiverId && typeof result.receiverId === "string") ? result.receiverId : receiverId,
             roomId: (result.roomId && typeof result.roomId === "string") ? result.roomId : selectedChat,
           };
 
+          console.log("[MessagesPage] Message sent successfully via REST API:", sentMessage);
           
-          // Add message to real-time messages (no optimistic message, just add the real one)
-          setRealtimeMessages((prev) => {
-            // Check if message already exists to prevent duplicates
-            const exists = prev.some((msg) => msg.id === sentMessage.id);
-            if (exists) {
-              return prev;
-            }
-            return [...prev, sentMessage];
-          });
+          // Update optimistic message with real message
+          setRealtimeMessages((prev) => 
+            prev.map((msg) => 
+              msg.tempId === tempId ? sentMessage : msg
+            )
+          );
           
           // Update room's lastMessage with the real message
           if (selectedChat) {
@@ -1583,23 +1839,27 @@ export default function MessagesPage() {
             });
           }
 
-        // RTK Query will automatically refetch messages and rooms due to invalidatesTags
-        refreshRooms();
-      }
-    } catch (err: unknown) {
+          // RTK Query will automatically refetch messages and rooms due to invalidatesTags
+          // Only refetch rooms, messages will be updated via invalidatesTags
+          refetchRooms();
+        }
+      } catch (err: unknown) {
         console.error("[MessagesPage] Error sending message via REST API:", err);
         
-      const errorMsg =
-        err &&
-        typeof err === "object" &&
-        "data" in err &&
-        err.data &&
-        typeof err.data === "object" &&
-        "message" in err.data
-          ? String(err.data.message)
-          : err && typeof err === "object" && "message" in err
-          ? String(err.message)
-          : "Failed to send message";
+        // Remove optimistic message on error
+        setRealtimeMessages((prev) => prev.filter((msg) => msg.tempId !== tempId));
+        
+        const errorMsg =
+          err &&
+          typeof err === "object" &&
+          "data" in err &&
+          err.data &&
+          typeof err.data === "object" &&
+          "message" in err.data
+            ? String(err.data.message)
+            : err && typeof err === "object" && "message" in err
+            ? String(err.message)
+            : "Failed to send message";
         console.error("[MessagesPage] Failed to send message:", errorMsg);
         setError(errorMsg);
       }
@@ -1629,231 +1889,17 @@ export default function MessagesPage() {
   const closePricingDialog = () => {
     setShowPricingDialog(false);
     setSelectedPlan(null);
-    setCustomPrice("");
   };
 
   const handlePlanSelect = (plan: string) => {
     setSelectedPlan(plan);
   };
 
-  const handleSendPricing = async () => {
-    if (!selectedPlan || !selectedChat) return;
-    
-    const currentUserId = userId || user?.id || fallbackUserId;
-    if (!currentUserId) return;
-    
-    // Prevent multiple rapid clicks or if already sending
-    if (sending) {
-      return;
-    }
-    
-    // Check if we're already processing a pricing send
-    const isProcessing = Array.from(sendingPricingRef.current).length > 0;
-    if (isProcessing) {
-      return;
-    }
-    
-    // Get the selected room to find the receiver ID
-    const room = rooms.find((r) => r.id === selectedChat);
-    if (!room) return;
-    
-    // Find the receiver ID
-    let receiverId: string | undefined;
-    if (room.type === "direct" && room.participants) {
-      const otherParticipant = room.participants.find((p) => {
-        const pId = extractParticipantId(p);
-        return pId && pId !== currentUserId;
-      });
-      receiverId = otherParticipant
-        ? extractParticipantId(otherParticipant) || undefined
-        : undefined;
-    }
-    
-    if (!receiverId) return;
-    
-    // Format the pricing message based on selected plan
-    let pricingContent = "";
-    let pricingData: any = null;
-    
-    if (selectedPlan === "custom-price" && customPrice) {
-      // Send custom price as a single pricing card
-      pricingContent = `💰 Custom Pricing: ${Number(customPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH`;
-      pricingData = { 
-        type: "custom", 
-        amount: customPrice,
-        currency: "APH"
-      };
-    } else if (userPricing && selectedPlan !== "custom-price") {
-      // Get the selected plan's pricing
-      const plan = selectedPlan as "shortTime" | "overnight" | "weekend";
-      const pricing = userPricing[plan];
-      
-      if (pricing && (pricing.incall || pricing.outcall)) {
-        const planName = plan === "shortTime" ? "Short Time" : plan === "overnight" ? "Overnight" : "Weekend";
-        const incall = pricing.incall ? Number(pricing.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
-        const outcall = pricing.outcall ? Number(pricing.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
-        const currency = pricing.currency || "APH";
-        
-        // Format content with pricing details so it can be parsed
-        pricingContent = `💰 ${planName} Pricing\nIncall: ${incall} ${currency}\nOutcall: ${outcall} ${currency}`;
-        
-        pricingData = {
-          type: plan,
-          incall: pricing.incall,
-          outcall: pricing.outcall,
-          currency: currency
-        };
-      } else {
-        // If selected plan has no pricing, send all available plans
-        const plans: any[] = [];
-        
-        if (userPricing.shortTime && (userPricing.shortTime.incall || userPricing.shortTime.outcall)) {
-          plans.push({
-            type: "shortTime",
-            incall: userPricing.shortTime.incall,
-            outcall: userPricing.shortTime.outcall,
-            currency: userPricing.shortTime.currency || "APH"
-          });
-        }
-        
-        if (userPricing.overnight && (userPricing.overnight.incall || userPricing.overnight.outcall)) {
-          plans.push({
-            type: "overnight",
-            incall: userPricing.overnight.incall,
-            outcall: userPricing.overnight.outcall,
-            currency: userPricing.overnight.currency || "APH"
-          });
-        }
-        
-        if (userPricing.weekend && (userPricing.weekend.incall || userPricing.weekend.outcall)) {
-          plans.push({
-            type: "weekend",
-            incall: userPricing.weekend.incall,
-            outcall: userPricing.weekend.outcall,
-            currency: userPricing.weekend.currency || "APH"
-          });
-        }
-        
-        if (plans.length > 0) {
-          pricingContent = "💰 My Pricing Plans";
-          pricingData = {
-            allPlans: plans,
-            type: plans[0].type,
-            incall: plans[0].incall,
-            outcall: plans[0].outcall,
-            currency: plans[0].currency
-          };
-        }
-      }
-    }
-    
-    if (!pricingData) {
-      console.error("No pricing data to send");
-      return;
-    }
-    
-    // Generate unique tempId with timestamp and random component to prevent duplicates
-    const tempId = `temp_pricing_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    // Check if we're already sending this exact message (prevent duplicate sends)
-    if (sendingPricingRef.current.has(tempId)) {
-      return;
-    }
-    
-    // Add to sending set immediately to prevent duplicate sends
-    sendingPricingRef.current.add(tempId);
-    
-    // Close dialog immediately for better UX
+  const handleSendPricing = () => {
+    if (selectedPlan) {
+      // Handle sending the selected pricing plan
+      console.log("Sending pricing plan:", selectedPlan);
       closePricingDialog();
-    setCustomPrice("");
-    
-    // Try WebSocket first if connected, otherwise fallback to REST API
-    if (socketConnected && socket) {
-      try {
-        console.log("[handleSendPricing] Sending via WebSocket, waiting for messageDelivered");
-        sendSocketMessage({
-          receiverId: receiverId,
-          roomId: selectedChat,
-          content: pricingContent,
-          type: "text",
-          tempId: tempId,
-          metadata: pricingData ? { pricing: pricingData } : undefined,
-        });
-        // WebSocket will emit messageDelivered event, which will add the message to UI
-      } catch (err) {
-        console.error("Error sending via WebSocket, falling back to REST API:", err);
-        sendingPricingRef.current.delete(tempId);
-        // Fallback to REST API
-        sendViaRestAPI();
-      }
-    } else {
-      console.log("[handleSendPricing] WebSocket not connected, using REST API");
-      // Fallback to REST API
-      sendViaRestAPI();
-    }
-
-    async function sendViaRestAPI() {
-      try {
-        const result = await sendMessageMutation({
-          receiverId: receiverId!,
-          content: pricingContent,
-          type: "text",
-          tempId: tempId,
-          metadata: pricingData ? { pricing: pricingData } : undefined,
-        }).unwrap();
-        
-        // Remove from sending set
-        sendingPricingRef.current.delete(tempId);
-        
-        if (result && receiverId && selectedChat && currentUserId) {
-          // Preserve metadata from the original message
-          const sentMessage: ChatMessage = {
-            ...result,
-            senderId: (result.senderId && typeof result.senderId === "string") ? result.senderId : currentUserId,
-            receiverId: (result.receiverId && typeof result.receiverId === "string") ? result.receiverId : receiverId,
-            roomId: (result.roomId && typeof result.roomId === "string") ? result.roomId : selectedChat,
-            // Preserve metadata - use result metadata if available, otherwise use original
-            metadata: result.metadata && Object.keys(result.metadata).length > 0 
-              ? result.metadata 
-              : (pricingData ? { pricing: pricingData } : undefined),
-          };
-          
-          // Add message to real-time messages (no optimistic message, just add the real one)
-          setRealtimeMessages((prev) => {
-            // Check if message already exists to prevent duplicates
-            const exists = prev.some((msg) => msg.id === sentMessage.id);
-            if (exists) {
-              return prev;
-            }
-            return [...prev, sentMessage];
-          });
-          
-          if (selectedChat) {
-            setRoomLastMessages((prev) => {
-              const updated = new Map(prev);
-              updated.set(selectedChat, sentMessage);
-              return updated;
-            });
-          }
-          
-          refreshRooms();
-        }
-      } catch (err) {
-        console.error("Error sending pricing message via REST API:", err);
-        sendingPricingRef.current.delete(tempId);
-        const errorMsg =
-          err &&
-          typeof err === "object" &&
-          "data" in err &&
-          err.data &&
-          typeof err.data === "object" &&
-          "message" in err.data
-            ? String(err.data.message)
-            : err && typeof err === "object" && "message" in err
-            ? String(err.message)
-            : "Failed to send pricing message";
-        setError(errorMsg);
-      }
     }
   };
 
@@ -1895,6 +1941,7 @@ export default function MessagesPage() {
     }
 
     if (processingUserId === targetUserId) {
+      console.log("[handleStartNewChat] Already processing this userId");
       return;
     }
 
@@ -1946,94 +1993,129 @@ export default function MessagesPage() {
     }
   };
 
+  const selectedChatData = rooms.find((room) => room.id === selectedChat);
+
   // Get the other participant's user ID for profile navigation
   const getOtherParticipantId = useCallback((): string | null => {
     if (!selectedChatData || !currentUserId) {
-      console.log("[getOtherParticipantId] Missing selectedChatData or currentUserId", {
-        hasSelectedChatData: !!selectedChatData,
-        currentUserId
-      });
       return null;
     }
 
     // For direct messages, find the other participant
     if (selectedChatData.type === "direct" && selectedChatData.participants) {
-      console.log("[getOtherParticipantId] Processing participants:", {
-        participants: selectedChatData.participants,
-        participantsLength: selectedChatData.participants.length,
-        currentUserId,
-        participantStructures: selectedChatData.participants.map((p: any) => ({
-          type: typeof p,
-          isString: typeof p === 'string',
-          isObject: typeof p === 'object',
-          keys: typeof p === 'object' && p !== null ? Object.keys(p) : null,
-          userId: typeof p === 'object' && p !== null ? (p as any).userId : null,
-          id: typeof p === 'object' && p !== null ? (p as any).id : null,
-          _id: typeof p === 'object' && p !== null ? (p as any)._id : null,
-          fullObject: typeof p === 'object' ? JSON.stringify(p, null, 2) : p
-        }))
-      });
-
       const otherParticipant = selectedChatData.participants.find((p) => {
-        const pId = extractParticipantId(p, 'getOtherParticipantId-find');
+        const pId = extractParticipantId(p);
         return pId && pId !== currentUserId;
       });
       
-      console.log("[getOtherParticipantId] Found otherParticipant:", {
-        otherParticipant,
-        otherParticipantType: typeof otherParticipant,
-        otherParticipantKeys: otherParticipant && typeof otherParticipant === 'object' 
-          ? Object.keys(otherParticipant) 
-          : null,
-        otherParticipantFull: otherParticipant && typeof otherParticipant === 'object'
-          ? JSON.stringify(otherParticipant, null, 2)
-          : otherParticipant
-      });
-      
       if (otherParticipant) {
-        const otherParticipantId = extractParticipantId(otherParticipant, 'getOtherParticipantId-extract');
-        console.log("[getOtherParticipantId] Extracted ID:", {
-          otherParticipantId,
-          idType: typeof otherParticipantId,
-          isString: typeof otherParticipantId === 'string',
-          willReturn: otherParticipantId && typeof otherParticipantId === "string"
-        });
+        const otherParticipantId = extractParticipantId(otherParticipant);
         if (otherParticipantId && typeof otherParticipantId === "string") {
           return otherParticipantId;
         }
       }
     }
 
-    console.log("[getOtherParticipantId] Returning null - no valid participant ID found");
     return null;
   }, [selectedChatData, currentUserId]);
 
-  const handleViewProfile = useCallback(() => {
-    console.log("[handleViewProfile] Called - getting other participant ID");
+  const handleViewProfile = useCallback(async () => {
     const otherParticipantUserId = getOtherParticipantId();
-    console.log("[handleViewProfile] Got ID:", {
-      otherParticipantUserId,
-      idType: typeof otherParticipantUserId,
-      willNavigate: !!otherParticipantUserId
-    });
-    
     if (!otherParticipantUserId) {
-      console.error("[handleViewProfile] Cannot view profile: other participant ID not found", {
-        selectedChatData,
-        currentUserId
-      });
+      console.error("[MessagesPage] Cannot view profile: other participant ID not found");
       return;
     }
 
-    // Navigate directly with userId (no need to fetch profile ID first)
-    console.log(`[handleViewProfile] Navigating to: /profile/${otherParticipantUserId}`);
-    router.push(`/profile/${otherParticipantUserId}`);
-  }, [getOtherParticipantId, router, selectedChatData, currentUserId]);
+    if (preloadedProfileId) {
+      router.push(`/profile/${preloadedProfileId}`);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_BASE_URL ||
+          "https://be-aphrodite-8wrp.onrender.com"
+        }/profiles/user/${otherParticipantUserId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const profileId = data?.data?.id || data?.id || null;
+
+        if (profileId && typeof profileId === "string") {
+          setPreloadedProfileId(profileId);
+          router.push(`/profile/${profileId}`);
+          return;
+        }
+      } else {
+        console.error(
+          "[MessagesPage] Failed to fetch participant profile for view profile, status:",
+          response.status
+        );
+      }
+    } catch (error) {
+      console.error("[MessagesPage] Error fetching participant profile for view profile:", error);
+    }
+
+    console.error(
+      "[MessagesPage] Could not resolve profile ID for participant:",
+      otherParticipantUserId
+    );
+  }, [getOtherParticipantId, router, preloadedProfileId]);
+
+  // Preload profile ID when a room is selected
+  useEffect(() => {
+    const otherParticipantUserId = getOtherParticipantId();
+    
+    // Reset preloaded profile ID when room changes
+    setPreloadedProfileId(null);
+    
+    // Only preload for direct messages
+    if (!otherParticipantUserId || !selectedChatData || selectedChatData.type !== "direct") {
+      return;
+    }
+
+    // Fetch profile in the background
+    const preloadProfile = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL || "https://be-aphrodite-8wrp.onrender.com"}/profiles/user/${otherParticipantUserId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const profileId = data?.data?.id || data?.id;
+          
+          if (profileId) {
+            console.log("[MessagesPage] Preloaded profile ID:", profileId);
+            setPreloadedProfileId(profileId);
+          }
+        }
+      } catch (error) {
+        console.error("[MessagesPage] Error preloading profile:", error);
+        // Silently fail - we'll use userId as fallback
+      }
+    };
+
+    preloadProfile();
+  }, [selectedChat, getOtherParticipantId, selectedChatData]);
 
   // Log participant information for debugging (after selectedChatData is defined)
   useEffect(() => {
     if (selectedChat && selectedChatData) {
       const currentUserId = userId || user?.id || fallbackUserId;
+      console.log("[MessagesPage] Selected room data:", selectedChatData);
       console.log(
         "[MessagesPage] Current user ID:",
         currentUserId,
@@ -2093,22 +2175,18 @@ export default function MessagesPage() {
         return pId && pId !== currentUserId;
       });
 
-      // Check if participant.userId is populated (will be an object with name, userName, etc.)
+      // Debug logging
       if (otherParticipant && typeof otherParticipant === "object") {
-        // Check if userId is populated with user data
-        const participantObj = otherParticipant as any;
-        if (participantObj.userId && typeof participantObj.userId === "object") {
-          const userData = participantObj.userId;
-          const displayName = userData.name || userData.userName || userData.email;
-          if (displayName) {
-            console.log("[getRoomDisplayName] Using populated user data:", displayName);
-            return displayName;
-          }
-        }
+        console.log(
+          "Found otherParticipant object:",
+          otherParticipant,
+          "keys:",
+          Object.keys(otherParticipant)
+        );
       }
 
       const otherParticipantId = otherParticipant
-        ? extractParticipantId(otherParticipant, 'getRoomDisplayName')
+        ? extractParticipantId(otherParticipant)
         : null;
 
       // Debug logging
@@ -2131,15 +2209,12 @@ export default function MessagesPage() {
         otherParticipantId !== "[object Object]" &&
         otherParticipantId.trim() !== ""
       ) {
-        // Check if we have the name cached
         const cachedName = participantNames.get(otherParticipantId);
         if (cachedName) {
           return cachedName;
         }
 
-        // If we have profileName from query params (for newly created rooms), use it
         if (profileName) {
-          // Also cache it for future use
           setParticipantNames((prev) => {
             const newMap = new Map(prev);
             newMap.set(otherParticipantId, profileName);
@@ -2148,26 +2223,6 @@ export default function MessagesPage() {
           return profileName;
         }
 
-        // Only fetch name if not cached and we have a valid userId
-        // Don't fetch if we already have a name from populated user data
-        if (!participantNames.has(otherParticipantId)) {
-          // Only fetch if it's a valid MongoDB ObjectId format (24 hex chars)
-          // This prevents fetching for invalid IDs that will return 404
-          // fetchParticipantName already handles duplicate prevention internally
-          // Pass the original participant object so we can see its structure in logs
-          if (
-            otherParticipantId &&
-            typeof otherParticipantId === "string" &&
-            otherParticipantId !== "[object Object]" &&
-            /^[0-9a-fA-F]{24}$/.test(otherParticipantId) // MongoDB ObjectId format
-          ) {
-            fetchParticipantName(otherParticipant || otherParticipantId, 'getRoomDisplayName').catch((err) => {
-              console.error("Error fetching participant name:", err);
-            });
-          }
-        }
-
-        // Fallback: Show last 8 characters of userId
         return `User ${otherParticipantId.slice(-8)}`;
       } else if (otherParticipantId) {
         // Log warning if we got an invalid ID
@@ -2199,7 +2254,7 @@ export default function MessagesPage() {
     if (!message.content || message.content.trim() === "") {
       return "No messages yet";
     }
-
+    
     // Handle different message types
     if (message.type === "text") {
       return message.content.length > 50
@@ -2245,250 +2300,76 @@ export default function MessagesPage() {
       currentUserIdStr !== "" &&
       senderIdStr === currentUserIdStr;
 
-    // Check if message has pricing metadata
-    const pricingMetadata = apiMessage.metadata?.pricing as {
-      type?: string;
-      incall?: number;
-      outcall?: number;
-      currency?: string;
-      amount?: string;
-      allPlans?: Array<{
-        type: string;
-        incall?: number;
-        outcall?: number;
-        currency?: string;
-      }>;
-    } | undefined;
-    
-    // Also check if content suggests it's a pricing message (fallback detection)
-    const content = apiMessage.content || "";
-    const isPricingContent = 
-      content.includes("💰") || 
-      content.includes("My Pricing Plans") ||
-      content.includes("Short Time Pricing") ||
-      content.includes("Overnight Pricing") ||
-      content.includes("Weekend Pricing") ||
-      content.includes("Custom Pricing");
-    
-    // Determine message type - if it has pricing metadata OR pricing content pattern, it's a pricing message
-    let messageType: "text" | "audio" | "video" | "image" | "pricing" = apiMessage.type as "text" | "audio" | "video" | "image" | "pricing";
-    if (pricingMetadata || isPricingContent) {
-      messageType = "pricing";
-    }
+    // Debug logging for message conversion
+    console.log("convertToUIMessage:", {
+      apiMessageSenderId: apiMessage.senderId,
+      senderIdStr,
+      currentUserId,
+      currentUserIdStr,
+      isOwn,
+      messageContent: apiMessage.content?.substring(0, 20),
+    });
 
     return {
       id: apiMessage.id,
       sender: isOwn ? "me" : "other",
-      type: messageType,
+      type: apiMessage.type as "text" | "audio" | "video" | "image" | "pricing",
       content: apiMessage.content,
       timestamp: formatTime(apiMessage.createdAt),
       duration: apiMessage.metadata?.duration as string | undefined,
       videoThumbnail:
         (apiMessage.metadata?.imageUrl as string) ||
         apiMessage.attachments?.[0],
-      pricing: pricingMetadata ? {
-        shortTime: pricingMetadata.type === "shortTime" ? {
-          incall: pricingMetadata.incall?.toString() || "",
-          outcall: pricingMetadata.outcall?.toString() || "",
-        } : undefined,
-        overnight: pricingMetadata.type === "overnight" ? {
-          incall: pricingMetadata.incall?.toString() || "",
-          outcall: pricingMetadata.outcall?.toString() || "",
-        } : undefined,
-        weekend: pricingMetadata.type === "weekend" ? {
-          incall: pricingMetadata.incall?.toString() || "",
-          outcall: pricingMetadata.outcall?.toString() || "",
-        } : undefined,
-      } : undefined,
-      pricingMetadata: pricingMetadata || (isPricingContent ? {
-        // If no metadata but content suggests pricing, create a basic metadata structure
-        type: content.includes("Short Time") ? "shortTime" : 
-              content.includes("Overnight") ? "overnight" :
-              content.includes("Weekend") ? "weekend" : 
-              content.includes("Custom") ? "custom" : "all",
-        // Try to parse pricing from content if it's a single plan message
-        ...(content.includes("Incall:") && content.includes("Outcall:") ? {
-          incall: parseFloat(content.match(/Incall:\s*([\d,]+\.?\d*)/)?.[1]?.replace(/,/g, '') || '0'),
-          outcall: parseFloat(content.match(/Outcall:\s*([\d,]+\.?\d*)/)?.[1]?.replace(/,/g, '') || '0'),
-          currency: content.match(/(APH|USD|NGN)/)?.[1] || "APH",
-        } : {}),
-      } : undefined),
     };
   };
 
   const renderMessage = (message: Message) => {
     const isOwnMessage = message.sender === "me";
 
-    // Check if message is a pricing message (by type or content)
-    const isPricingMessage = message.type === "pricing" || 
-      message.content?.includes("💰") ||
-      message.content?.includes("My Pricing Plans") ||
-      message.content?.includes("Short Time Pricing") ||
-      message.content?.includes("Overnight Pricing") ||
-      message.content?.includes("Weekend Pricing");
-
-    // Check if message has pricing metadata
-    if (isPricingMessage && message.pricingMetadata) {
-      const pricing = message.pricingMetadata;
-      const currency = pricing.currency || "APH";
-      
-      // If allPlans exists, render all pricing plans
-      if (pricing.allPlans && pricing.allPlans.length > 0) {
+    if (message.type === "pricing" && message.pricing) {
       return (
         <div className="space-y-3">
-            {pricing.allPlans.map((plan, index) => {
-              const planName = plan.type === "shortTime" ? "Short Time" : plan.type === "overnight" ? "Overnight" : "Weekend";
-              const incall = plan.incall ? Number(plan.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
-              const outcall = plan.outcall ? Number(plan.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
-              const buttonText = plan.type === "shortTime" ? "Book short time" : plan.type === "overnight" ? "Book overnight" : "Book weekend";
-              
-              return (
-                <div key={index} className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col justify-between">
+          {/* Short Time Card */}
+          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-white text-[20px]">Incall</span>
-                      <div className="flex items-center gap-1">
-                        <Wallet className="h-5 w-5 text-yellow-400" />
                 <span className="text-white font-semibold text-[20px]">
-                          {incall} {plan.currency || currency}
+                  50,000.00 APH
                 </span>
-                      </div>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-white text-[20px]">Outcall</span>
-                      <div className="flex items-center gap-1">
-                        <Wallet className="h-5 w-5 text-yellow-400" />
                 <span className="text-white font-semibold text-[20px]">
-                          {outcall} {plan.currency || currency}
+                  70,000.00 APH
                 </span>
-                      </div>
-                    </div>
-                  </div>
-                  <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium mt-4">
-                    {buttonText}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        );
-      }
-      
-      // Render based on pricing type (single plan or custom)
-      if (pricing.type === "custom" && pricing.amount) {
-        // Custom pricing
-        return (
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col">
-            <div className="space-y-3 mb-4">
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Custom Price</span>
-                <div className="flex items-center gap-1">
-                  <Wallet className="h-5 w-5 text-yellow-400" />
-                  <span className="text-white font-semibold text-[20px]">
-                    {Number(pricing.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}
-                  </span>
-                </div>
               </div>
             </div>
             <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium">
-              Book now
+              Book short time
             </button>
           </div>
-        );
-      } else if (pricing.type === "shortTime" || pricing.type === "overnight" || pricing.type === "weekend") {
-        // Single pricing plan
-        const planName = pricing.type === "shortTime" ? "Short Time" : pricing.type === "overnight" ? "Overnight" : "Weekend";
-        const incall = pricing.incall ? Number(pricing.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
-        const outcall = pricing.outcall ? Number(pricing.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---";
-        const buttonText = pricing.type === "shortTime" ? "Book short time" : pricing.type === "overnight" ? "Book overnight" : "Book weekend";
-        
-        return (
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col justify-between">
+
+          {/* Overnight Card */}
+          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-white text-[20px]">Incall</span>
-                <div className="flex items-center gap-1">
-                  <Wallet className="h-5 w-5 text-yellow-400" />
                 <span className="text-white font-semibold text-[20px]">
-                    {incall} {currency}
+                  70,000.00 APH
                 </span>
-                </div>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-white text-[20px]">Outcall</span>
-                <div className="flex items-center gap-1">
-                  <Wallet className="h-5 w-5 text-yellow-400" />
                 <span className="text-white font-semibold text-[20px]">
-                    {outcall} {currency}
+                  100,000.00 APH
                 </span>
               </div>
             </div>
-            </div>
-            <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium mt-4">
-              {buttonText}
+            <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium">
+              Book overnight
             </button>
           </div>
-        );
-      }
-    }
-    
-    // Fallback: if message type is pricing but no metadata, try to render from content or pricing object
-    if (isPricingMessage && !message.pricingMetadata && message.pricing) {
-      const cards = [];
-      
-      if (message.pricing.shortTime) {
-        cards.push({
-          name: "Short Time",
-          buttonText: "Book short time",
-          ...message.pricing.shortTime,
-        });
-      }
-      
-      if (message.pricing.overnight) {
-        cards.push({
-          name: "Overnight",
-          buttonText: "Book overnight",
-          ...message.pricing.overnight,
-        });
-      }
-      
-      if (message.pricing.weekend) {
-        cards.push({
-          name: "Weekend",
-          buttonText: "Book weekend",
-          ...message.pricing.weekend,
-        });
-      }
-      
-      return (
-        <div className="space-y-3">
-          {cards.map((card, index) => (
-            <div key={index} className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-white text-[20px]">Incall</span>
-                  <div className="flex items-center gap-1">
-                    <Wallet className="h-5 w-5 text-yellow-400" />
-                    <span className="text-white font-semibold text-[20px]">
-                      {Number(card.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
-                    </span>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-white text-[20px]">Outcall</span>
-                  <div className="flex items-center gap-1">
-                    <Wallet className="h-5 w-5 text-yellow-400" />
-                    <span className="text-white font-semibold text-[20px]">
-                      {Number(card.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium mt-4">
-                {card.buttonText}
-              </button>
-            </div>
-          ))}
         </div>
       );
     }
@@ -2497,29 +2378,29 @@ export default function MessagesPage() {
       return (
         <div
           className={`flex items-center gap-3 rounded-lg p-3 max-w-xs ${
-            isOwnMessage ? "bg-[#FA266D]" : "bg-white"
+            isOwnMessage ? "bg-white" : "bg-[#FA266D]"
           }`}
         >
           <button
             className={`w-8 h-8 rounded-full flex items-center justify-center ${
-              isOwnMessage ? "bg-white/20" : "bg-gray-200"
+              isOwnMessage ? "bg-gray-200" : "bg-white/20"
             }`}
           >
             <Play
               className={`h-4 w-4 ${
-                isOwnMessage ? "text-white" : "text-gray-600"
+                isOwnMessage ? "text-gray-600" : "text-white"
               }`}
             />
           </button>
           <div className="flex-1">
             <div
               className={`w-32 h-2 rounded-full ${
-                isOwnMessage ? "bg-white/30" : "bg-gray-300"
+                isOwnMessage ? "bg-gray-300" : "bg-white/30"
               }`}
             ></div>
             <div
               className={`flex justify-between text-xs mt-1 ${
-                isOwnMessage ? "text-white/80" : "text-gray-500"
+                isOwnMessage ? "text-gray-500" : "text-white/80"
               }`}
             >
               <span>{message.duration}</span>
@@ -2528,8 +2409,8 @@ export default function MessagesPage() {
           </div>
           {isOwnMessage && (
             <div className="flex items-center gap-1">
-              <CheckCheck className="h-3 w-3 text-white" />
-              <span className="text-xs text-white/80">Sent</span>
+              <CheckCheck className="h-3 w-3 text-blue-500" />
+              <span className="text-xs text-gray-500">Sent</span>
             </div>
           )}
         </div>
@@ -2540,7 +2421,7 @@ export default function MessagesPage() {
       return (
         <div
           className={`rounded-lg p-2 max-w-xs ${
-            isOwnMessage ? "bg-[#FA266D]/10" : "bg-white"
+            isOwnMessage ? "bg-white" : "bg-[#FA266D]/10"
           }`}
         >
           <div
@@ -2567,12 +2448,12 @@ export default function MessagesPage() {
           >
             <span
               className={`text-xs ${
-                isOwnMessage ? "text-white/80" : "text-gray-500"
+                isOwnMessage ? "text-gray-500" : "text-white/80"
               }`}
             >
               {message.timestamp}
             </span>
-            {isOwnMessage && <CheckCheck className="h-3 w-3 text-white" />}
+            {isOwnMessage && <CheckCheck className="h-3 w-3 text-blue-500" />}
           </div>
         </div>
       );
@@ -2582,7 +2463,7 @@ export default function MessagesPage() {
       return (
         <div
           className={`rounded-lg p-2 max-w-xs ${
-            isOwnMessage ? "bg-[#FA266D]/10" : "bg-white"
+            isOwnMessage ? "bg-white" : "bg-[#FA266D]/10"
           }`}
         >
           <div
@@ -2604,92 +2485,31 @@ export default function MessagesPage() {
           >
             <span
               className={`text-xs ${
-                isOwnMessage ? "text-white/80" : "text-gray-500"
+                isOwnMessage ? "text-gray-500" : "text-white/80"
               }`}
             >
               {message.timestamp}
             </span>
-            {isOwnMessage && <CheckCheck className="h-3 w-3 text-white" />}
+            {isOwnMessage && <CheckCheck className="h-3 w-3 text-blue-500" />}
           </div>
         </div>
       );
     }
 
-    // Final check: if message content suggests pricing, parse and render as card
-    if (isPricingMessage) {
-      const content = message.content || "";
-      
-      // Try to parse pricing from content like "Short Time Pricing Incall: 50,000.00 APH Outcall: 80,000.00 APH"
-      const incallMatch = content.match(/Incall:\s*([\d,]+\.?\d*)/i);
-      const outcallMatch = content.match(/Outcall:\s*([\d,]+\.?\d*)/i);
-      const currencyMatch = content.match(/(APH|USD|NGN)/i);
-      
-      if (incallMatch || outcallMatch) {
-        const incall = incallMatch ? parseFloat(incallMatch[1].replace(/,/g, '')) : null;
-        const outcall = outcallMatch ? parseFloat(outcallMatch[1].replace(/,/g, '')) : null;
-        const currency = currencyMatch ? currencyMatch[1] : "APH";
-        const planType = content.includes("Short Time") ? "shortTime" : 
-                        content.includes("Overnight") ? "overnight" :
-                        content.includes("Weekend") ? "weekend" : "custom";
-        const buttonText = planType === "shortTime" ? "Book short time" : 
-                          planType === "overnight" ? "Book overnight" : 
-                          planType === "weekend" ? "Book weekend" : "Book now";
-        
-        return (
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Incall</span>
-                <div className="flex items-center gap-1">
-                  <Wallet className="h-5 w-5 text-yellow-400" />
-                  <span className="text-white font-semibold text-[20px]">
-                    {incall ? Number(incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---"} {currency}
-                  </span>
-                </div>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Outcall</span>
-                <div className="flex items-center gap-1">
-                  <Wallet className="h-5 w-5 text-yellow-400" />
-                  <span className="text-white font-semibold text-[20px]">
-                    {outcall ? Number(outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "---"} {currency}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium mt-4">
-              {buttonText}
-            </button>
-          </div>
-        );
-      }
-      
-      // If it's "My Pricing Plans" but no parseable data, show a placeholder card
-      if (content.includes("My Pricing Plans") || content.includes("💰")) {
-        return (
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] flex flex-col items-center justify-center min-h-[180px]">
-            <Wallet className="h-12 w-12 text-yellow-400 mb-2" />
-            <span className="text-white text-[18px] font-semibold">Pricing Plans</span>
-            <span className="text-white/60 text-sm mt-1">Available pricing information</span>
-          </div>
-        );
-      }
-    }
-
     return (
       <div
         className={`rounded-lg p-3 max-w-xs ${
-          isOwnMessage ? "bg-[#FA266D] text-white" : "bg-white text-black"
+          isOwnMessage ? "bg-white text-gray-800" : "bg-[#FA266D] text-white"
         }`}
       >
         <p className="text-sm">{message.content}</p>
         <div
           className={`flex items-center justify-end gap-1 mt-1 ${
-            isOwnMessage ? "text-white/80" : "text-gray-500"
+            isOwnMessage ? "text-gray-500" : "text-pink-100"
           }`}
         >
           <span className="text-xs">{message.timestamp}</span>
-          {isOwnMessage && <CheckCheck className="h-3 w-3 text-white" />}
+          {isOwnMessage && <CheckCheck className="h-3 w-3" />}
         </div>
       </div>
     );
@@ -2699,14 +2519,12 @@ export default function MessagesPage() {
     <div className="flex h-full bg-[#1F1B2C] overflow-hidden">
       {/* Left Sidebar - Chat List */}
       {isSidebarOpen && (
-      <div className="w-[360px] bg-[#1F1B2C] border-r border-white/10 flex flex-col h-full">
+        <div className="w-[360px] bg-[#1F1B2C] border-r border-white/10 flex flex-col h-full">
         {/* Header */}
         <div className="p-6 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-white text-xl font-semibold">Messages</h1>
-            <div className="flex items-center gap-3">
-              {/* WebSocket Connection Status */}
-              {/* <ConnectionStatus /> */}
+            <div className="flex items-center gap-2">
               {/* <button
                 onClick={() => setShowNewChatDialog(true)}
                 className="bg-[#FA266D] hover:bg-pink-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -2717,6 +2535,7 @@ export default function MessagesPage() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  console.log("[MessagesPage] Hamburger menu clicked, closing sidebar");
                   setIsSidebarOpen(false);
                 }}
                 className="text-[#FA266D] hover:text-pink-400 transition-colors cursor-pointer p-1 z-10 relative"
@@ -2748,7 +2567,7 @@ export default function MessagesPage() {
             <div className="p-4 text-center">
               <p className="text-red-400 mb-2">{error}</p>
               <button
-                onClick={() => refreshRooms()}
+                onClick={() => refetchRooms()}
                 className="px-4 py-2 bg-[#FA266D] text-white rounded-lg hover:bg-pink-600"
               >
                 Retry
@@ -2856,7 +2675,7 @@ export default function MessagesPage() {
               ))
           )}
         </div>
-      </div>
+        </div>
       )}
 
       {/* Right Section - Chat Area */}
@@ -2998,6 +2817,17 @@ export default function MessagesPage() {
                     apiMessage.id ||
                     message.id ||
                     `msg-${index}-${apiMessage.createdAt || Date.now()}`;
+
+                  // Debug: Log message alignment
+                  console.log("Rendering message:", {
+                    id: message.id,
+                    apiMessageId: apiMessage.id,
+                    uniqueKey,
+                    sender: message.sender,
+                    isOwnMessage,
+                    content: message.content?.substring(0, 20),
+                    alignment: isOwnMessage ? "right" : "left",
+                  });
 
                   return (
                     <div
@@ -3198,23 +3028,28 @@ export default function MessagesPage() {
 
               {/* 2x2 + 1 Grid Layout */}
               <div className="grid grid-cols-2 gap-4 mb-4">
-                {/* Plan 1 - Short Time */}
+                {/* Plan 1 - Short Time Incall */}
                 <div
-                  onClick={() => handlePlanSelect("shortTime")}
+                  onClick={() => handlePlanSelect("short-time")}
                   className={`bg-gray-800/50 rounded-[20px] p-6 cursor-pointer border-2 transition-all ${
-                    selectedPlan === "shortTime"
+                    selectedPlan === "short-time"
                       ? "border-[#FA266D] bg-[#FA266D]/10"
                       : "border-transparent hover:border-white/20"
                   }`}
                 >
+                  {/* <div className="flex items-center justify-between mb-2">
+                    {selectedPlan === "short-incall" && (
+                      <div className="w-6 h-6 bg-[#FA266D] rounded-full flex items-center justify-center">
+                        <Check className="h-4 w-4 text-white" />
+                      </div>
+                    )}
+                  </div> */}
                   <div className="flex items-center justify-between mb-4">
                     <p className="font-semibold text-white text-[20px]">
                       Incall
                     </p>
                     <p className="text-[16px] font-medium text-white">
-                      {userPricing?.shortTime?.incall 
-                        ? `${Number(userPricing.shortTime.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.shortTime.currency || 'APH'}`
-                        : "---"}
+                      50,000.00 APH
                     </p>
                   </div>
                   <div className="flex items-center justify-between">
@@ -3222,9 +3057,7 @@ export default function MessagesPage() {
                       Outcall
                     </p>
                     <p className="text-[16px] font-medium text-white">
-                      {userPricing?.shortTime?.outcall 
-                        ? `${Number(userPricing.shortTime.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.shortTime.currency || 'APH'}`
-                        : "---"}
+                      70,000.00 APH
                     </p>
                   </div>
 
@@ -3242,14 +3075,23 @@ export default function MessagesPage() {
                       : "border-transparent hover:border-white/20"
                   }`}
                 >
+                  {/* <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-white font-semibold text-lg">
+                      Short Time
+                    </h3>
+                    {selectedPlan === "short-outcall" && (
+                      <div className="w-6 h-6 bg-[#FA266D] rounded-full flex items-center justify-center">
+                        <Check className="h-4 w-4 text-white" />
+                      </div>
+                    )}
+                  </div> */}
+
                   <div className="flex items-center justify-between mb-4">
                     <p className="font-semibold text-white text-[20px]">
                       Incall
                     </p>
                     <p className="text-[16px] font-medium text-white">
-                      {userPricing?.overnight?.incall 
-                        ? `${Number(userPricing.overnight.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.overnight.currency || 'APH'}`
-                        : "---"}
+                      50,000.00 APH
                     </p>
                   </div>
                   <div className="flex items-center justify-between">
@@ -3257,9 +3099,7 @@ export default function MessagesPage() {
                       Outcall
                     </p>
                     <p className="text-[16px] font-medium text-white">
-                      {userPricing?.overnight?.outcall 
-                        ? `${Number(userPricing.overnight.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.overnight.currency || 'APH'}`
-                        : "---"}
+                      70,000.00 APH
                     </p>
                   </div>
 
@@ -3268,7 +3108,7 @@ export default function MessagesPage() {
                   </button>
                 </div>
 
-                {/* Plan 3 - Weekend */}
+                {/* Plan 3 - Overnight Incall */}
                 <div
                   onClick={() => handlePlanSelect("weekend")}
                   className={`bg-gray-800/50 rounded-[20px] p-6 cursor-pointer border-2 transition-all ${
@@ -3277,24 +3117,28 @@ export default function MessagesPage() {
                       : "border-transparent hover:border-white/20"
                   }`}
                 >
+                  {/* <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-white font-semibold text-lg">
+                      Overnight
+                    </h3>
+                    {selectedPlan === "overnight-incall" && (
+                      <div className="w-6 h-6 bg-[#FA266D] rounded-full flex items-center justify-center">
+                        <Check className="h-4 w-4 text-white" />
+                      </div>
+                    )}
+                  </div> */}
                   <div className="flex items-center justify-between mb-4">
                     <p className="font-semibold text-white text-[20px]">
                       Incall
                     </p>
-                    <p className="text-[16px] font-medium text-white">
-                      {userPricing?.weekend?.incall 
-                        ? `${Number(userPricing.weekend.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.weekend.currency || 'APH'}`
-                        : "---"}
-                    </p>
+                    <p className="text-[16px] font-medium text-white">---</p>
                   </div>
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-white text-[20px]">
                       Outcall
                     </p>
                     <p className="text-[16px] font-medium text-white">
-                      {userPricing?.weekend?.outcall 
-                        ? `${Number(userPricing.weekend.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${userPricing.weekend.currency || 'APH'}`
-                        : "---"}
+                      70,000.00 APH
                     </p>
                   </div>
 
@@ -3303,7 +3147,7 @@ export default function MessagesPage() {
                   </button>
                 </div>
 
-                {/* Plan 4 - Custom Price */}
+                {/* Plan 4 - Overnight Outcall */}
                 <div
                   onClick={() => handlePlanSelect("custom-price")}
                   className={`bg-gray-800/50 rounded-[20px] p-6 cursor-pointer border-2 transition-all ${
@@ -3313,20 +3157,13 @@ export default function MessagesPage() {
                   }`}
                 >
                   {/* input price */}
-                  <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  <div className="relative">
                     {/* Briefcase inside input */}
                     <Briefcase className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
 
                     <input
                       type="number"
                       placeholder="Input price here"
-                      value={customPrice}
-                      onChange={(e) => {
-                        setCustomPrice(e.target.value);
-                        if (e.target.value) {
-                          handlePlanSelect("custom-price");
-                        }
-                      }}
                       className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
@@ -3346,19 +3183,15 @@ export default function MessagesPage() {
                   Cancel
                 </button> */}
                 <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleSendPricing();
-                  }}
-                  disabled={!selectedPlan || (selectedPlan === "custom-price" && !customPrice.trim()) || loadingProfile || sending || Array.from(sendingPricingRef.current).length > 0}
-                  className={`flex-1 py-3 rounded-[40px] font-semibold transition-colors cursor-pointer ${
-                    selectedPlan && (selectedPlan !== "custom-price" || customPrice.trim()) && !loadingProfile && !sending && Array.from(sendingPricingRef.current).length === 0
+                  onClick={handleSendPricing}
+                  disabled={!selectedPlan}
+                  className={`flex-1 py-3 rounded-[40px] font-semibold transition-colors ${
+                    selectedPlan
                       ? "bg-[#FA266D] text-white hover:bg-pink-600"
                       : "bg-gray-700 text-gray-500 cursor-not-allowed"
                   }`}
                 >
-                  {loadingProfile ? "Loading..." : sending || Array.from(sendingPricingRef.current).length > 0 ? "Sending..." : "Send Pricing"}
+                  Send Pricing
                 </button>
               </div>
             </div>
