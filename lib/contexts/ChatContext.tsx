@@ -108,11 +108,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!socket) return;
 
     const handleRoomListUpdate = (data: { rooms: ChatRoom[]; timestamp: string }) => {
-      
-      // Sort rooms by last activity (most recent first)
       const sortedRooms = [...data.rooms].sort((a, b) => {
-        const timeA = new Date(a.updatedAt || a.createdAt).getTime();
-        const timeB = new Date(b.updatedAt || b.createdAt).getTime();
+        const timeA = new Date(a.updatedAt).getTime();
+        const timeB = new Date(b.updatedAt).getTime();
         return timeB - timeA;
       });
       
@@ -121,19 +119,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Update online users map
       const newOnlineUsers = new Map<string, boolean>();
       sortedRooms.forEach(room => {
-        room.participants.forEach(participant => {
-          // Handle both string and object participants
-          if (typeof participant === 'string') {
-            // If participant is a string (userId), skip online status check
-            return;
-          } else if (typeof participant === 'object' && participant !== null) {
-            const participantObj = participant as any;
-            const participantUserId = participantObj.userId || participantObj.id || participantObj._id;
-            if (participantUserId && participantUserId !== userId) {
-              newOnlineUsers.set(String(participantUserId), participantObj.isOnline || false);
+        if (Array.isArray(room.participants)) {
+          room.participants.forEach(participantId => {
+            if (participantId && participantId !== userId) {
+              newOnlineUsers.set(participantId, false);
             }
-          }
-        });
+          });
+        }
       });
       setOnlineUsers(newOnlineUsers);
       
@@ -141,10 +133,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newUnreadCounts = new Map<string, number>();
       sortedRooms.forEach(room => {
         if (room.unreadCount !== undefined) {
-          const roomKey = room.roomId || room.id;
-          if (roomKey) {
-            newUnreadCounts.set(roomKey, room.unreadCount);
-          }
+          const key = room.roomId || room.id;
+          newUnreadCounts.set(key, room.unreadCount);
         }
       });
       setUnreadCounts(newUnreadCounts);
