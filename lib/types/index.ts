@@ -3,6 +3,7 @@
  */
 export * from './api.types';
 export * from './auth.types';
+export * from './chat.types';
 export * from './wallet.types';
 export * from './rider.types';
 export * from './order.types';

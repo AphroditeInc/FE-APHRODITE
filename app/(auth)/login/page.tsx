@@ -63,13 +63,24 @@ export default function LoginPage() {
       
       if (result && result.data) {
         const data = result.data;
-        // Handle different response formats
         const tokens = data.tokens || data;
         const user = data.user || data.data?.user;
+
+        const accessToken = tokens.accessToken || tokens.access_token;
+        const refreshToken = tokens.refreshToken || tokens.refresh_token;
+        const expiresIn = tokens.expiresIn || tokens.expires_in || '';
+
+        if (typeof window !== 'undefined' && expiresIn) {
+          try {
+            localStorage.setItem('expiresIn', String(expiresIn));
+          } catch (storageError) {
+            console.error('[LoginPage] Failed to store expiresIn:', storageError);
+          }
+        }
         
         dispatch(setCredentials({
-          access_token: tokens.accessToken || tokens.access_token,
-          refresh_token: tokens.refreshToken || tokens.refresh_token,
+          access_token: accessToken,
+          refresh_token: refreshToken,
           user: user,
           uid: user?.id || data.uid || data.userId,
         }));
