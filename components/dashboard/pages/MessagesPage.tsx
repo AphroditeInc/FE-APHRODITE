@@ -22,6 +22,7 @@ import { ChatSidebar } from "@/components/dashboard/messages/ChatSidebar";
 import { ChatHeader } from "@/components/dashboard/messages/ChatHeader";
 import { useMessagesRooms } from "@/components/dashboard/messages/useMessagesRooms";
 import { useChatWebSocket } from "@/components/dashboard/messages/useChatWebSocket";
+import { CheckoutModal } from "@/components/dashboard/messages/CheckoutModal";
 
 interface Participant {
   id?: string;
@@ -73,10 +74,17 @@ export default function MessagesPage() {
   } | null>(null);
   const [showPricingDialog, setShowPricingDialog] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PricingPlan>(null);
+  const [customPrice, setCustomPrice] = useState("");
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
   const [newChatUserId, setNewChatUserId] = useState("");
   const [preloadedProfileId, setPreloadedProfileId] = useState<string | null>(null);
   const hasProcessedQueryParams = useRef(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<"short-time" | "overnight" | "weekend" | "custom-price">("short-time");
+  const [checkoutAmounts, setCheckoutAmounts] = useState<{ incall: string; outcall: string }>({
+    incall: "50,000.00 APH",
+    outcall: "70,000.00 APH",
+  });
 
   const currentUserId = userId || user?.id || fallbackUserId;
 
@@ -968,6 +976,7 @@ export default function MessagesPage() {
   const closePricingDialog = () => {
     setShowPricingDialog(false);
     setSelectedPlan(null);
+    setCustomPrice("");
   };
 
   const handlePlanSelect = (plan: PricingPlan) => {
@@ -1005,14 +1014,34 @@ export default function MessagesPage() {
     const now = new Date().toISOString();
 
     const pricingData = {
-      shortTime: {
-        incall: "50,000.00 APH",
-        outcall: "70,000.00 APH",
-      },
-      overnight: {
-        incall: "70,000.00 APH",
-        outcall: "100,000.00 APH",
-      },
+      shortTime:
+        selectedPlan === "short-time"
+          ? {
+              incall: "50,000.00 APH",
+              outcall: "70,000.00 APH",
+            }
+          : undefined,
+      overnight:
+        selectedPlan === "overnight"
+          ? {
+              incall: "70,000.00 APH",
+              outcall: "100,000.00 APH",
+            }
+          : undefined,
+      weekend:
+        selectedPlan === "weekend"
+          ? {
+              incall: "---",
+              outcall: "70,000.00 APH",
+            }
+          : undefined,
+      customPrice:
+        selectedPlan === "custom-price" && customPrice
+          ? {
+              incall: `${customPrice} APH`,
+              outcall: `${customPrice} APH`,
+            }
+          : undefined,
     };
 
     const optimisticMessage: ChatMessage = {
@@ -1119,6 +1148,30 @@ export default function MessagesPage() {
         prev.filter((msg) => msg.tempId !== tempId)
       );
     }
+  };
+
+  const handleBookShortTime = (pricing: { incall: string; outcall: string }) => {
+    setCheckoutPlan("short-time");
+    setCheckoutAmounts(pricing);
+    setShowCheckout(true);
+  };
+
+  const handleBookOvernight = (pricing: { incall: string; outcall: string }) => {
+    setCheckoutPlan("overnight");
+    setCheckoutAmounts(pricing);
+    setShowCheckout(true);
+  };
+
+  const handleBookWeekend = (pricing: { incall: string; outcall: string }) => {
+    setCheckoutPlan("weekend");
+    setCheckoutAmounts(pricing);
+    setShowCheckout(true);
+  };
+
+  const handleBookCustomPrice = (pricing: { incall: string; outcall: string }) => {
+    setCheckoutPlan("custom-price");
+    setCheckoutAmounts(pricing);
+    setShowCheckout(true);
   };
 
   const handleStartNewChat = async () => {
@@ -1360,7 +1413,24 @@ export default function MessagesPage() {
               }
               onSharePricing={handleSharePricing}
               onMediaClick={handleMediaClick}
+              onBookShortTime={handleBookShortTime}
+              onBookOvernight={handleBookOvernight}
+              onBookWeekend={handleBookWeekend}
+              onBookCustomPrice={handleBookCustomPrice}
             />
+            {showCheckout && selectedChat && (
+              <CheckoutModal
+                open={showCheckout}
+                plan={checkoutPlan}
+                amounts={checkoutAmounts}
+                providerUserId={getOtherParticipantId() || ""}
+                roomId={selectedChat}
+                onClose={() => setShowCheckout(false)}
+                onSuccess={() => {
+                  setShowCheckout(false);
+                }}
+              />
+            )}
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center relative">
@@ -1414,6 +1484,8 @@ export default function MessagesPage() {
         open={showPricingDialog}
         selectedPlan={selectedPlan}
         onSelectPlan={handlePlanSelect}
+        customPrice={customPrice}
+        onChangeCustomPrice={setCustomPrice}
         onSend={handleSendPricing}
         onClose={closePricingDialog}
       />

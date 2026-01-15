@@ -8,6 +8,8 @@ type PricingPlanDialogProps = {
   open: boolean;
   selectedPlan: PricingPlan;
   onSelectPlan: (plan: PricingPlan) => void;
+  customPrice: string;
+  onChangeCustomPrice: (value: string) => void;
   onSend: () => void;
   onClose: () => void;
 };
@@ -16,6 +18,8 @@ export function PricingPlanDialog({
   open,
   selectedPlan,
   onSelectPlan,
+  customPrice,
+  onChangeCustomPrice,
   onSend,
   onClose,
 }: PricingPlanDialogProps) {
@@ -134,6 +138,8 @@ export function PricingPlanDialog({
                 <input
                   type="number"
                   placeholder="Input price here"
+                  value={customPrice}
+                  onChange={e => onChangeCustomPrice(e.target.value)}
                   className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
