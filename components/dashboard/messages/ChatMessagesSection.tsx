@@ -22,9 +22,12 @@ type UIMessage = {
   duration?: string;
   videoThumbnail?: string;
   pricing?: {
-    shortTime: { incall: string; outcall: string };
-    overnight: { incall: string; outcall: string };
+    shortTime?: { incall: string; outcall: string };
+    overnight?: { incall: string; outcall: string };
+    weekend?: { incall: string; outcall: string };
+    customPrice?: { incall: string; outcall: string };
   };
+  selectedPlan?: "short-time" | "overnight" | "weekend" | "custom-price";
 };
 
 type ChatMessagesSectionProps = {
@@ -42,6 +45,10 @@ type ChatMessagesSectionProps = {
   canSharePricing: boolean;
   onSharePricing: () => void;
   onMediaClick: (type: "video" | "image", src: string, duration?: string) => void;
+  onBookShortTime?: (pricing: { incall: string; outcall: string }) => void;
+  onBookOvernight?: (pricing: { incall: string; outcall: string }) => void;
+  onBookWeekend?: (pricing: { incall: string; outcall: string }) => void;
+  onBookCustomPrice?: (pricing: { incall: string; outcall: string }) => void;
 };
 
 const formatTime = (dateString: string) => {
@@ -64,6 +71,10 @@ export function ChatMessagesSection({
   canSharePricing,
   onSharePricing,
   onMediaClick,
+  onBookShortTime,
+  onBookOvernight,
+  onBookWeekend,
+  onBookCustomPrice,
 }: ChatMessagesSectionProps) {
   const convertToUIMessage = (apiMessage: ChatMessage): UIMessage => {
     const normalizeId = (
@@ -97,6 +108,7 @@ export function ChatMessagesSection({
     }
 
     let pricingData: UIMessage["pricing"] | undefined;
+    let selectedPlan: UIMessage["selectedPlan"] | undefined;
 
     if (messageType === "pricing") {
       const meta = apiMessage.metadata as
@@ -104,25 +116,41 @@ export function ChatMessagesSection({
             pricing?: {
               shortTime?: { incall?: string; outcall?: string };
               overnight?: { incall?: string; outcall?: string };
+              weekend?: { incall?: string; outcall?: string };
+              customPrice?: { incall?: string; outcall?: string };
             };
+            selectedPlan?: UIMessage["selectedPlan"];
           }
         | undefined;
 
       const metaPricing = meta?.pricing;
+      selectedPlan = meta?.selectedPlan;
 
       pricingData = {
-        shortTime: {
-          incall:
-            metaPricing?.shortTime?.incall ?? "50,000.00 APH",
-          outcall:
-            metaPricing?.shortTime?.outcall ?? "70,000.00 APH",
-        },
-        overnight: {
-          incall:
-            metaPricing?.overnight?.incall ?? "70,000.00 APH",
-          outcall:
-            metaPricing?.overnight?.outcall ?? "100,000.00 APH",
-        },
+        shortTime: metaPricing?.shortTime
+          ? {
+              incall: metaPricing.shortTime.incall ?? "50,000.00 APH",
+              outcall: metaPricing.shortTime.outcall ?? "70,000.00 APH",
+            }
+          : undefined,
+        overnight: metaPricing?.overnight
+          ? {
+              incall: metaPricing.overnight.incall ?? "70,000.00 APH",
+              outcall: metaPricing.overnight.outcall ?? "100,000.00 APH",
+            }
+          : undefined,
+        weekend: metaPricing?.weekend
+          ? {
+              incall: metaPricing.weekend.incall ?? "---",
+              outcall: metaPricing.weekend.outcall ?? "70,000.00 APH",
+            }
+          : undefined,
+        customPrice: metaPricing?.customPrice
+          ? {
+              incall: metaPricing.customPrice.incall ?? "",
+              outcall: metaPricing.customPrice.outcall ?? "",
+            }
+          : undefined,
       };
     }
 
@@ -137,6 +165,7 @@ export function ChatMessagesSection({
         (apiMessage.metadata?.imageUrl as string) ||
         apiMessage.attachments?.[0],
       pricing: pricingData,
+      selectedPlan,
     };
   };
 
@@ -144,19 +173,30 @@ export function ChatMessagesSection({
     const isOwnMessage = message.sender === "me";
 
     if (message.type === "pricing") {
-      const pricing = message.pricing || {
-        shortTime: {
-          incall: "50,000.00 APH",
-          outcall: "70,000.00 APH",
-        },
-        overnight: {
-          incall: "70,000.00 APH",
-          outcall: "100,000.00 APH",
-        },
-      };
+      const pricing = message.pricing || {};
+      const plan = message.selectedPlan;
 
-      return (
-        <div className="space-y-3">
+      // Determine what to show based on plan selection or available data
+      const showShortTime =
+        (plan === "short-time" && pricing.shortTime) ||
+        (!plan && pricing.shortTime && !pricing.overnight);
+      
+      const showOvernight =
+        (plan === "overnight" && pricing.overnight) ||
+        (!plan && pricing.overnight && !pricing.shortTime);
+      
+      const showWeekend =
+        (plan === "weekend" && pricing.weekend) ||
+        (!plan && pricing.weekend);
+      
+      const showCustom =
+        (plan === "custom-price" && pricing.customPrice) ||
+        (!plan && pricing.customPrice);
+
+      const showLegacy = !plan && pricing.shortTime && pricing.overnight;
+
+      if (showShortTime && pricing.shortTime) {
+        return (
           <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
             <div className="space-y-3">
               <div className="flex justify-between items-center">
@@ -172,11 +212,21 @@ export function ChatMessagesSection({
                 </span>
               </div>
             </div>
-            <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium">
+            <button
+              className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+              onClick={() => {
+                const p = pricing.shortTime;
+                if (p) onBookShortTime && onBookShortTime({ incall: p.incall, outcall: p.outcall });
+              }}
+            >
               Book short time
             </button>
           </div>
+        );
+      }
 
+      if (showOvernight && pricing.overnight) {
+        return (
           <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
             <div className="space-y-3">
               <div className="flex justify-between items-center">
@@ -192,12 +242,141 @@ export function ChatMessagesSection({
                 </span>
               </div>
             </div>
-            <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium">
+            <button
+              className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+              onClick={() => {
+                const p = pricing.overnight;
+                if (p) onBookOvernight && onBookOvernight({ incall: p.incall, outcall: p.outcall });
+              }}
+            >
               Book overnight
             </button>
           </div>
-        </div>
-      );
+        );
+      }
+
+      if (showWeekend && pricing.weekend) {
+        return (
+          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-white text-[20px]">Incall</span>
+                <span className="text-white font-semibold text-[20px]">
+                  {pricing.weekend.incall}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-white text-[20px]">Outcall</span>
+                <span className="text-white font-semibold text-[20px]">
+                  {pricing.weekend.outcall}
+                </span>
+              </div>
+            </div>
+            <button
+              className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+              onClick={() => {
+                const p = pricing.weekend;
+                if (p) onBookWeekend && onBookWeekend({ incall: p.incall, outcall: p.outcall });
+              }}
+            >
+              Book weekend
+            </button>
+          </div>
+        );
+      }
+
+      if (showCustom && pricing.customPrice) {
+        return (
+          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-white text-[20px]">Incall</span>
+                <span className="text-white font-semibold text-[20px]">
+                  {pricing.customPrice.incall}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-white text-[20px]">Outcall</span>
+                <span className="text-white font-semibold text-[20px]">
+                  {pricing.customPrice.outcall}
+                </span>
+              </div>
+            </div>
+            <button
+              className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+              onClick={() => {
+                const p = pricing.customPrice;
+                if (p) onBookCustomPrice && onBookCustomPrice({ incall: p.incall, outcall: p.outcall });
+              }}
+            >
+              Book custom price
+            </button>
+          </div>
+        );
+      }
+
+      // Default fallback (Legacy behavior: show both Short Time and Overnight)
+      // Or if explicitly showing legacy
+      if (showLegacy && pricing.shortTime && pricing.overnight) {
+        return (
+          <div className="space-y-3">
+            <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-white text-[20px]">Incall</span>
+                  <span className="text-white font-semibold text-[20px]">
+                    {pricing.shortTime.incall}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white text-[20px]">Outcall</span>
+                  <span className="text-white font-semibold text-[20px]">
+                    {pricing.shortTime.outcall}
+                  </span>
+                </div>
+              </div>
+              <button
+                className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+                onClick={() => {
+                  const p = pricing.shortTime;
+                  if (p) onBookShortTime && onBookShortTime({ incall: p.incall, outcall: p.outcall });
+                }}
+              >
+                Book short time
+              </button>
+            </div>
+
+            <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-white text-[20px]">Incall</span>
+                  <span className="text-white font-semibold text-[20px]">
+                    {pricing.overnight.incall}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-white text-[20px]">Outcall</span>
+                  <span className="text-white font-semibold text-[20px]">
+                    {pricing.overnight.outcall}
+                  </span>
+                </div>
+              </div>
+              <button
+                className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+                onClick={() => {
+                  const p = pricing.overnight;
+                  if (p) onBookOvernight && onBookOvernight({ incall: p.incall, outcall: p.outcall });
+                }}
+              >
+                Book overnight
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // If nothing matches (e.g. data missing), render nothing or an error placeholder
+      return null;
     }
 
     if (message.type === "audio") {
@@ -485,4 +664,3 @@ export function ChatMessagesSection({
     </>
   );
 }
-
