@@ -3,10 +3,11 @@
 import { useState, useEffect } from "react";
 import { Wallet, Plus, Download, ArrowDownLeft, ArrowUpRight, CheckCircle2, XCircle, Clock, X, ArrowUp, ChevronDown, AlertCircle, CheckCircle, HandCoins, Eye, EyeOff } from "lucide-react";
 import { useGetWalletBalanceQuery, useGetTransactionsQuery, useFundWalletMutation, useVerifyPaymentMutation } from "@/app/api/apiSlice";
-import { useAuthProfile } from "@/lib/hooks";
+import { useAuth, useAuthProfile } from "@/lib/hooks";
 import { useMemo } from "react";
 export default function WalletPage() {
   const { user } = useAuthProfile();
+  const { isDiva, isHunk } = useAuth();
   const { data: walletBalanceData, isLoading: isLoadingBalance, refetch: refetchBalance } = useGetWalletBalanceQuery(undefined, {
     pollingInterval: 30000, // Poll every 30 seconds
     refetchOnMountOrArgChange: true,
@@ -280,10 +281,12 @@ export default function WalletPage() {
                 <Plus className="w-5 h-5" />
                 <span>Fund Wallet</span>
               </button>
-              <button className="w-[210px] h-[56px] rounded-[30px] bg-white hover:bg-white/90 text-[#FA266D] flex items-center justify-center gap-2 transition-colors font-urbanist font-semibold text-base leading-none capitalize">
-                <Download className="w-5 h-5" />
-                <span>Request Payout</span>
-              </button>
+              {(isDiva || isHunk) && (
+                <button className="w-[210px] h-[56px] rounded-[30px] bg-white hover:bg-white/90 text-[#FA266D] flex items-center justify-center gap-2 transition-colors font-urbanist font-semibold text-base leading-none capitalize">
+                  <Download className="w-5 h-5" />
+                  <span>Request Payout</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -520,4 +523,3 @@ export default function WalletPage() {
     </div>
   );
 }
-

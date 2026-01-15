@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useChatSocket } from '../hooks/useChatSocket';
 import { useAuth } from '../hooks/useAuth';
-import { ChatRoom, ChatMessage } from '../types/auth.types';
+import { ChatRoom, ChatMessage } from '../types/chat.types';
 
 // Keep local RoomParticipant for backwards compatibility if needed,
 // but ChatRoom now comes from auth.types with participants as string[]
