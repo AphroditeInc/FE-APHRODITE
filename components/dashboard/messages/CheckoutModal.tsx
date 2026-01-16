@@ -1,8 +1,9 @@
 "use client";
 
-import { X, Check, MapPin } from "lucide-react";
+import { Check, MapPin, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useCreateOrderMutation, useGetWalletBalanceQuery } from "@/app/api/apiSlice";
 import type { CreateOrderPayload } from "@/lib/types";
 
@@ -13,9 +14,8 @@ type CheckoutModalProps = {
   plan: "short-time" | "overnight" | "weekend" | "custom-price";
   amounts: PricingAmounts;
   providerUserId: string;
-  roomId: string;
+  roomId?: string;
   onClose: () => void;
-  onSuccess?: (orderId: string) => void;
 };
 
 const parseAph = (value: string | number | undefined): number => {
@@ -33,29 +33,25 @@ export function CheckoutModal({
   providerUserId,
   roomId,
   onClose,
-  onSuccess,
 }: CheckoutModalProps) {
   const router = useRouter();
-  const [mode, setMode] = useState<"incall" | "outcall">("incall");
+  const [mode, setMode] = useState<"incall" | "outcall" | "">("");
   const [location, setLocation] = useState("");
   const [driverMessage, setDriverMessage] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const price = useMemo(() => {
-    return mode === "incall" ? parseAph(amounts.incall) : parseAph(amounts.outcall);
+    if (mode === "incall") return parseAph(amounts.incall);
+    if (mode === "outcall") return parseAph(amounts.outcall);
+    return 0;
   }, [mode, amounts]);
 
+  const hasIncall = useMemo(() => parseAph(amounts.incall) > 0, [amounts.incall]);
+  const hasOutcall = useMemo(() => parseAph(amounts.outcall) > 0, [amounts.outcall]);
+
   useEffect(() => {
-    const inc = parseAph(amounts.incall);
-    const out = parseAph(amounts.outcall);
-    if (inc > 0 && out > 0) {
-      setMode("incall");
-    } else if (inc > 0) {
-      setMode("incall");
-    } else if (out > 0) {
-      setMode("outcall");
-    }
+    setMode("");
   }, [plan, amounts.incall, amounts.outcall]);
 
   const serviceCharge = useMemo(() => Math.round(price * 0.1), [price]);
@@ -68,17 +64,7 @@ export function CheckoutModal({
     return typeof bal === "number" ? bal : parseAph(bal);
   }, [walletResp]);
 
-  const [createOrder, { isLoading, isSuccess, data: createdOrder }] = useCreateOrderMutation();
-
-  useEffect(() => {
-    if (isSuccess && createdOrder) {
-      setShowSuccess(true);
-      const orderId = (createdOrder as any)?.data?.id;
-      if (onSuccess && orderId) {
-        onSuccess(orderId);
-      }
-    }
-  }, [isSuccess, createdOrder]);
+  const [createOrder, { isLoading }] = useCreateOrderMutation();
 
   if (!open) return null;
 
@@ -88,8 +74,8 @@ export function CheckoutModal({
       setErrorMessage("Provider ID not available. Please reopen the chat and try again.");
       return;
     }
-    if (!roomId || roomId.trim() === "") {
-      setErrorMessage("Room ID not available. Please reopen the chat and try again.");
+    if (mode !== "incall" && mode !== "outcall") {
+      setErrorMessage("Please select service mode (Incall/Outcall).");
       return;
     }
     if (price <= 0) {
@@ -117,11 +103,16 @@ export function CheckoutModal({
       serviceCharge,
       locationFrom: location || undefined,
       notes: driverMessage || undefined,
-      roomId,
+      roomId: roomId && roomId.trim() !== "" ? roomId : undefined,
     };
 
     try {
-      await createOrder(payload).unwrap();
+      const result = await createOrder(payload).unwrap();
+      setShowSuccess(true);
+      const orderId = (result as any)?.data?.id || (result as any)?.id;
+      if (!orderId) {
+        console.warn("[CheckoutModal] Order created but could not determine order ID from response:", result);
+      }
     } catch (err) {
       let msg = "Failed to create order";
       try {
@@ -136,32 +127,44 @@ export function CheckoutModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      onClick={showSuccess ? undefined : onClose}
+    >
       <div
-        className="relative w-[621px] mx-4 bg-[#FFFFFF0F] backdrop-blur-[68px] text-white rounded-[24px] overflow-hidden"
+        className="relative w-[488px] mx-4 bg-[#FFFFFF0F] backdrop-blur-[68px] text-white rounded-[24px] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <button
+        {/* <button
           onClick={onClose}
           className="absolute top-4 right-4 z-10 bg-white/10 text-white p-2 rounded-full hover:bg-white/20 transition-colors"
           aria-label="Close"
         >
           <X className="h-6 w-6" />
-        </button>
+        </button> */}
 
         <div className="p-8">
           {showSuccess ? (
-            <div className="rounded-[24px] bg-[#0F0D16] p-8 text-center">
+            <div className="rounded-[24px] mx-auto  p-8 text-center">
               <div className="mb-6">
                 <div className="mx-auto flex items-center justify-center gap-2 text-[24px] font-semibold">
                   <span className="relative inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#FA266D]">
-                    <span className="absolute inset-1 rounded-full bg-[#FA266D]" />
+                    <Image
+                      src="/icons/logo.svg"
+                      alt="Aphrodite Logo"
+                      width={24}
+                      height={24}
+                      className="h-6 w-6"
+                    />
                   </span>
                   <span className="text-[#FA266D]">Aphrodite</span>
                 </div>
               </div>
-              <div className="mx-auto w-20 h-20 rounded-full border-4 border-green-500/60 flex items-center justify-center mb-6">
+
+              <div className=" w-[120px] h-[120px] rounded-full bg-[#11BF401A] mx-auto flex items-center justify-center">
+                <div className=" flex items-center justify-center mx-auto border-4 rounded-full w-20 h-20 border-green-500/60">
                 <Check className="h-10 w-10 text-green-400" />
+                </div>
               </div>
               <h3 className="text-[22px] font-semibold mb-3">Payment Successful</h3>
               <p className="text-sm text-white/70 mb-6">
@@ -181,14 +184,21 @@ export function CheckoutModal({
             <div className="space-y-4">
               <h2 className="text-[32px] font-bold mb-6">Checkout</h2>
               <div className="relative">
+                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/60 text-lg">
+                  ⚥
+                </span>
                 <select
                   value={mode}
                   onChange={(e) => setMode(e.target.value as "incall" | "outcall")}
-                  className="w-full bg-transparent border border-white/20 rounded-[40px] text-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  className="w-full py-3 appearance-none bg-transparent border border-[#FFFFFF1A] rounded-[32px] text-white pl-11 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500"
                 >
-                  <option value="incall">Incall</option>
-                  <option value="outcall">Outcall</option>
+                  <option value="" disabled>
+                    Select service mode (Incall/Outcall)
+                  </option>
+                  {hasIncall && <option value="incall">Incall</option>}
+                  {hasOutcall && <option value="outcall">Outcall</option>}
                 </select>
+                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-white/60 h-5 w-5" />
               </div>
 
               <div className="relative">

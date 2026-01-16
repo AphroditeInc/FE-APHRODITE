@@ -126,29 +126,38 @@ export function ChatMessagesSection({
       const metaPricing = meta?.pricing;
       selectedPlan = meta?.selectedPlan;
 
+      const valOrDash = (v?: string) =>
+        v && typeof v === "string" && v.trim() !== "" ? v : "---";
+
       pricingData = {
         shortTime: metaPricing?.shortTime
           ? {
-              incall: metaPricing.shortTime.incall ?? "50,000.00 APH",
-              outcall: metaPricing.shortTime.outcall ?? "70,000.00 APH",
+              incall: valOrDash(metaPricing.shortTime.incall),
+              outcall: valOrDash(metaPricing.shortTime.outcall),
             }
           : undefined,
         overnight: metaPricing?.overnight
           ? {
-              incall: metaPricing.overnight.incall ?? "70,000.00 APH",
-              outcall: metaPricing.overnight.outcall ?? "100,000.00 APH",
+              incall: valOrDash(metaPricing.overnight.incall),
+              outcall: valOrDash(metaPricing.overnight.outcall),
             }
           : undefined,
         weekend: metaPricing?.weekend
           ? {
-              incall: metaPricing.weekend.incall ?? "---",
-              outcall: metaPricing.weekend.outcall ?? "70,000.00 APH",
+              incall: valOrDash(metaPricing.weekend.incall),
+              outcall: valOrDash(metaPricing.weekend.outcall),
             }
           : undefined,
         customPrice: metaPricing?.customPrice
           ? {
-              incall: metaPricing.customPrice.incall ?? "",
-              outcall: metaPricing.customPrice.outcall ?? "",
+              incall:
+                metaPricing.customPrice.incall && typeof metaPricing.customPrice.incall === "string"
+                  ? metaPricing.customPrice.incall
+                  : "",
+              outcall:
+                metaPricing.customPrice.outcall && typeof metaPricing.customPrice.outcall === "string"
+                  ? metaPricing.customPrice.outcall
+                  : "",
             }
           : undefined,
       };

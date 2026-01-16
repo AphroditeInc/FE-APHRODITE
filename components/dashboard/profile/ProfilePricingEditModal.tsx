@@ -15,6 +15,28 @@ type ProfilePricingEditModalProps = {
   onUpdated: () => Promise<void> | void;
 };
 
+type ToastType = "success" | "error" | "info";
+
+type ToastState = {
+  type: ToastType;
+  message: string;
+} | null;
+
+export function useToast(timeout = 3000) {
+  const [toast, setToast] = useState<ToastState>(null);
+
+  const showToast = (message: string, type: ToastType) => {
+    setToast({ message, type });
+    if (timeout > 0) {
+      setTimeout(() => {
+        setToast(null);
+      }, timeout);
+    }
+  };
+
+  return { toast, showToast };
+}
+
 export function ProfilePricingEditModal({
   open,
   onClose,
@@ -25,6 +47,7 @@ export function ProfilePricingEditModal({
 }: ProfilePricingEditModalProps) {
   const [incall, setIncall] = useState("");
   const [outcall, setOutcall] = useState("");
+  const { toast, showToast } = useToast();
 
   const [updatePricing, { isLoading: isUpdatingPricing }] = useUpdatePricingMutation();
 
@@ -57,7 +80,7 @@ export function ProfilePricingEditModal({
 
   const handleSubmit = async () => {
     if (!profileId) {
-      alert("Profile ID not found. Please refresh the page and try again.");
+      showToast("Profile ID not found. Please refresh the page and try again.", "error");
       return;
     }
 
@@ -66,7 +89,7 @@ export function ProfilePricingEditModal({
     }
 
     if (!incall && !outcall) {
-      alert("Please enter at least one price (incall or outcall).");
+      showToast("Please enter at least one price (incall or outcall).", "error");
       return;
     }
 
@@ -97,15 +120,17 @@ export function ProfilePricingEditModal({
 
       if (result) {
         await onUpdated();
-        handleClose();
-        alert("Pricing updated successfully!");
+        showToast("Pricing updated successfully!", "success");
+        setTimeout(() => {
+          handleClose();
+        }, 3000);
       }
     } catch (error: any) {
       const errorMessage =
         error?.data?.message ||
         error?.message ||
         "Failed to update pricing. Please try again.";
-      alert(`Error: ${errorMessage}`);
+      showToast(`Error: ${errorMessage}`, "error");
     }
   };
 
@@ -120,6 +145,19 @@ export function ProfilePricingEditModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+            toast.type === "success"
+              ? "bg-green-600 text-white"
+              : toast.type === "error"
+              ? "bg-red-600 text-white"
+              : "bg-gray-800 text-white"
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
       <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
@@ -181,4 +219,3 @@ export function ProfilePricingEditModal({
     </div>
   );
 }
-

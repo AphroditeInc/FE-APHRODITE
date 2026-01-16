@@ -46,6 +46,7 @@ export interface UpdateOrderLocationPayload {
 
 export interface Order {
   id: string;
+  orderId?: string;
   customerId: string;
   providerId: string;
   riderId?: string;
@@ -55,6 +56,7 @@ export interface Order {
   transportationCost: number;
   serviceCharge: number;
   totalAmount: number;
+  currency?: string;
   locationFrom?: string;
   locationTo?: string;
   distance?: number;
@@ -63,6 +65,17 @@ export interface Order {
   riderChatRoomId?: string;
   notes?: string;
   status: OrderStatus;
+  isPaid?: boolean;
+  paidAt?: string | null;
+  acceptedAt?: string | null;
+  rejectedAt?: string | null;
+  readyAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
+  riderAssignedAt?: string | null;
+  riderPickedUpAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -73,4 +86,3 @@ export interface ListOrdersQuery {
   cursor?: string;
   limit?: number;
 }
-

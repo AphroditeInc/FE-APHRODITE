@@ -1081,13 +1081,60 @@ export const apiSlice = createApi({
     listOrders: builder.query<ApiResponse<Order[]>, ListOrdersQuery>({
       query: (params) => {
         const searchParams = new URLSearchParams();
-        if (params.role) searchParams.append('role', params.role);
-        if (params.status) searchParams.append('status', params.status);
-        if (params.cursor) searchParams.append('cursor', params.cursor);
-        if (params.limit) searchParams.append('limit', params.limit.toString());
-        return `/orders${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+        if (params.role) searchParams.append("role", params.role);
+        if (params.status) searchParams.append("status", params.status);
+        if (params.cursor) searchParams.append("cursor", params.cursor);
+        if (params.limit) searchParams.append("limit", params.limit.toString());
+        return `/orders${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
       },
-      providesTags: ['User'],
+      transformResponse: (response: unknown): ApiResponse<Order[]> => {
+        if (!response || typeof response !== "object") {
+          return { success: false, data: [] };
+        }
+
+        const obj = response as Record<string, unknown>;
+
+        if (Array.isArray(obj)) {
+          return {
+            success: true,
+            data: obj as unknown as Order[],
+          };
+        }
+
+        if ("items" in obj && Array.isArray(obj.items)) {
+          return {
+            success: typeof obj.success === "boolean" ? (obj.success as boolean) : true,
+            data: obj.items as Order[],
+            message: typeof obj.message === "string" ? (obj.message as string) : undefined,
+          };
+        }
+
+        if ("data" in obj && Array.isArray(obj.data)) {
+          return {
+            success: typeof obj.success === "boolean" ? (obj.success as boolean) : true,
+            data: obj.data as Order[],
+            message: typeof obj.message === "string" ? (obj.message as string) : undefined,
+          };
+        }
+
+        if (
+          "data" in obj &&
+          obj.data &&
+          typeof obj.data === "object" &&
+          "items" in (obj.data as Record<string, unknown>) &&
+          Array.isArray((obj.data as Record<string, unknown>).items)
+        ) {
+          const dataObj = obj.data as Record<string, unknown>;
+          return {
+            success: typeof obj.success === "boolean" ? (obj.success as boolean) : true,
+            data: dataObj.items as Order[],
+            message: typeof obj.message === "string" ? (obj.message as string) : undefined,
+          };
+        }
+
+        return { success: false, data: [] };
+      },
+      providesTags: ["User"],
     }),
     getOrderById: builder.query<ApiResponse<Order>, string>({
       query: (id) => `/orders/${id}`,
@@ -1262,4 +1309,3 @@ export const {
   useEditMessageMutation,
   useDeleteMessageMutation,
 } = apiSlice;
-

@@ -4,6 +4,7 @@ import { Inbox, Menu } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth, useChatSocket } from "@/lib/hooks";
+import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
 import {
   useGetRoomMessagesQuery,
   useMarkRoomAsReadMutation,
@@ -87,6 +88,68 @@ export default function MessagesPage() {
   });
 
   const currentUserId = userId || user?.id || fallbackUserId;
+
+  const { profile: currentProfile } = useEnrichedProfile(
+    currentUserId || null
+  );
+
+  const formattedPricing = useMemo(
+    () => {
+      const pricing = currentProfile?.pricing as
+        | {
+            shortTime?: { incall?: number | null; outcall?: number | null };
+            overnight?: { incall?: number | null; outcall?: number | null };
+            weekend?: { incall?: number | null; outcall?: number | null };
+          }
+        | undefined;
+
+      if (!pricing) {
+        return null;
+      }
+
+      const formatValue = (value?: number | null) => {
+        if (value === null || typeof value === "undefined") {
+          return undefined;
+        }
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+          return undefined;
+        }
+        return `${num.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })} APH`;
+      };
+
+      return {
+        shortTime:
+          pricing.shortTime &&
+          (pricing.shortTime.incall || pricing.shortTime.outcall)
+            ? {
+                incall: formatValue(pricing.shortTime.incall),
+                outcall: formatValue(pricing.shortTime.outcall),
+              }
+            : undefined,
+        overnight:
+          pricing.overnight &&
+          (pricing.overnight.incall || pricing.overnight.outcall)
+            ? {
+                incall: formatValue(pricing.overnight.incall),
+                outcall: formatValue(pricing.overnight.outcall),
+              }
+            : undefined,
+        weekend:
+          pricing.weekend &&
+          (pricing.weekend.incall || pricing.weekend.outcall)
+            ? {
+                incall: formatValue(pricing.weekend.incall),
+                outcall: formatValue(pricing.weekend.outcall),
+              }
+            : undefined,
+      };
+    },
+    [currentProfile?.pricing]
+  );
 
   const {
     rooms,
@@ -1017,22 +1080,34 @@ export default function MessagesPage() {
       shortTime:
         selectedPlan === "short-time"
           ? {
-              incall: "50,000.00 APH",
-              outcall: "70,000.00 APH",
+              incall:
+                formattedPricing?.shortTime?.incall ??
+                "50,000.00 APH",
+              outcall:
+                formattedPricing?.shortTime?.outcall ??
+                "70,000.00 APH",
             }
           : undefined,
       overnight:
         selectedPlan === "overnight"
           ? {
-              incall: "70,000.00 APH",
-              outcall: "100,000.00 APH",
+              incall:
+                formattedPricing?.overnight?.incall ??
+                "70,000.00 APH",
+              outcall:
+                formattedPricing?.overnight?.outcall ??
+                "100,000.00 APH",
             }
           : undefined,
       weekend:
         selectedPlan === "weekend"
           ? {
-              incall: "---",
-              outcall: "70,000.00 APH",
+              incall:
+                formattedPricing?.weekend?.incall ??
+                "---",
+              outcall:
+                formattedPricing?.weekend?.outcall ??
+                "70,000.00 APH",
             }
           : undefined,
       customPrice:
@@ -1426,9 +1501,6 @@ export default function MessagesPage() {
                 providerUserId={getOtherParticipantId() || ""}
                 roomId={selectedChat}
                 onClose={() => setShowCheckout(false)}
-                onSuccess={() => {
-                  setShowCheckout(false);
-                }}
               />
             )}
           </>
@@ -1488,6 +1560,7 @@ export default function MessagesPage() {
         onChangeCustomPrice={setCustomPrice}
         onSend={handleSendPricing}
         onClose={closePricingDialog}
+        pricing={formattedPricing}
       />
 
       <NewChatDialog
