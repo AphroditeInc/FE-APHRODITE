@@ -74,32 +74,11 @@ export default function ProviderDashboardPage() {
   }, [walletBalanceData]);
 
   const bookingStats = useMemo(() => {
-    if (!ordersData || typeof ordersData !== 'object') {
-      return { totalBookings: 0, totalEarnings: 0 };
-    }
-
-    const response = ordersData as { success?: boolean; data?: unknown };
-    let orders: Order[] = [];
-
-    if (Array.isArray(response)) {
-      orders = response as unknown as Order[];
-    } else if ('data' in response && Array.isArray(response.data as unknown[])) {
-      orders = response.data as Order[];
-    } else if (
-      'data' in response &&
-      response.data &&
-      typeof response.data === 'object' &&
-      'items' in (response.data as { items?: unknown })
-    ) {
-      const items = (response.data as { items?: unknown }).items;
-      if (Array.isArray(items)) {
-        orders = items as Order[];
-      }
-    }
+    const orders: Order[] = ordersData?.data ?? [];
 
     const totalBookings = orders.length;
     const totalEarnings = orders.reduce((sum, order) => {
-      const amount = typeof order.totalAmount === 'number' ? order.totalAmount : 0;
+      const amount = typeof order.totalAmount === "number" ? order.totalAmount : 0;
       return sum + amount;
     }, 0);
 

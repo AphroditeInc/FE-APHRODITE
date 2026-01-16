@@ -8,6 +8,8 @@ import { useGetProfileByIdQuery } from "@/feature/profile/profileApiSlice";
 import type { EnrichedProfile } from "@/lib/types/auth.types";
 import { ProfileDetailSkeleton } from "@/components/ui/Skeleton";
 import CustomPricingModal from "../modals/CustomPricingModal";
+import { PricingPlanDialog, type PricingPlan } from "@/components/dashboard/messages/PricingPlanDialog";
+import { CheckoutModal } from "@/components/dashboard/messages/CheckoutModal";
 
 // Array of background images
 const backgroundImages = [
@@ -39,6 +41,15 @@ export default function ProfileDetailPage() {
   const [reviewRating, setReviewRating] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
   const [isCustomPricingModalOpen, setIsCustomPricingModalOpen] = useState(false);
+  const [showPricingDialog, setShowPricingDialog] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<PricingPlan>(null);
+  const [customPrice, setCustomPrice] = useState("");
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<"short-time" | "overnight" | "weekend" | "custom-price">("short-time");
+  const [checkoutAmounts, setCheckoutAmounts] = useState<{ incall: string; outcall: string }>({
+    incall: "0",
+    outcall: "0",
+  });
 
   // Fetch profile from API
   const { data: profileResponse, isLoading, error } = useGetProfileByIdQuery(profileId, {
@@ -370,7 +381,14 @@ export default function ProfileDetailPage() {
             {/* Action Buttons */}
             <div className="flex flex-col gap-3 mt-6">
               {/* Book Now Button */}
-              <button className="w-full h-[56px] rounded-[30px] bg-[#FA266D] hover:bg-[#E91E63] text-white font-semibold flex items-center justify-center gap-2 transition-colors">
+              <button
+                onClick={() => {
+                  setSelectedPlan(null);
+                  setCustomPrice("");
+                  setShowPricingDialog(true);
+                }}
+                className="w-full h-[56px] rounded-[30px] bg-[#FA266D] hover:bg-[#E91E63] text-white font-semibold flex items-center justify-center gap-2 transition-colors"
+              >
                 <BookOpen className="w-5 h-5" />
                 Book Now
               </button>
@@ -467,6 +485,103 @@ export default function ProfileDetailPage() {
           </button>
         </div>
       </div>
+
+      <PricingPlanDialog
+        open={showPricingDialog}
+        selectedPlan={selectedPlan}
+        onSelectPlan={setSelectedPlan}
+        customPrice={customPrice}
+        onChangeCustomPrice={setCustomPrice}
+        onSend={() => {
+          if (!selectedPlan || !enrichedProfile?.pricing) {
+            return;
+          }
+
+          const pricing = enrichedProfile.pricing;
+
+          if (selectedPlan === "short-time" && pricing.shortTime) {
+            const incall =
+              pricing.shortTime.incall !== undefined && pricing.shortTime.incall !== null
+                ? String(pricing.shortTime.incall)
+                : "0";
+            const outcall =
+              pricing.shortTime.outcall !== undefined && pricing.shortTime.outcall !== null
+                ? String(pricing.shortTime.outcall)
+                : "0";
+            setCheckoutPlan("short-time");
+            setCheckoutAmounts({ incall, outcall });
+          } else if (selectedPlan === "overnight" && pricing.overnight) {
+            const incall =
+              pricing.overnight.incall !== undefined && pricing.overnight.incall !== null
+                ? String(pricing.overnight.incall)
+                : "0";
+            const outcall =
+              pricing.overnight.outcall !== undefined && pricing.overnight.outcall !== null
+                ? String(pricing.overnight.outcall)
+                : "0";
+            setCheckoutPlan("overnight");
+            setCheckoutAmounts({ incall, outcall });
+          } else if (selectedPlan === "weekend" && pricing.weekend) {
+            const incall =
+              pricing.weekend.incall !== undefined && pricing.weekend.incall !== null
+                ? String(pricing.weekend.incall)
+                : "0";
+            const outcall =
+              pricing.weekend.outcall !== undefined && pricing.weekend.outcall !== null
+                ? String(pricing.weekend.outcall)
+                : "0";
+            setCheckoutPlan("weekend");
+            setCheckoutAmounts({ incall, outcall });
+          } else if (selectedPlan === "custom-price" && customPrice) {
+            setCheckoutPlan("custom-price");
+            setCheckoutAmounts({ incall: customPrice, outcall: customPrice });
+          } else {
+            return;
+          }
+
+          setShowPricingDialog(false);
+          setShowCheckout(true);
+        }}
+        onClose={() => setShowPricingDialog(false)}
+        submitLabel="Book"
+        showCustomPrice={false}
+        pricing={
+          enrichedProfile?.pricing
+            ? {
+                shortTime: {
+                  incall:
+                    enrichedProfile.pricing.shortTime?.incall !== undefined
+                      ? String(enrichedProfile.pricing.shortTime.incall)
+                      : undefined,
+                  outcall:
+                    enrichedProfile.pricing.shortTime?.outcall !== undefined
+                      ? String(enrichedProfile.pricing.shortTime.outcall)
+                      : undefined,
+                },
+                overnight: {
+                  incall:
+                    enrichedProfile.pricing.overnight?.incall !== undefined
+                      ? String(enrichedProfile.pricing.overnight.incall)
+                      : undefined,
+                  outcall:
+                    enrichedProfile.pricing.overnight?.outcall !== undefined
+                      ? String(enrichedProfile.pricing.overnight.outcall)
+                      : undefined,
+                },
+                weekend: {
+                  incall:
+                    enrichedProfile.pricing.weekend?.incall !== undefined
+                      ? String(enrichedProfile.pricing.weekend.incall)
+                      : undefined,
+                  outcall:
+                    enrichedProfile.pricing.weekend?.outcall !== undefined
+                      ? String(enrichedProfile.pricing.weekend.outcall)
+                      : undefined,
+                },
+              }
+            : null
+        }
+      />
 
       {/* Tab Content */}
       <div className="px-12 pb-6">
@@ -967,6 +1082,16 @@ export default function ProfileDetailPage() {
         onClose={() => setIsCustomPricingModalOpen(false)}
         profileId={profileId}
       />
+
+      {showCheckout && enrichedProfile && (
+        <CheckoutModal
+          open={showCheckout}
+          plan={checkoutPlan}
+          amounts={checkoutAmounts}
+          providerUserId={enrichedProfile.user?.id || enrichedProfile.userId || ""}
+          onClose={() => setShowCheckout(false)}
+        />
+      )}
     </div>
   );
 }
