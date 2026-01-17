@@ -637,7 +637,7 @@ export function ChatMessagesSection({
       </div>
 
       <div className="bg-[#1F1B2C] px-3 py-2 md:p-4">
-        <div className="space-y-3">
+        <div className="flex items-center gap-3">
           <input
             type="text"
             placeholder="Write message..."
@@ -650,46 +650,44 @@ export function ChatMessagesSection({
                 onSendMessage(e);
               }
             }}
-            className="bg-transparent text-white placeholder-gray-400 focus:outline-none flex-1 text-base rounded-[32px] border border-white/10 py-[18px] pl-[24px] w-full"
+            className="bg-transparent text-white placeholder-gray-400 focus:outline-none flex-1 min-w-0 text-base rounded-[32px] border border-white/10 py-[14px] pl-[16px] pr-3"
             disabled={sending}
           />
 
-          <div className="flex items-center justify-end gap-3">
-            {canSharePricing && (
-              <button
-                onClick={onSharePricing}
-                className="text-[#FA266D] hover:text-pink-400 flex items-center gap-2 text-sm"
-              >
-                <MapPin className="h-4 w-4" />
-                Share Pricing Plan
-              </button>
-            )}
-            <button className="w-10 h-10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
-              <Image className="h-5 w-5 text-white" />
-            </button>
-            <button className="w-10 h-10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
-              <Mic className="h-5 w-5 text-white" />
-            </button>
+          {canSharePricing && (
             <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onSendMessage(e);
-              }}
-              disabled={!messageInput.trim() || sending}
-              className="bg-[#FA266D] text-white px-6 py-2 rounded-full flex items-center gap-2 hover:bg-pink-600 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+              onClick={onSharePricing}
+              className="hidden md:inline-flex text-[#FA266D] hover:text-pink-400 items-center gap-2 text-sm whitespace-nowrap"
             >
-              {sending ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              ) : (
-                <>
-                  <span className="text-sm font-medium">Send</span>
-                  <Send className="h-4 w-4" />
-                </>
-              )}
+              <MapPin className="h-4 w-4" />
+              Share Pricing
             </button>
-          </div>
+          )}
+          <button className="hidden sm:flex w-10 h-10 border border-white/20 rounded-full items-center justify-center hover:bg-white/10 transition-colors shrink-0">
+            <Image className="h-5 w-5 text-white" />
+          </button>
+          <button className="hidden sm:flex w-10 h-10 border border-white/20 rounded-full items-center justify-center hover:bg-white/10 transition-colors shrink-0">
+            <Mic className="h-5 w-5 text-white" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onSendMessage(e);
+            }}
+            disabled={!messageInput.trim() || sending}
+            className="bg-[#FA266D] text-white px-4 py-2 rounded-full flex items-center gap-2 hover:bg-pink-600 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed shrink-0"
+          >
+            {sending ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            ) : (
+              <>
+                <span className="text-sm font-medium">Send</span>
+                <Send className="h-4 w-4" />
+              </>
+            )}
+          </button>
         </div>
       </div>
     </>
