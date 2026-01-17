@@ -1438,7 +1438,7 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-[#1F1B2C] overflow-hidden">
+    <div className="flex flex-col md:flex-row bg-[#1F1B2C] h-full min-h-0">
       <div
         className={`${selectedChat ? "hidden md:block" : "block"} h-full`}
       >

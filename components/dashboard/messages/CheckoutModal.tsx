@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useCreateOrderMutation, useGetWalletBalanceQuery } from "@/app/api/apiSlice";
 import type { CreateOrderPayload } from "@/lib/types";
+import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
 
 type PricingAmounts = { incall: string; outcall: string };
 
@@ -40,6 +41,16 @@ export function CheckoutModal({
   const [driverMessage, setDriverMessage] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const { profile: providerProfile } = useEnrichedProfile(providerUserId || null);
+
+  const providerLocation = useMemo(() => {
+    if (!providerProfile) return undefined;
+    const city = providerProfile.city;
+    const state = providerProfile.state;
+    if (city && state) return `${city}, ${state}`;
+    return city || state || undefined;
+  }, [providerProfile?.city, providerProfile?.state]);
 
   const price = useMemo(() => {
     if (mode === "incall") return parseAph(amounts.incall);
@@ -82,6 +93,10 @@ export function CheckoutModal({
       setErrorMessage("Invalid price for selected mode. Please switch mode.");
       return;
     }
+    if (!location.trim()) {
+      setErrorMessage("Please enter your location.");
+      return;
+    }
     let serviceType: string;
 
     if (plan === "short-time") {
@@ -101,7 +116,8 @@ export function CheckoutModal({
       price,
       transportationCost: transportation,
       serviceCharge,
-      locationFrom: location || undefined,
+      locationFrom: providerLocation,
+      locationTo: location || undefined,
       notes: driverMessage || undefined,
       roomId: roomId && roomId.trim() !== "" ? roomId : undefined,
     };
