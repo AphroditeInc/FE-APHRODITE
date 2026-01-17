@@ -72,11 +72,11 @@ export default function UserTypePage() {
               </div>
 
               {/* Title + Description */}
-              <div>
-                <h3 className="text-lg font-semibold text-white">
+              <div className="space-y-1">
+                <h3 className="text-base sm:text-lg font-semibold text-white break-words">
                   {userType.title}
                 </h3>
-                <p className="text-sm text-gray-300 mt-1 w-[344px]">
+                <p className="text-xs sm:text-sm text-gray-300 mt-1 break-words">
                   {userType.description}
                 </p>
               </div>

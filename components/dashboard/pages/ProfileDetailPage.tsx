@@ -238,7 +238,7 @@ export default function ProfileDetailPage() {
       </div>
 
       {/* Main Profile Section */}
-      <div className="px-12 pb-6">
+      <div className="px-4 sm:px-8 lg:px-12 pb-6">
         <div className="flex flex-col lg:flex-row gap-6 sm:gap-8">
           {/* Profile Image/Media */}
           <div className="lg:w-1/2">
@@ -328,15 +328,15 @@ export default function ProfileDetailPage() {
               </button>
             </div>
             
-            {/* Location and Rating on one line */}
-            <div className="flex items-center gap-4">
+            {/* Location and Rating */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               {/* Location */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <div className="relative">
                   <MapPin className="w-[17.75px] h-[20.5px] text-[#FA266D] fill-[#FA266D]" />
                   <div className="absolute top-[5px] left-1/2 -translate-x-1/2 w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-black"></div>
                 </div>
-                <span className="text-[#FFFFFF99] text-[16px] font-normal sm:text-base">
+                <span className="text-[#FFFFFF99] text-sm sm:text-base font-normal truncate max-w-[180px] sm:max-w-xs">
                   {profile.location}
                 </span>
               </div>
@@ -351,7 +351,7 @@ export default function ProfileDetailPage() {
                     />
                   ))}
                 </div>
-                <span className="text-white italic font-normal text-[14px] sm:text-base">
+                <span className="text-white italic font-normal text-sm sm:text-base">
                   {profile.rating ? profile.rating.toFixed(1) : '0.0'}
                 </span>
               </div>
@@ -431,58 +431,60 @@ export default function ProfileDetailPage() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="px-12 pb-6">
-        <div className="flex space-x-8 border-b border-white/20">
-          <button 
-            onClick={() => setActiveTab("About")}
-            className={`pb-4 px-1 font-semibold transition-colors ${
-              activeTab === "About" 
-                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
-                : "text-white/60 hover:text-white"
-            }`}
-          >
-            About
-          </button>
-          <button 
-            onClick={() => setActiveTab("Services")}
-            className={`pb-4 px-1 font-semibold transition-colors ${
-              activeTab === "Services" 
-                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
-                : "text-white/60 hover:text-white"
-            }`}
-          >
-            Services
-          </button>
-          <button 
-            onClick={() => setActiveTab("Media")}
-            className={`pb-4 px-1 font-semibold transition-colors ${
-              activeTab === "Media" 
-                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
-                : "text-white/60 hover:text-white"
-            }`}
-          >
-            Media
-          </button>
-          <button 
-            onClick={() => setActiveTab("Reviews")}
-            className={`pb-4 px-1 font-semibold transition-colors ${
-              activeTab === "Reviews" 
-                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
-                : "text-white/60 hover:text-white"
-            }`}
-          >
-            Reviews
-          </button>
-          <button 
-            onClick={() => setActiveTab("Posts")}
-            className={`pb-4 px-1 font-semibold transition-colors ${
-              activeTab === "Posts" 
-                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
-                : "text-white/60 hover:text-white"
-            }`}
-          >
-            Posts
-          </button>
+      <div className="px-0 sm:px-8 lg:px-12 pb-4">
+        <div className="overflow-x-auto scrollbar-hide">
+          <div className="flex min-w-max px-4 sm:px-0 space-x-6 sm:space-x-8 border-b border-white/20">
+            <button
+              onClick={() => setActiveTab("About")}
+              className={`pb-3 sm:pb-4 px-1 text-sm sm:text-base font-semibold transition-colors ${
+                activeTab === "About"
+                  ? "text-[#FA266D] border-b-2 border-[#FA266D]"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              About
+            </button>
+            <button
+              onClick={() => setActiveTab("Services")}
+              className={`pb-3 sm:pb-4 px-1 text-sm sm:text-base font-semibold transition-colors ${
+                activeTab === "Services"
+                  ? "text-[#FA266D] border-b-2 border-[#FA266D]"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              Services
+            </button>
+            <button
+              onClick={() => setActiveTab("Media")}
+              className={`pb-3 sm:pb-4 px-1 text-sm sm:text-base font-semibold transition-colors ${
+                activeTab === "Media"
+                  ? "text-[#FA266D] border-b-2 border-[#FA266D]"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              Media
+            </button>
+            <button
+              onClick={() => setActiveTab("Reviews")}
+              className={`pb-3 sm:pb-4 px-1 text-sm sm:text-base font-semibold transition-colors ${
+                activeTab === "Reviews"
+                  ? "text-[#FA266D] border-b-2 border-[#FA266D]"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              Reviews
+            </button>
+            <button
+              onClick={() => setActiveTab("Posts")}
+              className={`pb-3 sm:pb-4 px-1 text-sm sm:text-base font-semibold transition-colors ${
+                activeTab === "Posts"
+                  ? "text-[#FA266D] border-b-2 border-[#FA266D]"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              Posts
+            </button>
+          </div>
         </div>
       </div>
 
@@ -584,75 +586,64 @@ export default function ProfileDetailPage() {
       />
 
       {/* Tab Content */}
-      <div className="px-12 pb-6">
+      <div className="px-4 sm:px-8 lg:px-12 pb-8">
         {activeTab === "About" && (
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Left Column */}
-            <div className="space-y-4">
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Gender</p>
-                <p className="text-white">{profile.gender || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Sexual Orientation</p>
-                <p className="text-white">{profile.sexualOrientation || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Looks</p>
-                <p className="text-white">{profile.looks || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Education</p>
-                <p className="text-white">{profile.education || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">City</p>
-                <p className="text-white">{profile.city || 'Not specified'}</p>
-              </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Gender</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.gender || 'Not specified'}</p>
             </div>
-
-            {/* Middle Column */}
-            <div className="space-y-4">
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Ethnicity</p>
-                <p className="text-white">{profile.ethnicity || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Body Build</p>
-                <p className="text-white">{profile.bodyBuild || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Smoker</p>
-                <p className="text-white">{profile.smoker || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Country</p>
-                <p className="text-white">{profile.country || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Last Seen</p>
-                <p className="text-white">{profile.lastSeen || 'Not available'}</p>
-              </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Sexual Orientation</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.sexualOrientation || 'Not specified'}</p>
             </div>
-
-            {/* Right Column */}
-            <div className="space-y-4">
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Nationality</p>
-                <p className="text-white">{profile.nationality || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Bust Size</p>
-                <p className="text-white">{profile.bustSize || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">Occupation</p>
-                <p className="text-white">{profile.occupation || 'Not specified'}</p>
-              </div>
-              <div className="flex-col pt-3 justify-between">
-                <p className="text-[#FA266D] pb-4 font-semibold">State</p>
-                <p className="text-white">{profile.state || 'Not specified'}</p>
-              </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Looks</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.looks || 'Not specified'}</p>
+            </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Education</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.education || 'Not specified'}</p>
+            </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">City</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.city || 'Not specified'}</p>
+            </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Ethnicity</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.ethnicity || 'Not specified'}</p>
+            </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Body Build</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.bodyBuild || 'Not specified'}</p>
+            </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Smoker</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.smoker || 'Not specified'}</p>
+            </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Country</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.country || 'Not specified'}</p>
+            </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Last Seen</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.lastSeen || 'Not available'}</p>
+            </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Nationality</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.nationality || 'Not specified'}</p>
+            </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Bust Size</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.bustSize || 'Not specified'}</p>
+            </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">Occupation</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.occupation || 'Not specified'}</p>
+            </div>
+            <div className="pt-3">
+              <p className="text-[#FA266D] pb-2 sm:pb-3 font-semibold text-xs sm:text-sm">State</p>
+              <p className="text-white text-xs sm:text-sm break-words">{profile.state || 'Not specified'}</p>
             </div>
           </div>
         )}

@@ -15,7 +15,7 @@ export default function AuthCard({
 }: AuthCardProps) {
   return (
     <div
-      className={`relative bg-white/6 backdrop-blur-md rounded-[20px] sm:rounded-[24px] w-full max-w-[586px] py-6 sm:py-8 lg:py-[40px] mx-4 text-white border border-white/20 font-urbanist ${className}`}
+      className={`relative bg-white/6 backdrop-blur-md rounded-[20px] sm:rounded-[24px] w-full mx-auto max-w-[586px] py-6 sm:py-8 lg:py-[40px] mx-4 text-white border border-white/20 font-urbanist ${className}`}
     >
       {/* Logo */}
       <div className="h-full flex flex-col justify-center w-full max-w-[386px] mx-auto px-4 sm:px-0">
