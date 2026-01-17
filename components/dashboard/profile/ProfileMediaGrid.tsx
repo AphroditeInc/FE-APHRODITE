@@ -17,14 +17,14 @@ export function ProfileMediaGrid({ profile }: ProfileMediaGridProps) {
       </div>
 
       {profile && profile.media && Array.isArray(profile.media) && profile.media.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
           {profile.media.map((mediaUrl: string, index: number) => {
             const isVideo = /\.(mp4|webm|ogg|avi|mov|wmv|flv|mkv)$/i.test(mediaUrl);
 
             return (
               <div key={index} className="relative group cursor-pointer">
                 <div
-                  className="aspect-square rounded-2xl overflow-hidden bg-cover bg-center bg-gray-700"
+                  className="aspect-square rounded-xl sm:rounded-2xl overflow-hidden bg-cover bg-center bg-gray-700"
                   style={{
                     backgroundImage: mediaUrl ? `url(${mediaUrl})` : "none",
                   }}
@@ -33,8 +33,8 @@ export function ProfileMediaGrid({ profile }: ProfileMediaGridProps) {
 
                   {isVideo && (
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-16 h-16 bg-pink-500 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                        <Play className="w-8 h-8 text-white ml-1" fill="currentColor" />
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-pink-500 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                        <Play className="w-5 h-5 sm:w-6 sm:h-6 text-white ml-0.5" fill="currentColor" />
                       </div>
                     </div>
                   )}
@@ -64,4 +64,3 @@ export function ProfileMediaGrid({ profile }: ProfileMediaGridProps) {
     </div>
   );
 }
-

@@ -2,6 +2,7 @@
 
 import { Edit, ArrowLeft, Info, Coins, ThumbsUp, ThumbsDown, Plus, Pencil, Star } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { ProfilePageSkeleton } from "@/components/ui/Skeleton";
@@ -50,6 +51,7 @@ const mockReviews = [
 ];
 
 export function ProviderProfilePage() {
+  const router = useRouter();
   const { user: authUser } = useAuth();
   const { profile, loading, error, refetch } = useEnrichedProfile(authUser?.id || null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -152,7 +154,16 @@ export function ProviderProfilePage() {
   return (
       <div className="min-h-screen bg-[#1F1B2C]">
       <div className="flex items-center justify-between p-4 sm:p-6">
-        <button className="flex items-center gap-2 text-white hover:text-pink-300 transition-colors cursor-pointer">
+        <button
+          onClick={() => {
+            if (typeof window !== "undefined" && window.history.length > 1) {
+              router.back();
+            } else {
+              router.push("/dashboard");
+            }
+          }}
+          className="flex items-center gap-2 text-white hover:text-pink-300 transition-colors cursor-pointer"
+        >
           <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
           <span className="text-sm sm:text-base">Back</span>
         </button>

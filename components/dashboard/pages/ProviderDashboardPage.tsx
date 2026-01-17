@@ -321,7 +321,7 @@ export default function ProviderDashboardPage() {
             </div>
           </div>
       </section>
-      <section className="px-8 pb-8">
+      <section className="px-4 sm:px-8 pb-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div className="text-left">
             <h2 className="text-3xl md:text-4xl font-bold text-[#FA266D] mb-2">
@@ -352,25 +352,27 @@ export default function ProviderDashboardPage() {
           </div>
         </div>
         {!isLoading && !error && profiles.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 min-[0px]:gap-4 min-[640px]:gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
             {profiles.map((profile, index) => (
-              <div key={profile.id} className="w-full min-w-[280px]">
-                <div 
-                  className="relative overflow-hidden group cursor-pointer aspect-[4/5] rounded-[20px] min-h-[350px]"
+              <div key={profile.id} className="w-full">
+                <div
+                  className="relative overflow-hidden group cursor-pointer aspect-[3/4] md:aspect-[4/5] rounded-[20px]"
                   onClick={() => handleCardClick(profile.id)}
                 >
                   <div className="relative w-full h-full">
-                    <div 
+                    <div
                       className="w-full h-full rounded-[20px] overflow-hidden relative bg-cover bg-center"
                       style={{ backgroundImage: `url(${profile.image || getRandomBackgroundImage(index)})` }}
                     >
                       <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
                     </div>
                     
-                    <div className="absolute text-white bottom-4 left-4 right-4 rounded-2xl bg-white/[0.06] backdrop-blur-[40px] p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center">
-                          <h3 className="text-lg font-bold text-white mr-2">{profile.name}</h3>
+                    <div className="absolute text-white bottom-2 left-2 right-2 md:bottom-4 md:left-4 md:right-4 rounded-2xl bg-white/[0.06] backdrop-blur-[40px] p-2.5 md:p-4 overflow-hidden">
+                      <div className="flex items-center justify-between gap-1 mb-2 md:mb-3">
+                        <div className="flex items-center flex-1 min-w-0">
+                          <h3 className="text-sm sm:text-base md:text-lg font-bold text-white mr-2 truncate">
+                            {profile.name}
+                          </h3>
                           <Check className="w-4 h-4 text-green-500" />
                         </div>
                         <button
@@ -378,43 +380,64 @@ export default function ProviderDashboardPage() {
                             e.stopPropagation();
                             handleLike(profile.id);
                           }}
-                          className="transition-colors"
+                          className="transition-colors flex-shrink-0"
                         >
                           <Heart 
-                            className={`w-6 h-6 ${
+                            className={`w-5 h-5 ${
                               profile.isLiked ? 'text-[#FA266D] fill-current' : 'text-gray-400'
                             }`} 
                           />
                         </button>
                       </div>
 
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center">
+                      <div className="flex flex-wrap items-center gap-y-1 gap-x-2 mb-2 md:mb-3">
+                        <div className="flex items-center min-w-0">
                           <span className="text-pink-500 mr-1">📍</span>
-                          <p className="text-sm text-gray-200">{profile.location}</p>
+                          <p className="text-xs sm:text-sm text-gray-200 truncate max-w-[120px] sm:max-w-[160px] md:max-w-none">
+                            {profile.location}
+                          </p>
                         </div>
-                        <div className="flex items-center">
+                        <div className="flex items-center ml-auto">
                           <span className="text-yellow-400 mr-1">★</span>
-                          <span className="text-sm font-medium text-gray-200">{profile.rating}</span>
+                          <span className="text-xs sm:text-sm font-medium text-gray-200">
+                            {profile.rating}
+                          </span>
                         </div>
                       </div>
 
                       {profile.services && profile.services.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {profile.services.slice(0, 5).map((service, serviceIndex) => (
-                            <span
-                              key={serviceIndex}
-                              className="px-2 py-1 border border-white text-white text-xs rounded-full"
-                            >
-                              {service}
-                            </span>
-                          ))}
-                          {profile.services.length > 5 && (
-                            <span className="px-2 py-1 text-white text-xs">
-                              +{profile.services.length - 5}
-                            </span>
-                          )}
-                        </div>
+                        <>
+                          <div className="flex flex-wrap gap-1 md:hidden">
+                            {profile.services.slice(0, 2).map((service, serviceIndex) => (
+                              <span
+                                key={serviceIndex}
+                                className="px-1.5 py-0.5 border border-white text-white text-[10px] rounded-full"
+                              >
+                                {service}
+                              </span>
+                            ))}
+                            {profile.services.length > 2 && (
+                              <span className="px-1.5 py-0.5 text-white text-[10px]">
+                                +{profile.services.length - 2}
+                              </span>
+                            )}
+                          </div>
+                          <div className="hidden md:flex flex-wrap gap-1">
+                            {profile.services.slice(0, 5).map((service, serviceIndex) => (
+                              <span
+                                key={serviceIndex}
+                                className="px-2 py-1 border border-white text-white text-xs rounded-full"
+                              >
+                                {service}
+                              </span>
+                            ))}
+                            {profile.services.length > 5 && (
+                              <span className="px-2 py-1 text-white text-xs">
+                                +{profile.services.length - 5}
+                              </span>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
