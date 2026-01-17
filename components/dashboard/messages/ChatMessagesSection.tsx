@@ -206,23 +206,27 @@ export function ChatMessagesSection({
 
       if (showShortTime && pricing.shortTime) {
         return (
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Incall</span>
-                <span className="text-white font-semibold text-[20px]">
+          <div className="bg-gray-800 rounded-[16px] px-4 py-3 md:p-4 w-full max-w-sm flex flex-col gap-3">
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-white text-xs md:text-sm tracking-wide">
+                  Incall
+                </span>
+                <span className="text-white font-semibold text-sm md:text-base">
                   {pricing.shortTime.incall}
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Outcall</span>
-                <span className="text-white font-semibold text-[20px]">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-white text-xs md:text-sm tracking-wide">
+                  Outcall
+                </span>
+                <span className="text-white font-semibold text-sm md:text-base">
                   {pricing.shortTime.outcall}
                 </span>
               </div>
             </div>
             <button
-              className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+              className="w-full bg-[#FA266D] text-white py-2 px-3 rounded-full text-xs md:text-sm font-medium"
               onClick={() => {
                 const p = pricing.shortTime;
                 if (p) onBookShortTime && onBookShortTime({ incall: p.incall, outcall: p.outcall });
@@ -236,23 +240,27 @@ export function ChatMessagesSection({
 
       if (showOvernight && pricing.overnight) {
         return (
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Incall</span>
-                <span className="text-white font-semibold text-[20px]">
+          <div className="bg-gray-800 rounded-[16px] px-4 py-3 md:p-4 w-full max-w-sm flex flex-col gap-3">
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-white text-xs md:text-sm tracking-wide">
+                  Incall
+                </span>
+                <span className="text-white font-semibold text-sm md:text-base">
                   {pricing.overnight.incall}
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Outcall</span>
-                <span className="text-white font-semibold text-[20px]">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-white text-xs md:text-sm tracking-wide">
+                  Outcall
+                </span>
+                <span className="text-white font-semibold text-sm md:text-base">
                   {pricing.overnight.outcall}
                 </span>
               </div>
             </div>
             <button
-              className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+              className="w-full bg-[#FA266D] text-white py-2 px-3 rounded-full text-xs md:text-sm font-medium"
               onClick={() => {
                 const p = pricing.overnight;
                 if (p) onBookOvernight && onBookOvernight({ incall: p.incall, outcall: p.outcall });
@@ -266,23 +274,27 @@ export function ChatMessagesSection({
 
       if (showWeekend && pricing.weekend) {
         return (
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Incall</span>
-                <span className="text-white font-semibold text-[20px]">
+          <div className="bg-gray-800 rounded-[16px] px-4 py-3 md:p-4 w-full max-w-sm flex flex-col gap-3">
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-white text-xs md:text-sm tracking-wide">
+                  Incall
+                </span>
+                <span className="text-white font-semibold text-sm md:text-base">
                   {pricing.weekend.incall}
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Outcall</span>
-                <span className="text-white font-semibold text-[20px]">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-white text-xs md:text-sm tracking-wide">
+                  Outcall
+                </span>
+                <span className="text-white font-semibold text-sm md:text-base">
                   {pricing.weekend.outcall}
                 </span>
               </div>
             </div>
             <button
-              className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+              className="w-full bg-[#FA266D] text-white py-2 px-3 rounded-full text-xs md:text-sm font-medium"
               onClick={() => {
                 const p = pricing.weekend;
                 if (p) onBookWeekend && onBookWeekend({ incall: p.incall, outcall: p.outcall });
@@ -296,23 +308,27 @@ export function ChatMessagesSection({
 
       if (showCustom && pricing.customPrice) {
         return (
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Incall</span>
-                <span className="text-white font-semibold text-[20px]">
+          <div className="bg-gray-800 rounded-[16px] px-4 py-3 md:p-4 w-full max-w-sm flex flex-col gap-3">
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-white text-xs md:text-sm tracking-wide">
+                  Incall
+                </span>
+                <span className="text-white font-semibold text-sm md:text-base">
                   {pricing.customPrice.incall}
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Outcall</span>
-                <span className="text-white font-semibold text-[20px]">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-white text-xs md:text-sm tracking-wide">
+                  Outcall
+                </span>
+                <span className="text-white font-semibold text-sm md:text-base">
                   {pricing.customPrice.outcall}
                 </span>
               </div>
             </div>
             <button
-              className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+              className="w-full bg-[#FA266D] text-white py-2 px-3 rounded-full text-xs md:text-sm font-medium"
               onClick={() => {
                 const p = pricing.customPrice;
                 if (p) onBookCustomPrice && onBookCustomPrice({ incall: p.incall, outcall: p.outcall });
@@ -324,28 +340,30 @@ export function ChatMessagesSection({
         );
       }
 
-      // Default fallback (Legacy behavior: show both Short Time and Overnight)
-      // Or if explicitly showing legacy
       if (showLegacy && pricing.shortTime && pricing.overnight) {
         return (
           <div className="space-y-3">
-            <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-white text-[20px]">Incall</span>
-                  <span className="text-white font-semibold text-[20px]">
+            <div className="bg-gray-800 rounded-[16px] px-4 py-3 md:p-4 w-full max-w-sm flex flex-col gap-3">
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-white text-xs md:text-sm tracking-wide">
+                    Incall
+                  </span>
+                  <span className="text-white font-semibold text-sm md:text-base">
                     {pricing.shortTime.incall}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-white text-[20px]">Outcall</span>
-                  <span className="text-white font-semibold text-[20px]">
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-white text-xs md:text-sm tracking-wide">
+                    Outcall
+                  </span>
+                  <span className="text-white font-semibold text-sm md:text-base">
                     {pricing.shortTime.outcall}
                   </span>
                 </div>
               </div>
               <button
-                className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+                className="w-full bg-[#FA266D] text-white py-2 px-3 rounded-full text-xs md:text-sm font-medium"
                 onClick={() => {
                   const p = pricing.shortTime;
                   if (p) onBookShortTime && onBookShortTime({ incall: p.incall, outcall: p.outcall });
@@ -355,23 +373,27 @@ export function ChatMessagesSection({
               </button>
             </div>
 
-            <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-white text-[20px]">Incall</span>
-                  <span className="text-white font-semibold text-[20px]">
+            <div className="bg-gray-800 rounded-[16px] px-4 py-3 md:p-4 w-full max-w-sm flex flex-col gap-3">
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-white text-xs md:text-sm tracking-wide">
+                    Incall
+                  </span>
+                  <span className="text-white font-semibold text-sm md:text-base">
                     {pricing.overnight.incall}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-white text-[20px]">Outcall</span>
-                  <span className="text-white font-semibold text-[20px]">
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-white text-xs md:text-sm tracking-wide">
+                    Outcall
+                  </span>
+                  <span className="text-white font-semibold text-sm md:text-base">
                     {pricing.overnight.outcall}
                   </span>
                 </div>
               </div>
               <button
-                className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium"
+                className="w-full bg-[#FA266D] text-white py-2 px-3 rounded-full text-xs md:text-sm font-medium"
                 onClick={() => {
                   const p = pricing.overnight;
                   if (p) onBookOvernight && onBookOvernight({ incall: p.incall, outcall: p.outcall });
@@ -614,7 +636,7 @@ export function ChatMessagesSection({
         )}
       </div>
 
-      <div className="bg-[#1F1B2C]  p-4">
+      <div className="bg-[#1F1B2C] px-3 py-2 md:p-4">
         <div className="space-y-3">
           <input
             type="text"

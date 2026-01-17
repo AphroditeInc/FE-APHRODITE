@@ -99,7 +99,7 @@ export function ChatSidebar({
   };
 
   return (
-    <div className="w-[360px] bg-[#1F1B2C] border-r border-white/10 flex flex-col h-full">
+    <div className="w-full md:w-[360px] bg-[#1F1B2C] border-r border-white/10 flex flex-col h-full">
       <div className="p-6 border-b border-white/10 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-white text-xl font-semibold">Messages</h1>

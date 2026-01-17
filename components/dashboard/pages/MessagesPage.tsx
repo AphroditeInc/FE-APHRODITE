@@ -196,8 +196,7 @@ export default function MessagesPage() {
 
   const [realtimeMessages, setRealtimeMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
- 
-  // Sidebar state
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const messages = useMemo(() => {
@@ -1434,26 +1433,37 @@ export default function MessagesPage() {
   }, [selectedChat, getOtherParticipantId, selectedChatData]);
 
   // Convert API ChatMessage to UI Message format
-  return (
-    <div className="flex h-full bg-[#1F1B2C] overflow-hidden">
-      {isSidebarOpen && (
-        <ChatSidebar
-          rooms={rooms}
-          loadingRooms={loadingRooms}
-          error={error}
-          onRetry={refetchRooms}
-          selectedChatId={selectedChat}
-          onSelectChat={roomId => setSelectedChat(roomId)}
-          participantNames={participantNames}
-          participantAvatars={participantAvatars}
-          currentUserId={userId || user?.id || fallbackUserId}
-          extractParticipantId={extractParticipantId}
-          onCloseSidebar={() => setIsSidebarOpen(false)}
-        />
-      )}
+  const handleSelectChat = (roomId: string) => {
+    setSelectedChat(roomId);
+  };
 
-      {/* Right Section - Chat Area */}
-      <div className="flex-1 bg-[#1F1B2C] flex flex-col">
+  return (
+    <div className="flex flex-col md:flex-row h-screen bg-[#1F1B2C] overflow-hidden">
+      <div
+        className={`${selectedChat ? "hidden md:block" : "block"} h-full`}
+      >
+        {isSidebarOpen && (
+          <ChatSidebar
+            rooms={rooms}
+            loadingRooms={loadingRooms}
+            error={error}
+            onRetry={refetchRooms}
+            selectedChatId={selectedChat}
+            onSelectChat={handleSelectChat}
+            participantNames={participantNames}
+            participantAvatars={participantAvatars}
+            currentUserId={userId || user?.id || fallbackUserId}
+            extractParticipantId={extractParticipantId}
+            onCloseSidebar={() => setIsSidebarOpen(false)}
+          />
+        )}
+      </div>
+
+      <div
+        className={`flex-1 bg-[#1F1B2C] flex flex-col min-h-0 ${
+          !selectedChat ? "hidden md:flex" : "flex"
+        }`}
+      >
         {selectedChat ? (
           <>
             <ChatHeader
@@ -1467,32 +1477,34 @@ export default function MessagesPage() {
               onViewProfile={handleViewProfile}
             />
 
-            <ChatMessagesSection
-              messages={messages}
-              messagesLoading={messagesLoading}
-              messagesError={messagesError}
-              selectedChat={selectedChat}
-              onRetry={() => {
-                refetchMessages();
-              }}
-              onClearSelectedChat={() => {
-                setSelectedChat(null);
-              }}
-              currentUserId={userId || user?.id || fallbackUserId}
-              messageInput={messageInput}
-              onChangeMessageInput={setMessageInput}
-              onSendMessage={sendMessage}
-              sending={sending}
-              canSharePricing={
-                isDiva || isHunk || user?.userType === "diva" || user?.userType === "hunk"
-              }
-              onSharePricing={handleSharePricing}
-              onMediaClick={handleMediaClick}
-              onBookShortTime={handleBookShortTime}
-              onBookOvernight={handleBookOvernight}
-              onBookWeekend={handleBookWeekend}
-              onBookCustomPrice={handleBookCustomPrice}
-            />
+            <div className="flex-1 flex flex-col min-h-0">
+              <ChatMessagesSection
+                messages={messages}
+                messagesLoading={messagesLoading}
+                messagesError={messagesError}
+                selectedChat={selectedChat}
+                onRetry={() => {
+                  refetchMessages();
+                }}
+                onClearSelectedChat={() => {
+                  setSelectedChat(null);
+                }}
+                currentUserId={userId || user?.id || fallbackUserId}
+                messageInput={messageInput}
+                onChangeMessageInput={setMessageInput}
+                onSendMessage={sendMessage}
+                sending={sending}
+                canSharePricing={
+                  isDiva || isHunk || user?.userType === "diva" || user?.userType === "hunk"
+                }
+                onSharePricing={handleSharePricing}
+                onMediaClick={handleMediaClick}
+                onBookShortTime={handleBookShortTime}
+                onBookOvernight={handleBookOvernight}
+                onBookWeekend={handleBookWeekend}
+                onBookCustomPrice={handleBookCustomPrice}
+              />
+            </div>
             {showCheckout && selectedChat && (
               <CheckoutModal
                 open={showCheckout}
