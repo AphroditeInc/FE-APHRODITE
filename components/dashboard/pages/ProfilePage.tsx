@@ -15,6 +15,7 @@ import { ProfileMediaUploadModal } from "@/components/dashboard/profile/ProfileM
 import { ProfileServicesModal } from "@/components/dashboard/profile/ProfileServicesModal";
 import { ProfilePricingEditModal } from "@/components/dashboard/profile/ProfilePricingEditModal";
 import CustomPricingModal from "@/components/dashboard/modals/CustomPricingModal";
+import { PricingDetailsModal } from "@/components/dashboard/profile/PricingDetailsModal";
 
 // Mock reviews data
 const mockReviews = [
@@ -41,7 +42,7 @@ const mockReviews = [
   {
     id: 2,
     name: "Shegzzy",
-    initials: "SG", 
+    initials: "SG",
     avatarColor: "bg-green-400",
     rating: 5,
     timestamp: "2 weeks ago",
@@ -60,6 +61,11 @@ export function ProviderProfilePage() {
   const [isCustomPricingModalOpen, setIsCustomPricingModalOpen] = useState(false);
   const [isEditPricingModalOpen, setIsEditPricingModalOpen] = useState(false);
   const [editingPricingType, setEditingPricingType] = useState<'shortTime' | 'overnight' | 'weekend' | null>(null);
+  const [viewingPricingPlan, setViewingPricingPlan] = useState<{
+    name: string;
+    duration?: string;
+    pricing: { incall?: string | number; outcall?: string | number };
+  } | null>(null);
   const [currentFormStep, setCurrentFormStep] = useState(1);
   const [activeTab, setActiveTab] = useState("About");
   const [reviewText, setReviewText] = useState("");
@@ -131,7 +137,7 @@ export function ProviderProfilePage() {
         <div className="text-center">
           <div className="text-red-400 text-xl mb-4">Error loading profile</div>
           <div className="text-white/80 mb-4">{error}</div>
-          <button 
+          <button
             onClick={refetch}
             className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-lg transition-colors cursor-pointer"
           >
@@ -152,7 +158,7 @@ export function ProviderProfilePage() {
   }
 
   return (
-      <div className="min-h-screen bg-[#1F1B2C]">
+    <div className="min-h-screen bg-[#1F1B2C]">
       <div className="flex items-center justify-between p-4 sm:p-6">
         <button
           onClick={() => {
@@ -177,15 +183,15 @@ export function ProviderProfilePage() {
               {activeTab === "Media"
                 ? "Add Media"
                 : activeTab === "Services"
-                ? "Edit Services"
-                : "Edit Profile"}
+                  ? "Edit Services"
+                  : "Edit Profile"}
             </span>
             <span className="sm:hidden">
               {activeTab === "Media"
                 ? "Add"
                 : activeTab === "Services"
-                ? "Edit"
-                : "Edit"}
+                  ? "Edit"
+                  : "Edit"}
             </span>
           </button>
         )}
@@ -206,43 +212,39 @@ export function ProviderProfilePage() {
       {/* Navigation Tabs */}
       <div className="px-4 sm:px-8 lg:px-12 pb-4 sm:pb-6">
         <div className="flex space-x-4 sm:space-x-8 border-b border-white/20 overflow-x-auto scrollbar-hide">
-          <button 
+          <button
             onClick={() => setActiveTab("About")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
-              activeTab === "About" 
-                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
-                : "text-white/60 hover:text-white"
-            }`}
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${activeTab === "About"
+              ? "text-[#FA266D] border-b-2 border-[#FA266D]"
+              : "text-white/60 hover:text-white"
+              }`}
           >
             About
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab("Services")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
-              activeTab === "Services" 
-                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
-                : "text-white/60 hover:text-white"
-            }`}
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${activeTab === "Services"
+              ? "text-[#FA266D] border-b-2 border-[#FA266D]"
+              : "text-white/60 hover:text-white"
+              }`}
           >
             Services
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab("Media")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
-              activeTab === "Media" 
-                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
-                : "text-white/60 hover:text-white"
-            }`}
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${activeTab === "Media"
+              ? "text-[#FA266D] border-b-2 border-[#FA266D]"
+              : "text-white/60 hover:text-white"
+              }`}
           >
             Media
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab("Reviews")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
-              activeTab === "Reviews" 
-                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
-                : "text-white/60 hover:text-white"
-            }`}
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${activeTab === "Reviews"
+              ? "text-[#FA266D] border-b-2 border-[#FA266D]"
+              : "text-white/60 hover:text-white"
+              }`}
           >
             Reviews
           </button>
@@ -257,19 +259,19 @@ export function ProviderProfilePage() {
             {/* Services Grid */}
             {/* Map services from profile.services array (from API response: data.services) */}
             {profile && profile.services && Array.isArray(profile.services) && profile.services.length > 0 ? (
-            <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3">
                 {profile.services
                   .map(service => typeof service === 'string' ? service : (service.name || service.id || ''))
                   .filter((s): s is string => s !== '')
                   .map((serviceName, index) => (
                     <div
                       key={`${serviceName}-${index}`}
-                  className="inline-flex px-4 py-2 border border-white/30 text-white text-sm rounded-full hover:border-pink-500 hover:text-pink-500 transition-colors whitespace-nowrap"
-                >
+                      className="inline-flex px-4 py-2 border border-white/30 text-white text-sm rounded-full hover:border-pink-500 hover:text-pink-500 transition-colors whitespace-nowrap"
+                    >
                       {serviceName}
                     </div>
-              ))}
-            </div>
+                  ))}
+              </div>
             ) : (
               <div className="text-white/60 text-center py-8">
                 No services added yet. Click "Edit Services" to add services.
@@ -291,7 +293,7 @@ export function ProviderProfilePage() {
                   <span className="text-[#FA266D] font-normal text-[14px] sm:text-base">Add Custom Pricing</span>
                 </button>
               </div>
-              
+
               <div className="grid md:grid-cols-3 gap-6">
                 {/* Short Time Card */}
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
@@ -336,6 +338,17 @@ export function ProviderProfilePage() {
                       )}
                     </div>
                   </div>
+
+                  <button
+                    onClick={() => setViewingPricingPlan({
+                      name: "Short Time",
+                      pricing: profile.pricing?.shortTime || {}
+                    })}
+                    className="w-full flex items-center justify-center gap-2 mt-4 text-[#FA266D] hover:text-pink-400 transition-colors font-medium cursor-pointer"
+                  >
+                    <span className="text-base">View Services</span>
+                    <span className="text-xl">&rsaquo;</span>
+                  </button>
                 </div>
 
                 {/* Overnight Card */}
@@ -381,6 +394,17 @@ export function ProviderProfilePage() {
                       )}
                     </div>
                   </div>
+                  <button
+                    onClick={() => setViewingPricingPlan({
+                      name: "Overnight",
+                      duration: "5 hours",
+                      pricing: profile.pricing?.overnight || {}
+                    })}
+                    className="w-full flex items-center justify-center gap-2 mt-4 text-[#FA266D] hover:text-pink-400 transition-colors font-medium cursor-pointer"
+                  >
+                    <span className="text-base">View Services</span>
+                    <span className="text-xl">&rsaquo;</span>
+                  </button>
                 </div>
 
                 {/* Weekend Card */}
@@ -426,6 +450,16 @@ export function ProviderProfilePage() {
                       )}
                     </div>
                   </div>
+                  <button
+                    onClick={() => setViewingPricingPlan({
+                      name: "Weekend",
+                      pricing: profile.pricing?.weekend || {}
+                    })}
+                    className="w-full flex items-center justify-center gap-2 mt-4 text-[#FA266D] hover:text-pink-400 transition-colors font-medium cursor-pointer"
+                  >
+                    <span className="text-base">View Services</span>
+                    <span className="text-xl">&rsaquo;</span>
+                  </button>
                 </div>
               </div>
 
@@ -468,6 +502,17 @@ export function ProviderProfilePage() {
                             )}
                           </div>
                         </div>
+                        <button
+                          onClick={() => setViewingPricingPlan({
+                            name: category.categoryName,
+                            duration: category.duration,
+                            pricing: { incall: category.incall, outcall: category.outcall }
+                          })}
+                          className="w-full flex items-center justify-center gap-2 mt-4 text-white hover:text-white/80 transition-colors font-medium cursor-pointer"
+                        >
+                          <span className="text-base">View Services</span>
+                          <span className="text-xl">&rsaquo;</span>
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -490,31 +535,31 @@ export function ProviderProfilePage() {
                     <div className={`w-12 h-12 ${review.avatarColor} rounded-full flex items-center justify-center text-white font-semibold text-lg`}>
                       {review.initials}
                     </div>
-                    
+
                     {/* Review Content */}
                     <div className="flex-1 space-y-3">
                       {/* Name */}
                       <h4 className="text-[#E05090] font-semibold text-lg">{review.name}</h4>
-                      
+
                       {/* Rating and Timestamp */}
                       <div className="flex items-center gap-3">
                         <div className="flex">
                           {[...Array(5)].map((_, i) => (
-                            <Star 
-                              key={i} 
-                              className={`w-4 h-4 ${i < review.rating ? 'text-[#FFC000] fill-current' : 'text-gray-400'}`} 
+                            <Star
+                              key={i}
+                              className={`w-4 h-4 ${i < review.rating ? 'text-[#FFC000] fill-current' : 'text-gray-400'}`}
                             />
                           ))}
                         </div>
                         <span className="text-[#A0A0A0] text-sm">{review.timestamp}</span>
                       </div>
-                      
+
                       {/* Review Text */}
                       <p className="text-white text-sm leading-relaxed">{review.text}</p>
-                      
+
                       {/* Actions */}
                       <div className="flex items-center gap-4">
-                        <button 
+                        <button
                           onClick={() => handleReplyToReview(review.id.toString())}
                           className="text-pink-500 hover:text-pink-400 transition-colors text-sm font-medium cursor-pointer"
                         >
@@ -659,7 +704,16 @@ export function ProviderProfilePage() {
         profileId={String(profile.id)}
       />
 
-    </div>
+      <PricingDetailsModal
+        open={!!viewingPricingPlan}
+        onClose={() => setViewingPricingPlan(null)}
+        planName={viewingPricingPlan?.name || ""}
+        duration={viewingPricingPlan?.duration}
+        pricing={viewingPricingPlan?.pricing || {}}
+        services={profile.services || []}
+      />
+
+    </div >
   );
 }
 

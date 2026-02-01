@@ -109,32 +109,13 @@ export function ProfileServicesModal({
     }
 
     try {
-      const existingServiceNames: string[] =
-        existingServices && Array.isArray(existingServices)
-          ? existingServices
-              .map(service =>
-                typeof service === "string" ? service : service.id || service.name || ""
-              )
-              .filter((s): s is string => s !== "")
-          : [];
-
-      const servicesArray: string[] = [...existingServiceNames];
-
-      allServices.forEach(serviceName => {
-        const exists = servicesArray.some(
-          existing =>
-            existing === serviceName ||
-            existing.toLowerCase() === serviceName.toLowerCase()
-        );
-
-        if (!exists) {
-          servicesArray.push(serviceName);
-        }
-      });
-
+      // Send the new list directly. The API (or backend) should handle replacement.
+      // Based on standard "Edit" modal behavior, we expect the sent list to become the new state.
       const result = await updateProfile({
         id: String(profileId),
-        services: servicesArray,
+        data: {
+          services: allServices,
+        },
       }).unwrap();
 
       if (result) {
@@ -171,11 +152,10 @@ export function ProfileServicesModal({
               <button
                 key={service}
                 onClick={() => handleToggleService(service)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  selectedServices.includes(service)
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedServices.includes(service)
                     ? "bg-pink-500 text-white border-2 border-pink-500"
                     : "bg-transparent text-white border-2 border-white/30 hover:border-white/50"
-                }`}
+                  }`}
               >
                 {service}
               </button>
