@@ -1,92 +1,29 @@
 "use client";
 
-import {
-  Search,
-  Menu,
-  Check,
-  Inbox,
-  ArrowLeft,
-  Video,
-  MoreVertical,
-  Play,
-  MapPin,
-  Image,
-  Mic,
-  Send,
-  CheckCheck,
-  X,
-  Briefcase,
-} from "lucide-react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { Inbox, Menu } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useAuth } from "@/lib/hooks";
+import { useAuth, useChatSocket } from "@/lib/hooks";
+import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
 import {
   useGetRoomMessagesQuery,
   useMarkRoomAsReadMutation,
   useSendMessageMutation,
   useCreateRoomMutation,
-  useGetUserRoomsQuery,
 } from "@/app/api/apiSlice";
-import { apiService } from "@/lib/services";
 import type { ChatRoom, ChatMessage } from "@/lib/types";
-
-// Type definitions for API responses
-interface ConversationParticipant {
-  _id?: string;
-  id?: string;
-  userId?: string;
-  name?: string;
-  firstName?: string;
-  username?: string;
-}
-
-interface ConversationSender {
-  _id: string;
-  name?: string;
-}
-
-interface ConversationReceiver {
-  _id: string;
-  name?: string;
-}
-
-interface ConversationLastMessage {
-  _id?: string;
-  id?: string;
-  senderId: string;
-  receiverId?: string; // Made optional to match ChatMessage type
-  roomId?: string;
-  content: string;
-  type: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  metadata?: Record<string, unknown>;
-  attachments?: string[];
-  readAt?: string;
-  deliveredAt?: string;
-  replyTo?: string;
-}
-
-interface ConversationResponse {
-  roomId?: string;
-  _id?: string;
-  id?: string;
-  type?: string;
-  sender?: ConversationSender;
-  receiver?: ConversationReceiver;
-  participants?: (string | ConversationParticipant)[];
-  createdAt?: string;
-  updatedAt?: string;
-  lastMessage?: ConversationLastMessage;
-  unreadCount?: number;
-}
-
-interface MessagesResponse {
-  messages?: ChatMessage[];
-  data?: ChatMessage[];
-  items?: ChatMessage[];
-}
+import { MediaModal } from "@/components/dashboard/messages/MediaModal";
+import {
+  PricingPlanDialog,
+  type PricingPlan,
+} from "@/components/dashboard/messages/PricingPlanDialog";
+import { NewChatDialog } from "@/components/dashboard/messages/NewChatDialog";
+import { ChatMessagesSection } from "@/components/dashboard/messages/ChatMessagesSection";
+import { ChatSidebar } from "@/components/dashboard/messages/ChatSidebar";
+import { ChatHeader } from "@/components/dashboard/messages/ChatHeader";
+import { useMessagesRooms } from "@/components/dashboard/messages/useMessagesRooms";
+import { useChatWebSocket } from "@/components/dashboard/messages/useChatWebSocket";
+import { CheckoutModal } from "@/components/dashboard/messages/CheckoutModal";
 
 interface Participant {
   id?: string;
@@ -98,27 +35,14 @@ interface Participant {
   [key: string]: unknown;
 }
 
-interface Message {
-  id: string;
-  sender: "me" | "other";
-  type: "text" | "audio" | "video" | "image" | "pricing";
-  content: string;
-  timestamp: string;
-  duration?: string;
-  videoThumbnail?: string;
-  pricing?: {
-    shortTime: { incall: string; outcall: string };
-    overnight: { incall: string; outcall: string };
-  };
-}
-
 export default function MessagesPage() {
   const {
     user,
     userId,
     isLoading: authLoading,
     isAuthenticated,
-    tokens,
+    isDiva,
+    isHunk,
   } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -134,7 +58,6 @@ export default function MessagesPage() {
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
           if (parsedUser?.id) {
-            console.log("Found user ID in localStorage:", parsedUser.id);
             setFallbackUserId(parsedUser.id);
           }
         }
@@ -151,25 +74,97 @@ export default function MessagesPage() {
     duration?: string;
   } | null>(null);
   const [showPricingDialog, setShowPricingDialog] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<PricingPlan>(null);
+  const [customPrice, setCustomPrice] = useState("");
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
   const [newChatUserId, setNewChatUserId] = useState("");
-  const [participantAvatars, setParticipantAvatars] = useState<
-    Map<string, string>
-  >(new Map());
+  const [preloadedProfileId, setPreloadedProfileId] = useState<string | null>(null);
+  const hasProcessedQueryParams = useRef(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<"short-time" | "overnight" | "weekend" | "custom-price">("short-time");
+  const [checkoutAmounts, setCheckoutAmounts] = useState<{ incall: string; outcall: string }>({
+    incall: "50,000.00 APH",
+    outcall: "70,000.00 APH",
+  });
 
-  // RTK Query hooks
   const currentUserId = userId || user?.id || fallbackUserId;
-  // Use getUserRooms instead of getConversations to get all rooms (matches Swagger: /chat/rooms returns 3, /chat/conversations returns 2)
-  const {
-    data: roomsData,
-    isLoading: loadingRooms,
-    error: roomsError,
-    refetch: refetchRooms,
-  } = useGetUserRoomsQuery(
-    { limit: 50, offset: 0 },
-    { skip: !currentUserId || authLoading }
+
+  const { profile: currentProfile } = useEnrichedProfile(
+    currentUserId || null
   );
+
+  const formattedPricing = useMemo(
+    () => {
+      const pricing = currentProfile?.pricing as
+        | {
+            shortTime?: { incall?: number | null; outcall?: number | null };
+            overnight?: { incall?: number | null; outcall?: number | null };
+            weekend?: { incall?: number | null; outcall?: number | null };
+          }
+        | undefined;
+
+      if (!pricing) {
+        return null;
+      }
+
+      const formatValue = (value?: number | null) => {
+        if (value === null || typeof value === "undefined") {
+          return undefined;
+        }
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+          return undefined;
+        }
+        return `${num.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })} APH`;
+      };
+
+      return {
+        shortTime:
+          pricing.shortTime &&
+          (pricing.shortTime.incall || pricing.shortTime.outcall)
+            ? {
+                incall: formatValue(pricing.shortTime.incall),
+                outcall: formatValue(pricing.shortTime.outcall),
+              }
+            : undefined,
+        overnight:
+          pricing.overnight &&
+          (pricing.overnight.incall || pricing.overnight.outcall)
+            ? {
+                incall: formatValue(pricing.overnight.incall),
+                outcall: formatValue(pricing.overnight.outcall),
+              }
+            : undefined,
+        weekend:
+          pricing.weekend &&
+          (pricing.weekend.incall || pricing.weekend.outcall)
+            ? {
+                incall: formatValue(pricing.weekend.incall),
+                outcall: formatValue(pricing.weekend.outcall),
+              }
+            : undefined,
+      };
+    },
+    [currentProfile?.pricing]
+  );
+
+  const {
+    rooms,
+    loadingRooms,
+    roomsError,
+    refetchRooms,
+    participantNames,
+    participantAvatars,
+    setParticipantNames,
+    setParticipantAvatars,
+    setRoomLastMessages,
+  } = useMessagesRooms({
+    currentUserId,
+    authLoading,
+  });
 
   const {
     data: messagesData,
@@ -178,7 +173,11 @@ export default function MessagesPage() {
     refetch: refetchMessages,
   } = useGetRoomMessagesQuery(
     { roomId: selectedChat || "", query: { limit: 50 } },
-    { skip: !selectedChat || !selectedChat.trim() }
+    { 
+      skip: !selectedChat || !selectedChat.trim(),
+      // Don't refetch if we already have data for this room
+      refetchOnMountOrArgChange: true,
+    }
   );
 
   const [markRoomAsReadMutation] = useMarkRoomAsReadMutation();
@@ -186,265 +185,35 @@ export default function MessagesPage() {
     useSendMessageMutation();
   const [createRoomMutation] = useCreateRoomMutation();
 
-  // Convert API data to component state
-  // According to Swagger: GET /chat/rooms returns { success: true, data: [...] }
-  // Each room has participants as array of objects with userId property
-  const rooms = useMemo(() => {
-    if (!roomsData) {
-      console.log("[MessagesPage] No roomsData yet");
-      return [];
-    }
+  // WebSocket hook for real-time chat
+  const {
+    socket,
+    connected: socketConnected,
+    sendMessage: sendSocketMessage,
+    joinRoom: joinSocketRoom,
+    leaveRoom: leaveSocketRoom,
+  } = useChatSocket();
 
-    console.log("[MessagesPage] roomsData:", roomsData);
-    console.log(
-      "[MessagesPage] roomsData type:",
-      typeof roomsData,
-      "isArray:",
-      Array.isArray(roomsData)
-    );
+  const [realtimeMessages, setRealtimeMessages] = useState<ChatMessage[]>([]);
+  const messagesRef = useRef<ChatMessage[]>([]);
 
-    // transformResponse should already extract the array, so roomsData should be ChatRoom[]
-    let roomsArray: ChatRoom[] = [];
-
-    if (Array.isArray(roomsData)) {
-      console.log(
-        "[MessagesPage] roomsData is array (expected), length:",
-        roomsData.length
-      );
-      roomsArray = roomsData;
-    } else {
-      console.warn(
-        "[MessagesPage] roomsData is not an array (unexpected):",
-        roomsData
-      );
-      return [];
-    }
-
-    // Transform rooms to match ChatRoom type
-    // According to Swagger, participants is an array of objects: [{ userId: "...", ... }, ...]
-    const transformedRooms = roomsArray
-      .map((room: any) => {
-        const roomId = room.roomId || room._id || room.id;
-        if (!roomId) {
-          console.warn("[MessagesPage] Room missing roomId:", room);
-          return null;
-        }
-
-        // Extract participant IDs and names from objects with userId property
-        const participants: string[] = [];
-        const participantNamesFromRoom: Map<string, string> = new Map();
-
-        console.log(
-          "[MessagesPage] Processing room:",
-          roomId,
-          "participants:",
-          room.participants
-        );
-
-        if (room.participants && Array.isArray(room.participants)) {
-          room.participants.forEach((p: any, index: number) => {
-            console.log(
-              `[MessagesPage] Participant ${index}:`,
-              p,
-              "type:",
-              typeof p,
-              "keys:",
-              typeof p === "object" ? Object.keys(p) : "N/A"
-            );
-
-            // Handle both formats: object with userId, or string
-            const participantId =
-              typeof p === "string" ? p : p.userId || p._id || p.id;
-            if (
-              participantId &&
-              typeof participantId === "string" &&
-              !participants.includes(participantId)
-            ) {
-              participants.push(participantId);
-
-              // Extract name if available in participant object
-              if (typeof p === "object" && p !== null) {
-                const name =
-                  p.firstName && p.lastName
-                    ? `${p.firstName} ${p.lastName}`.trim()
-                    : p.firstName || p.lastName || p.username || p.name || null;
-
-                console.log(
-                  "[MessagesPage] Extracted name for",
-                  participantId,
-                  ":",
-                  name
-                );
-
-                if (name && typeof name === "string") {
-                  participantNamesFromRoom.set(participantId, name);
-                }
-              }
-            }
-          });
-        }
-
-        console.log(
-          "[MessagesPage] Extracted participant names:",
-          Array.from(participantNamesFromRoom.entries())
-        );
-
-        // Cache participant names for later use
-        if (participantNamesFromRoom.size > 0) {
-          setParticipantNames((prev) => {
-            const newMap = new Map(prev);
-            participantNamesFromRoom.forEach((name, id) => {
-              if (!newMap.has(id)) {
-                newMap.set(id, name);
-              }
-            });
-            return newMap;
-          });
-        }
-
-        // Transform lastMessage if present
-        let lastMessage: ChatMessage | undefined;
-        if (room.lastMessage) {
-          // lastMessage might be a string ID or an object
-          if (typeof room.lastMessage === "string") {
-            // If it's just an ID, we can't create a full ChatMessage
-            // We'll need to fetch it separately or skip it
-            console.log(
-              "[MessagesPage] Room has lastMessage as ID only:",
-              room.lastMessage
-            );
-          } else if (
-            typeof room.lastMessage === "object" &&
-            room.lastMessage !== null
-          ) {
-            const msg = room.lastMessage;
-            const messageId = msg._id || msg.id;
-            if (messageId && typeof messageId === "string") {
-              lastMessage = {
-                id: messageId,
-                senderId: msg.senderId,
-                receiverId: msg.receiverId,
-                roomId: msg.roomId || roomId,
-                content: msg.content || "",
-                type: (msg.type || "text") as ChatMessage["type"],
-                status: (msg.status || "sent") as ChatMessage["status"],
-                createdAt: msg.createdAt || new Date().toISOString(),
-                updatedAt: msg.updatedAt || new Date().toISOString(),
-                metadata: msg.metadata,
-                attachments: msg.attachments || [],
-                readAt: msg.readAt,
-                deliveredAt: msg.deliveredAt,
-                replyTo: msg.replyTo,
-              };
-            }
-          }
-        }
-
-        const chatRoom: ChatRoom = {
-          id: roomId,
-          roomId: roomId,
-          type: (room.type || "direct") as ChatRoom["type"],
-          participants: participants,
-          createdAt: room.createdAt || new Date().toISOString(),
-          updatedAt: room.updatedAt || new Date().toISOString(),
-          lastMessage: lastMessage,
-          unreadCount: room.unreadCount || 0,
-          messageCount: room.messageCount || 0,
-        };
-
-        return chatRoom;
-      })
-      .filter((room): room is ChatRoom => room !== null);
-
-    // Deduplicate rooms by participant combination - keep the most recent room for each unique set
-    const deduplicatedRooms = transformedRooms.reduce((acc, room) => {
-      // Sort participant IDs to create a consistent key
-      const participantKey = [...room.participants].sort().join("_");
-
-      // Check if we already have a room with these participants
-      const existingRoom = acc.find((r) => {
-        const existingKey = [...r.participants].sort().join("_");
-        return existingKey === participantKey;
-      });
-
-      if (existingRoom) {
-        // Keep the room with the most recent updatedAt
-        const existingIndex = acc.indexOf(existingRoom);
-        const existingDate = new Date(existingRoom.updatedAt).getTime();
-        const newDate = new Date(room.updatedAt).getTime();
-
-        if (newDate > existingDate) {
-          console.log(
-            "[MessagesPage] Replacing duplicate room",
-            existingRoom.roomId,
-            "with newer",
-            room.roomId
-          );
-          acc[existingIndex] = room;
-        } else {
-          console.log(
-            "[MessagesPage] Skipping duplicate room",
-            room.roomId,
-            "keeping",
-            existingRoom.roomId
-          );
-        }
-      } else {
-        acc.push(room);
-      }
-
-      return acc;
-    }, [] as ChatRoom[]);
-
-    console.log(
-      "[MessagesPage] Transformed",
-      transformedRooms.length,
-      "rooms from",
-      roomsArray.length,
-      "raw rooms, deduplicated to",
-      deduplicatedRooms.length,
-      "rooms"
-    );
-    return deduplicatedRooms;
-  }, [roomsData]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const messages = useMemo(() => {
-    console.log("[MessagesPage] Processing messagesData:", messagesData);
-    console.log(
-      "[MessagesPage] messagesData type:",
-      typeof messagesData,
-      "isArray:",
-      Array.isArray(messagesData)
-    );
-
-    // transformResponse should already extract the array, so messagesData should be ChatMessage[]
     if (!messagesData) {
-      console.log("[MessagesPage] No messagesData, returning empty array");
       return [];
     }
 
-    // transformResponse should return ChatMessage[], so this should be an array
     let messagesArray: ChatMessage[] = [];
 
     if (Array.isArray(messagesData)) {
-      console.log(
-        "[MessagesPage] messagesData is array (expected), length:",
-        messagesData.length
-      );
       messagesArray = messagesData;
     } else {
-      // Fallback: if transformResponse didn't work, try to extract manually
-      console.warn(
-        "[MessagesPage] messagesData is not an array (unexpected), trying to extract:",
-        messagesData
-      );
-      const messagesResponse = messagesData as
-        | MessagesResponse
-        | {
-            data?: ChatMessage[];
-            items?: ChatMessage[];
-            messages?: ChatMessage[];
-          };
+      const messagesResponse = messagesData as {
+        data?: ChatMessage[];
+        items?: ChatMessage[];
+        messages?: ChatMessage[];
+      };
 
       if (Array.isArray(messagesResponse.messages)) {
         messagesArray = messagesResponse.messages;
@@ -461,74 +230,71 @@ export default function MessagesPage() {
       }
     }
 
-    console.log(
-      "[MessagesPage] Final messagesArray length:",
-      messagesArray.length
-    );
-    if (messagesArray.length > 0) {
-      console.log("[MessagesPage] First message:", messagesArray[0]);
-      console.log(
-        "[MessagesPage] Last message:",
-        messagesArray[messagesArray.length - 1]
-      );
-    }
-
-    // Create a copy of the array before sorting (RTK Query returns frozen arrays)
-    // Sort messages by createdAt (oldest first)
     const sorted = [...messagesArray].sort((a, b) => {
       const dateA = new Date(a.createdAt).getTime();
       const dateB = new Date(b.createdAt).getTime();
       return dateA - dateB;
     });
 
-    console.log("[MessagesPage] Sorted messages length:", sorted.length);
-    return sorted;
-  }, [messagesData]);
-
-  // Log messages data for debugging (moved after messages definition to avoid hoisting issue)
-  // Note: selectedChatData is defined later, so we'll add another useEffect after it
-  useEffect(() => {
     if (selectedChat) {
-      console.log("[MessagesPage] Selected chat:", selectedChat);
-      console.log("[MessagesPage] Messages data:", messagesData);
-      console.log(
-        "[MessagesPage] Messages data type:",
-        typeof messagesData,
-        "isArray:",
-        Array.isArray(messagesData)
+      const roomRealtimeMessages = realtimeMessages.filter(
+        (msg) => msg.roomId === selectedChat
       );
-      console.log("[MessagesPage] Loading messages:", loadingMessages);
-      console.log("[MessagesPage] Messages error:", messagesError);
-      console.log(
-        "[MessagesPage] Processed messages array length:",
-        messages.length
-      );
-    } else {
-      console.log("[MessagesPage] No chat selected");
+
+      const messageMap = new Map<string, ChatMessage>();
+
+      sorted.forEach((msg) => {
+        messageMap.set(msg.id, msg);
+      });
+
+      roomRealtimeMessages.forEach((msg) => {
+        messageMap.set(msg.id, msg);
+      });
+
+      const merged = Array.from(messageMap.values()).sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime();
+        const dateB = new Date(b.createdAt).getTime();
+        return dateA - dateB;
+      });
+
+      messagesRef.current = merged;
+      return merged;
     }
-  }, [selectedChat, messagesData, loadingMessages, messagesError, messages]);
+
+    messagesRef.current = sorted;
+    return sorted;
+  }, [messagesData, realtimeMessages, selectedChat]);
+
+  useChatWebSocket({
+    socket,
+    socketConnected,
+    selectedChat,
+    setRealtimeMessages,
+    setRoomLastMessages,
+    joinSocketRoom,
+    leaveSocketRoom,
+  });
 
   const loading = loadingRooms || loadingMessages;
   const messagesLoading = loadingMessages;
-  const apiError = roomsError
-    ? "data" in roomsError &&
-      roomsError.data &&
-      typeof roomsError.data === "object" &&
-      "message" in roomsError.data
-      ? String(roomsError.data.message)
-      : "message" in roomsError
-      ? String(roomsError.message)
-      : "Failed to fetch conversations"
-    : null;
+  const apiError =
+    roomsError && typeof roomsError === "object"
+      ? (() => {
+          const err = roomsError as any;
+          if (err?.data?.message) {
+            return String(err.data.message);
+          }
+          if (err?.message) {
+            return String(err.message);
+          }
+          return "Failed to fetch conversations";
+        })()
+      : null;
 
   // Local state for UI
   const [localError, setLocalError] = useState<string | null>(null);
-  const [profileName, setProfileName] = useState<string | null>(null);
   const [processingUserId, setProcessingUserId] = useState<string | null>(null);
   const [invalidUserIds, setInvalidUserIds] = useState<Set<string>>(new Set());
-  const [participantNames, setParticipantNames] = useState<Map<string, string>>(
-    new Map()
-  );
 
   // Combined error state
   const error: string | null = apiError || localError;
@@ -557,9 +323,31 @@ export default function MessagesPage() {
       return participant;
     }
 
-    // Handle objects - NEVER convert to string directly as it becomes [object Object]
+    // Handle objects
     if (participant && typeof participant === "object") {
-      // Try to get id or _id property
+      // First check if this is a RoomParticipant object with a userId field
+      if ('userId' in participant && participant.userId) {
+        const userIdValue = participant.userId;
+        
+        // If userId is an object (populated), get the _id from it
+        if (typeof userIdValue === 'object' && userIdValue !== null) {
+          const userIdObj = userIdValue as any;
+          const id = userIdObj._id || userIdObj.id;
+          if (id && typeof id === 'string') {
+            return id;
+          }
+        }
+        
+        // If userId is a string, return it
+        if (typeof userIdValue === 'string') {
+          if (userIdValue === "[object Object]" || userIdValue.trim() === "") {
+            return null;
+          }
+          return userIdValue;
+        }
+      }
+      
+      // Try to get id or _id property directly
       const id = participant.id || participant._id;
 
       if (id !== null && id !== undefined) {
@@ -646,35 +434,15 @@ export default function MessagesPage() {
 
       // Check if this ID was already marked as invalid
       if (invalidUserIds.has(targetUserId)) {
-        console.log("Skipping invalid userId:", targetUserId);
         router.replace("/chat");
         return;
       }
 
       if (processingUserId === targetUserId) {
-        console.log("Already processing this userId, skipping...");
         return;
       }
 
       setProcessingUserId(targetUserId);
-      console.log(
-        "[createRoomWithUser] Creating room with targetUserId:",
-        targetUserId,
-        "current user:",
-        currentUserId
-      );
-      console.log(
-        "[createRoomWithUser] Current user ID type:",
-        typeof currentUserId,
-        "value:",
-        currentUserId
-      );
-      console.log(
-        "[createRoomWithUser] Target user ID type:",
-        typeof targetUserId,
-        "value:",
-        targetUserId
-      );
 
       // Ensure both IDs are strings and valid
       if (!currentUserId || typeof currentUserId !== "string") {
@@ -723,10 +491,6 @@ export default function MessagesPage() {
         const participants = [cleanCurrentUserId, cleanTargetUserId];
 
         // Check if room already exists before trying to create
-        console.log(
-          "[createRoomWithUser] Checking for existing room with participants:",
-          participants
-        );
         const existingRoom = rooms.find((room) => {
           if (!room.participants || room.type !== "direct") return false;
 
@@ -738,13 +502,6 @@ export default function MessagesPage() {
             participantIds.includes(cleanTargetUserId) &&
             participantIds.includes(cleanCurrentUserId);
 
-          if (hasBothParticipants) {
-            console.log(
-              "[createRoomWithUser] Found existing room:",
-              room.id || room.roomId
-            );
-          }
-
           return hasBothParticipants;
         });
 
@@ -753,10 +510,6 @@ export default function MessagesPage() {
             existingRoom.roomId ||
             existingRoom.id ||
             (existingRoom as { _id?: string })._id;
-          console.log(
-            "[createRoomWithUser] Room already exists, using existing room:",
-            roomId
-          );
           if (roomId) {
             setSelectedChat(roomId);
             router.replace("/chat");
@@ -765,14 +518,6 @@ export default function MessagesPage() {
           }
         }
 
-        console.log(
-          "[createRoomWithUser] No existing room found, calling createRoomMutation with:",
-          {
-            type: "direct",
-            participants: participants,
-          }
-        );
-
         let result;
         try {
           result = await createRoomMutation({
@@ -780,47 +525,25 @@ export default function MessagesPage() {
             participants: participants, // Use cleaned IDs
           }).unwrap();
         } catch (mutationError: any) {
-          // Check if it's a duplicate key error
           const mutationErrorMsg =
-            mutationError?.data?.message || mutationError?.message || "";
+            (mutationError as any)?.data?.message || (mutationError as any)?.message || "";
           if (
             mutationErrorMsg.includes("E11000") ||
             mutationErrorMsg.includes("duplicate key")
           ) {
-            console.log(
-              "[createRoomWithUser] Caught duplicate key error during mutation, refetching rooms..."
-            );
+            const refetchResult: any = await refetchRooms();
+            const freshRooms: ChatRoom[] = (refetchResult && refetchResult.data) || rooms;
 
-            // Refetch to get the latest rooms including the existing one
-            const refetchResult = await refetchRooms();
-            const freshRooms = refetchResult?.data || rooms;
-
-            console.log(
-              "[createRoomWithUser] Searching in",
-              freshRooms.length,
-              "rooms for existing room with participants:",
-              [currentUserId, targetUserId]
-            );
-
-            // Find the existing room in fresh data
-            const existingRoom = freshRooms.find((room) => {
+            const existingRoom = freshRooms.find((room: ChatRoom) => {
               if (!room.participants || room.type !== "direct") return false;
 
               const participantIds = room.participants
-                .map((p) => extractParticipantId(p))
-                .filter((id): id is string => id !== null);
+                .map((p: string | Participant) => extractParticipantId(p))
+                .filter((id: string | null): id is string => id !== null);
 
               const hasBothParticipants =
                 participantIds.includes(targetUserId) &&
                 participantIds.includes(currentUserId);
-              console.log(
-                "[createRoomWithUser] Checking room:",
-                room.roomId || room.id,
-                "participantIds:",
-                participantIds,
-                "hasBoth:",
-                hasBothParticipants
-              );
               return hasBothParticipants;
             });
 
@@ -829,10 +552,6 @@ export default function MessagesPage() {
                 existingRoom.roomId ||
                 existingRoom.id ||
                 (existingRoom as { _id?: string })._id;
-              console.log(
-                "[createRoomWithUser] Found existing room after refetch:",
-                roomId
-              );
               if (roomId) {
                 setSelectedChat(roomId);
                 router.replace("/chat");
@@ -853,17 +572,6 @@ export default function MessagesPage() {
           // If it's not a duplicate error, re-throw it
           throw mutationError;
         }
-
-        console.log(
-          "[createRoomWithUser] Room created successfully, raw result:",
-          result
-        );
-        console.log(
-          "[createRoomWithUser] Result type:",
-          typeof result,
-          "isArray:",
-          Array.isArray(result)
-        );
 
         if (!result) {
           console.error(
@@ -889,10 +597,6 @@ export default function MessagesPage() {
             "_id" in resultObj
           ) {
             roomData = resultObj as unknown as ChatRoom;
-            console.log(
-              "[createRoomWithUser] Result is ChatRoom object:",
-              roomData
-            );
           } else if (
             "data" in resultObj &&
             resultObj.data &&
@@ -900,10 +604,6 @@ export default function MessagesPage() {
           ) {
             // Result is wrapped in { data: {...} }
             roomData = resultObj.data as unknown as ChatRoom;
-            console.log(
-              "[createRoomWithUser] Result has data property:",
-              roomData
-            );
           } else {
             console.warn(
               "[createRoomWithUser] Unexpected result structure:",
@@ -928,13 +628,6 @@ export default function MessagesPage() {
           (roomData as any)._id ||
           (roomData as any).id;
 
-        console.log(
-          "[createRoomWithUser] Extracted roomId:",
-          roomId,
-          "from roomData:",
-          roomData
-        );
-
         if (!roomId || typeof roomId !== "string") {
           console.error(
             "[createRoomWithUser] No valid roomId found in response:",
@@ -943,10 +636,6 @@ export default function MessagesPage() {
           throw new Error("Room creation failed: No room ID in response");
         }
 
-        console.log(
-          "[createRoomWithUser] Setting selected chat to roomId:",
-          roomId
-        );
         setSelectedChat(roomId);
         router.replace("/chat");
 
@@ -956,9 +645,6 @@ export default function MessagesPage() {
         }, 500);
 
         setProcessingUserId(null);
-        console.log(
-          "[createRoomWithUser] Room creation completed successfully"
-        );
       } catch (err: unknown) {
         console.error("[createRoomWithUser] Error creating room:", err);
         console.error("[createRoomWithUser] Error type:", typeof err);
@@ -1022,50 +708,60 @@ export default function MessagesPage() {
     ]
   );
 
-  // Extract participant names from rooms data
-  // Note: /chat/rooms doesn't include user names, so we'll need to fetch them separately
-  // This effect is kept for backward compatibility but won't extract names from rooms
-  useEffect(() => {
-    if (roomsData && Array.isArray(roomsData)) {
-      // Rooms from /chat/rooms don't have sender/receiver info
-      // We'll need to fetch participant names separately using their userIds
-      console.log(
-        "[MessagesPage] Rooms data loaded, participant names will be fetched separately"
-      );
-    }
-  }, [roomsData]);
+  
 
   // Handle userId query parameter - find or create room with that user
+  // Use a ref to track the last processed userId to prevent unnecessary runs
+  const lastProcessedUserId = useRef<string | null>(null);
+  
   useEffect(() => {
     const targetUserId = searchParams.get("userId");
     const name = searchParams.get("name");
     const currentUserId = userId || user?.id || fallbackUserId;
+    
+    // If the userId hasn't changed, don't process again
+    if (targetUserId && lastProcessedUserId.current === targetUserId && hasProcessedQueryParams.current) {
+      return;
+    }
 
-    console.log(
-      "Query params check - targetUserId:",
-      targetUserId,
-      "name:",
-      name,
-      "loading:",
-      loading,
-      "rooms.length:",
-      rooms.length,
-      "currentUserId:",
-      currentUserId,
-      "authLoading:",
-      authLoading,
-      "processingUserId:",
-      processingUserId
-    );
+    // Only process query params if there's a userId parameter and we haven't processed it yet
+    // This prevents the effect from running on every room click
+    if (!targetUserId) {
+      // No query params, reset the flag so we can process new ones if they appear
+      // But only reset if we're not currently processing (to avoid race conditions)
+      if (!processingUserId) {
+        hasProcessedQueryParams.current = false;
+      }
+      // Early return - don't do anything if no userId param
+      return;
+    }
 
-    if (name) {
-      setProfileName(name);
+    // If we've already processed this query param, don't process again
+    if (hasProcessedQueryParams.current) {
+      return;
+    }
+
+    // Only proceed if we actually have a targetUserId (not empty string)
+    if (!targetUserId || targetUserId.trim() === '') {
+      return;
+    }
+
+    if (name && targetUserId) {
+      setParticipantNames(prev => {
+        const next = new Map(prev);
+        next.set(targetUserId, name);
+        return next;
+      });
     }
 
     // Skip if this userId was already marked as invalid
     if (targetUserId && invalidUserIds.has(targetUserId)) {
-      console.log("Skipping invalid userId:", targetUserId);
-      router.replace("/chat");
+      // Only replace URL if there are actually query params to clear
+      if (searchParams.toString()) {
+        router.replace("/chat", { scroll: false });
+      }
+      hasProcessedQueryParams.current = true;
+      lastProcessedUserId.current = targetUserId;
       return;
     }
 
@@ -1077,8 +773,6 @@ export default function MessagesPage() {
       !authLoading &&
       !processingUserId
     ) {
-      console.log("Processing userId:", targetUserId, "Current rooms:", rooms);
-
       // Validate MongoDB ObjectId format before processing
       if (!isValidMongoObjectId(targetUserId)) {
         console.error("Invalid MongoDB ObjectId format:", targetUserId);
@@ -1086,8 +780,12 @@ export default function MessagesPage() {
         setError(
           `Invalid user ID format. The user ID "${targetUserId}" is not a valid MongoDB ObjectId. Please use a valid user ID (24-character hex string).`
         );
-        // Clear query params to prevent retries
-        router.replace("/chat");
+        // Clear query params to prevent retries (only if there are query params)
+        if (searchParams.toString()) {
+          router.replace("/chat", { scroll: false });
+        }
+        hasProcessedQueryParams.current = true;
+        lastProcessedUserId.current = targetUserId;
         return;
       }
 
@@ -1102,44 +800,25 @@ export default function MessagesPage() {
         const hasBothParticipants =
           participantIds.includes(targetUserId) &&
           participantIds.includes(currentUserId);
-        console.log(
-          "Checking room:",
-          room.id,
-          "type:",
-          room.type,
-          "participants:",
-          room.participants,
-          "participantIds:",
-          participantIds,
-          "hasBoth:",
-          hasBothParticipants
-        );
         return hasBothParticipants;
       });
 
       if (existingRoom) {
-        console.log("Found existing room:", existingRoom.id);
         setSelectedChat(existingRoom.id);
-        // Remove query parameter from URL
-        router.replace("/chat");
+        // Mark as processed before navigation to prevent re-running
+        hasProcessedQueryParams.current = true;
+        lastProcessedUserId.current = targetUserId;
+        // Remove query parameter from URL (only if there are query params)
+        if (searchParams.toString()) {
+          router.replace("/chat", { scroll: false });
+        }
       } else {
-        console.log("No existing room found, creating new one...");
+        // Mark as processed to prevent re-running during room creation
+        hasProcessedQueryParams.current = true;
+        lastProcessedUserId.current = targetUserId;
         // If no existing room, create one
         createRoomWithUser(targetUserId);
       }
-    } else {
-      console.log(
-        "Skipping processing - targetUserId:",
-        targetUserId,
-        "currentUserId:",
-        currentUserId,
-        "loading:",
-        loading,
-        "authLoading:",
-        authLoading,
-        "processingUserId:",
-        processingUserId
-      );
     }
   }, [
     rooms,
@@ -1151,112 +830,17 @@ export default function MessagesPage() {
     loading,
     authLoading,
     invalidUserIds,
+    processingUserId,
   ]);
 
   useEffect(() => {
     if (selectedChat) {
-      console.log("Selected chat changed, marking room as read:", selectedChat);
       markRoomAsReadMutation(selectedChat).catch((err) => {
         console.error("Error marking room as read:", err);
       });
     }
   }, [selectedChat, markRoomAsReadMutation]);
 
-  // Fetch participant names from /profiles/user/{userId} endpoint
-  const fetchParticipantName = async (
-    participantId: string | Participant
-  ): Promise<string | null> => {
-    const normalizedId = extractParticipantId(participantId);
-
-    if (
-      !normalizedId ||
-      typeof normalizedId !== "string" ||
-      normalizedId === "[object Object]"
-    ) {
-      return null;
-    }
-
-    if (participantNames.has(normalizedId)) {
-      return participantNames.get(normalizedId) || null;
-    }
-
-    // Fetch from /profiles/user/{userId} endpoint
-    try {
-      const response = await fetch(
-        `${
-          process.env.NEXT_PUBLIC_API_BASE_URL ||
-          "https://be-aphrodite-8wrp.onrender.com"
-        }/profiles/user/${normalizedId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const profile = data.success ? data.data : data;
-
-        if (profile) {
-          // Check if name is in nested user object first
-          const user = profile.user;
-          const name =
-            user?.firstName && user?.lastName
-              ? `${user.firstName} ${user.lastName}`.trim()
-              : user?.firstName || user?.lastName
-              ? user.firstName || user.lastName
-              : user?.userName
-              ? user.userName
-              : profile.firstName && profile.lastName
-              ? `${profile.firstName} ${profile.lastName}`.trim()
-              : profile.firstName ||
-                profile.lastName ||
-                profile.username ||
-                profile.userName ||
-                profile.stageName ||
-                null;
-
-          // Extract avatar from media array (get first non-"string" entry)
-          let avatar: string | null = null;
-          if (
-            profile.media &&
-            Array.isArray(profile.media) &&
-            profile.media.length > 0
-          ) {
-            const validMedia = profile.media.find(
-              (url: string) => url !== "string" && url.startsWith("http")
-            );
-            if (validMedia) {
-              avatar = validMedia;
-            }
-          }
-
-          if (name) {
-            setParticipantNames((prev) => {
-              const newMap = new Map(prev);
-              newMap.set(normalizedId, name);
-              return newMap;
-            });
-          }
-
-          if (avatar) {
-            setParticipantAvatars((prev) => {
-              const newMap = new Map(prev);
-              newMap.set(normalizedId, avatar);
-              return newMap;
-            });
-          }
-
-          return name;
-        }
-      }
-    } catch (err) {
-      console.error("Error fetching participant profile:", err);
-    }
-
-    return null;
-  };
 
   const sendMessage = async (
     e?: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent
@@ -1297,43 +881,134 @@ export default function MessagesPage() {
       return;
     }
 
-    try {
-      const result = await sendMessageMutation({
-        receiverId: receiverId, // TypeScript now knows receiverId is defined (string, not undefined)
-        content: messageInput.trim(),
-        type: "text",
-        tempId: `temp_${Date.now()}`,
-      }).unwrap();
+    const messageContent = messageInput.trim();
+    const tempId = `temp_${Date.now()}`;
+    
+    // Ensure currentUserId is a string (not null)
+    if (!currentUserId || typeof currentUserId !== "string") {
+      console.error("[MessagesPage] Cannot send message: invalid currentUserId");
+      return;
+    }
+    
+    // Create optimistic message for immediate UI update
+    const optimisticMessage: ChatMessage = {
+      id: tempId,
+      senderId: currentUserId,
+      receiverId: receiverId,
+      roomId: selectedChat,
+      content: messageContent,
+      type: "text",
+      status: "sending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      tempId: tempId,
+    };
 
-      if (result) {
-        // transformResponse already extracted the data, so result is the message object
-        const sentMessage = {
-          ...result,
-          senderId: currentUserId, // Ensure senderId is set correctly
-        };
+    // Add optimistic message to real-time messages
+    setRealtimeMessages((prev) => [...prev, optimisticMessage]);
+    
+    // Update room's lastMessage immediately for optimistic UI
+    if (selectedChat) {
+      setRoomLastMessages((prev) => {
+        const updated = new Map(prev);
+        updated.set(selectedChat, optimisticMessage);
+        return updated;
+      });
+    }
+    
+    setMessageInput("");
 
-        console.log("Message sent successfully:", sentMessage);
-        setMessageInput("");
-
-        // RTK Query will automatically refetch messages and rooms due to invalidatesTags
-        // But we can also manually refetch to ensure immediate update
-        refetchMessages();
-        refetchRooms();
+    // Try WebSocket first if connected, otherwise fallback to REST API
+    if (socketConnected && socket) {
+      try {
+        sendSocketMessage({
+          receiverId: receiverId,
+          roomId: selectedChat,
+          content: messageContent,
+          type: "text",
+          tempId: tempId,
+        });
+        
+        // WebSocket will handle the messageDelivered event to update the optimistic message
+        // Only refetch rooms to update last message, not messages (we already have optimistic update)
+        setTimeout(() => {
+          refetchRooms();
+        }, 1000);
+      } catch (err) {
+        console.error("[MessagesPage] Error sending via WebSocket, falling back to REST API:", err);
+        // Fallback to REST API
+        sendViaRestAPI();
       }
-    } catch (err: unknown) {
-      console.error("Error sending message:", err);
-      const errorMsg =
-        err &&
-        typeof err === "object" &&
-        "data" in err &&
-        err.data &&
-        typeof err.data === "object" &&
-        "message" in err.data
-          ? String(err.data.message)
-          : err && typeof err === "object" && "message" in err
-          ? String(err.message)
-          : "Failed to send message";
-      console.error("Failed to send message:", errorMsg);
+    } else {
+      // Fallback to REST API
+      sendViaRestAPI();
+    }
+
+    async function sendViaRestAPI() {
+      // receiverId is already validated above, but TypeScript needs this check
+      if (!receiverId) {
+        console.error("[MessagesPage] Cannot send via REST API: receiverId is undefined");
+        return;
+      }
+      
+      try {
+        const result = await sendMessageMutation({
+          receiverId: receiverId,
+          content: messageContent,
+          type: "text",
+          tempId: tempId,
+        }).unwrap();
+
+        if (result && receiverId && selectedChat && currentUserId) {
+          // transformResponse already extracted the data, so result is the message object
+          // Ensure senderId and receiverId are strings (not null)
+          const sentMessage: ChatMessage = {
+            ...result,
+            senderId: (result.senderId && typeof result.senderId === "string") ? result.senderId : currentUserId,
+            receiverId: (result.receiverId && typeof result.receiverId === "string") ? result.receiverId : receiverId,
+            roomId: (result.roomId && typeof result.roomId === "string") ? result.roomId : selectedChat,
+          };
+
+          // Update optimistic message with real message
+          setRealtimeMessages((prev) => 
+            prev.map((msg) => 
+              msg.tempId === tempId ? sentMessage : msg
+            )
+          );
+          
+          // Update room's lastMessage with the real message
+          if (selectedChat) {
+            setRoomLastMessages((prev) => {
+              const updated = new Map(prev);
+              updated.set(selectedChat, sentMessage);
+              return updated;
+            });
+          }
+
+          // RTK Query will automatically refetch messages and rooms due to invalidatesTags
+          // Only refetch rooms, messages will be updated via invalidatesTags
+          refetchRooms();
+        }
+      } catch (err: unknown) {
+        console.error("[MessagesPage] Error sending message via REST API:", err);
+        
+        // Remove optimistic message on error
+        setRealtimeMessages((prev) => prev.filter((msg) => msg.tempId !== tempId));
+        
+        const errorMsg =
+          err &&
+          typeof err === "object" &&
+          "data" in err &&
+          err.data &&
+          typeof err.data === "object" &&
+          "message" in err.data
+            ? String(err.data.message)
+            : err && typeof err === "object" && "message" in err
+            ? String(err.message)
+            : "Failed to send message";
+        console.error("[MessagesPage] Failed to send message:", errorMsg);
+        setError(errorMsg);
+      }
     }
   };
 
@@ -1354,42 +1029,228 @@ export default function MessagesPage() {
   };
 
   const handleSharePricing = () => {
+    if (!(isDiva || isHunk || user?.userType === "diva" || user?.userType === "hunk")) {
+      return;
+    }
     setShowPricingDialog(true);
   };
 
   const closePricingDialog = () => {
     setShowPricingDialog(false);
     setSelectedPlan(null);
+    setCustomPrice("");
   };
 
-  const handlePlanSelect = (plan: string) => {
+  const handlePlanSelect = (plan: PricingPlan) => {
     setSelectedPlan(plan);
   };
 
-  const handleSendPricing = () => {
-    if (selectedPlan) {
-      // Handle sending the selected pricing plan
-      console.log("Sending pricing plan:", selectedPlan);
-      closePricingDialog();
+  const handleSendPricing = async () => {
+    if (!selectedPlan) {
+      return;
     }
+
+    const currentUserId = userId || user?.id || fallbackUserId;
+    if (!selectedChat || !currentUserId) {
+      return;
+    }
+
+    const room = rooms.find((r) => r.id === selectedChat);
+    if (!room || room.type !== "direct" || !room.participants) {
+      return;
+    }
+
+    const otherParticipant = room.participants.find((p) => {
+      const pId = extractParticipantId(p);
+      return pId && pId !== currentUserId;
+    });
+    const receiverId = otherParticipant
+      ? extractParticipantId(otherParticipant) || undefined
+      : undefined;
+
+    if (!receiverId || receiverId.trim() === "") {
+      return;
+    }
+
+    const tempId = `pricing_${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const pricingData = {
+      shortTime:
+        selectedPlan === "short-time"
+          ? {
+              incall:
+                formattedPricing?.shortTime?.incall ??
+                "50,000.00 APH",
+              outcall:
+                formattedPricing?.shortTime?.outcall ??
+                "70,000.00 APH",
+            }
+          : undefined,
+      overnight:
+        selectedPlan === "overnight"
+          ? {
+              incall:
+                formattedPricing?.overnight?.incall ??
+                "70,000.00 APH",
+              outcall:
+                formattedPricing?.overnight?.outcall ??
+                "100,000.00 APH",
+            }
+          : undefined,
+      weekend:
+        selectedPlan === "weekend"
+          ? {
+              incall:
+                formattedPricing?.weekend?.incall ??
+                "---",
+              outcall:
+                formattedPricing?.weekend?.outcall ??
+                "70,000.00 APH",
+            }
+          : undefined,
+      customPrice:
+        selectedPlan === "custom-price" && customPrice
+          ? {
+              incall: `${customPrice} APH`,
+              outcall: `${customPrice} APH`,
+            }
+          : undefined,
+    };
+
+    const optimisticMessage: ChatMessage = {
+      id: tempId,
+      senderId: currentUserId,
+      receiverId,
+      roomId: selectedChat,
+      content: "Pricing plan",
+      type: "text",
+      status: "sending",
+      createdAt: now,
+      updatedAt: now,
+      metadata: {
+        messageType: "pricing",
+        pricing: pricingData,
+        selectedPlan,
+      },
+      tempId,
+    };
+
+    setRealtimeMessages((prev) => [...prev, optimisticMessage]);
+
+    setRoomLastMessages((prev) => {
+      const updated = new Map(prev);
+      updated.set(selectedChat, optimisticMessage);
+      return updated;
+    });
+
+    closePricingDialog();
+
+    const sendMetadata = {
+      messageType: "pricing",
+      pricing: pricingData,
+      selectedPlan,
+    } as Record<string, unknown>;
+
+    if (socketConnected && socket) {
+      try {
+        sendSocketMessage({
+          receiverId,
+          roomId: selectedChat,
+          content: "Pricing plan",
+          type: "text",
+          tempId,
+          metadata: sendMetadata,
+        });
+
+        setTimeout(() => {
+          refetchRooms();
+        }, 1000);
+        return;
+      } catch (err) {
+        console.error(
+          "[MessagesPage] Error sending pricing via WebSocket, falling back to REST API:",
+          err
+        );
+      }
+    }
+
+    try {
+      const result = await sendMessageMutation({
+        receiverId,
+        content: "Pricing plan",
+        type: "text",
+        tempId,
+        metadata: sendMetadata,
+      }).unwrap();
+
+      if (result && receiverId && selectedChat && currentUserId) {
+        const sentMessage: ChatMessage = {
+          ...result,
+          senderId:
+            result.senderId && typeof result.senderId === "string"
+              ? result.senderId
+              : currentUserId,
+          receiverId:
+            result.receiverId && typeof result.receiverId === "string"
+              ? result.receiverId
+              : receiverId,
+          roomId:
+            result.roomId && typeof result.roomId === "string"
+              ? result.roomId
+              : selectedChat,
+        };
+
+        setRealtimeMessages((prev) =>
+          prev.map((msg) => (msg.tempId === tempId ? sentMessage : msg))
+        );
+
+        setRoomLastMessages((prev) => {
+          const updated = new Map(prev);
+          updated.set(selectedChat, sentMessage);
+          return updated;
+        });
+
+        refetchRooms();
+      }
+    } catch (err) {
+      console.error(
+        "[MessagesPage] Error sending pricing message via REST API:",
+        err
+      );
+      setRealtimeMessages((prev) =>
+        prev.filter((msg) => msg.tempId !== tempId)
+      );
+    }
+  };
+
+  const handleBookShortTime = (pricing: { incall: string; outcall: string }) => {
+    setCheckoutPlan("short-time");
+    setCheckoutAmounts(pricing);
+    setShowCheckout(true);
+  };
+
+  const handleBookOvernight = (pricing: { incall: string; outcall: string }) => {
+    setCheckoutPlan("overnight");
+    setCheckoutAmounts(pricing);
+    setShowCheckout(true);
+  };
+
+  const handleBookWeekend = (pricing: { incall: string; outcall: string }) => {
+    setCheckoutPlan("weekend");
+    setCheckoutAmounts(pricing);
+    setShowCheckout(true);
+  };
+
+  const handleBookCustomPrice = (pricing: { incall: string; outcall: string }) => {
+    setCheckoutPlan("custom-price");
+    setCheckoutAmounts(pricing);
+    setShowCheckout(true);
   };
 
   const handleStartNewChat = async () => {
     const targetUserId = newChatUserId.trim();
     const currentUserId = userId || user?.id || fallbackUserId;
-
-    console.log(
-      "[handleStartNewChat] Called with userId:",
-      targetUserId,
-      "currentUserId:",
-      currentUserId,
-      "authLoading:",
-      authLoading,
-      "isAuthenticated:",
-      isAuthenticated,
-      "fallbackUserId:",
-      fallbackUserId
-    );
 
     if (!targetUserId) {
       console.error("[handleStartNewChat] No userId provided");
@@ -1398,7 +1259,6 @@ export default function MessagesPage() {
     }
 
     if (authLoading) {
-      console.log("[handleStartNewChat] Auth still loading, waiting...");
       setError("Please wait for authentication to complete");
       return;
     }
@@ -1412,7 +1272,6 @@ export default function MessagesPage() {
     }
 
     if (processingUserId === targetUserId) {
-      console.log("[handleStartNewChat] Already processing this userId");
       return;
     }
 
@@ -1431,7 +1290,6 @@ export default function MessagesPage() {
     });
 
     if (existingRoom) {
-      console.log("[handleStartNewChat] Room already exists:", existingRoom.id);
       setSelectedChat(existingRoom.id);
       setShowNewChatDialog(false);
       setNewChatUserId("");
@@ -1439,12 +1297,6 @@ export default function MessagesPage() {
       return;
     }
 
-    console.log(
-      "[handleStartNewChat] Starting new chat with userId:",
-      targetUserId,
-      "current user:",
-      currentUserId
-    );
     setError(null); // Clear any previous errors
     setShowNewChatDialog(false); // Close dialog while processing
 
@@ -1452,7 +1304,6 @@ export default function MessagesPage() {
     try {
       await createRoomWithUser(targetUserId);
       setNewChatUserId("");
-      console.log("[handleStartNewChat] Chat started successfully");
     } catch (err) {
       console.error("[handleStartNewChat] Error starting chat:", err);
       const errorMessage =
@@ -1466,800 +1317,218 @@ export default function MessagesPage() {
 
   const selectedChatData = rooms.find((room) => room.id === selectedChat);
 
-  // Log participant information for debugging (after selectedChatData is defined)
-  useEffect(() => {
-    if (selectedChat && selectedChatData) {
-      const currentUserId = userId || user?.id || fallbackUserId;
-      console.log("[MessagesPage] Selected room data:", selectedChatData);
-      console.log(
-        "[MessagesPage] Current user ID:",
-        currentUserId,
-        "type:",
-        typeof currentUserId
-      );
-      console.log(
-        "[MessagesPage] Room participants:",
-        selectedChatData.participants
-      );
-
-      // Check if current user is in participants
-      if (selectedChatData.participants) {
-        const participantIds = selectedChatData.participants
-          .map((p) => extractParticipantId(p))
-          .filter((id): id is string => id !== null);
-        const isParticipant =
-          currentUserId && participantIds.includes(currentUserId);
-        console.log(
-          "[MessagesPage] Is current user a participant?",
-          isParticipant,
-          "participantIds:",
-          participantIds,
-          "currentUserId:",
-          currentUserId
-        );
-
-        if (!isParticipant && currentUserId) {
-          console.warn(
-            "[MessagesPage] WARNING: Current user is NOT a participant in this room!"
-          );
-          console.warn(
-            '[MessagesPage] This will cause "User is not a participant in this room" error when fetching messages.'
-          );
-        }
-      }
-    }
-  }, [selectedChat, selectedChatData, userId, user?.id, fallbackUserId]);
-
-  // Helper functions for data transformation
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
-
-  const getRoomDisplayName = (room: ChatRoom) => {
-    if (room.type === "group") {
-      return room.name || "Group Chat";
+  // Get the other participant's user ID for profile navigation
+  const getOtherParticipantId = useCallback((): string | null => {
+    if (!selectedChatData || !currentUserId) {
+      return null;
     }
 
-    // For direct messages, find the other participant's name
-    const currentUserId = userId || user?.id || fallbackUserId;
-    if (room.participants && room.participants.length === 2 && currentUserId) {
-      // Find the other participant (not the current user)
-      const otherParticipant = room.participants.find((p) => {
+    // For direct messages, find the other participant
+    if (selectedChatData.type === "direct" && selectedChatData.participants) {
+      const otherParticipant = selectedChatData.participants.find((p) => {
         const pId = extractParticipantId(p);
         return pId && pId !== currentUserId;
       });
+      
+      if (otherParticipant) {
+        const otherParticipantId = extractParticipantId(otherParticipant);
+        if (otherParticipantId && typeof otherParticipantId === "string") {
+          return otherParticipantId;
+        }
+      }
+    }
 
-      // Debug logging
-      if (otherParticipant && typeof otherParticipant === "object") {
-        console.log(
-          "Found otherParticipant object:",
-          otherParticipant,
-          "keys:",
-          Object.keys(otherParticipant)
+    return null;
+  }, [selectedChatData, currentUserId]);
+
+  const handleViewProfile = useCallback(async () => {
+    const otherParticipantUserId = getOtherParticipantId();
+    if (!otherParticipantUserId) {
+      console.error("[MessagesPage] Cannot view profile: other participant ID not found");
+      return;
+    }
+
+    if (preloadedProfileId) {
+      router.push(`/profile/${preloadedProfileId}`);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_BASE_URL ||
+          "https://be-aphrodite-8wrp.onrender.com"
+        }/profiles/user/${otherParticipantUserId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const profileId = data?.data?.id || data?.id || null;
+
+        if (profileId && typeof profileId === "string") {
+          setPreloadedProfileId(profileId);
+          router.push(`/profile/${profileId}`);
+          return;
+        }
+      } else {
+        console.error(
+          "[MessagesPage] Failed to fetch participant profile for view profile, status:",
+          response.status
         );
       }
+    } catch (error) {
+      console.error("[MessagesPage] Error fetching participant profile for view profile:", error);
+    }
 
-      const otherParticipantId = otherParticipant
-        ? extractParticipantId(otherParticipant)
-        : null;
+    console.error(
+      "[MessagesPage] Could not resolve profile ID for participant:",
+      otherParticipantUserId
+    );
+  }, [getOtherParticipantId, router, preloadedProfileId]);
 
-      // Debug logging
-      if (
-        otherParticipantId === "[object Object]" ||
-        (otherParticipantId && typeof otherParticipantId !== "string")
-      ) {
-        console.error("Invalid otherParticipantId extracted:", {
-          otherParticipant,
-          otherParticipantId,
-          type: typeof otherParticipantId,
-          roomParticipants: room.participants,
-        });
-      }
+  // Preload profile ID when a room is selected
+  useEffect(() => {
+    const otherParticipantUserId = getOtherParticipantId();
+    
+    // Reset preloaded profile ID when room changes
+    setPreloadedProfileId(null);
+    
+    // Only preload for direct messages
+    if (!otherParticipantUserId || !selectedChatData || selectedChatData.type !== "direct") {
+      return;
+    }
 
-      // Validate otherParticipantId is a valid string before using it
-      if (
-        otherParticipantId &&
-        typeof otherParticipantId === "string" &&
-        otherParticipantId !== "[object Object]" &&
-        otherParticipantId.trim() !== ""
-      ) {
-        // Check if we have the name cached
-        const cachedName = participantNames.get(otherParticipantId);
-        if (cachedName) {
-          return cachedName;
-        }
+    // Fetch profile in the background
+    const preloadProfile = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL || "https://be-aphrodite-8wrp.onrender.com"}/profiles/user/${otherParticipantUserId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+            },
+          }
+        );
 
-        // If we have profileName from query params (for newly created rooms), use it
-        if (profileName) {
-          // Also cache it for future use
-          setParticipantNames((prev) => {
-            const newMap = new Map(prev);
-            newMap.set(otherParticipantId, profileName);
-            return newMap;
-          });
-          return profileName;
-        }
-
-        // Try to fetch the name if not cached (async, will update later)
-        if (!participantNames.has(otherParticipantId)) {
-          // Double-check before calling API
-          const safeId = extractParticipantId(otherParticipantId);
-          if (
-            safeId &&
-            typeof safeId === "string" &&
-            safeId !== "[object Object]"
-          ) {
-            fetchParticipantName(safeId).catch((err) => {
-              console.error("Error fetching participant name:", err);
-            });
+        if (response.ok) {
+          const data = await response.json();
+          const profileId = data?.data?.id || data?.id;
+          
+          if (profileId) {
+            setPreloadedProfileId(profileId);
           }
         }
-
-        // Fallback: Show last 8 characters of userId
-        return `User ${otherParticipantId.slice(-8)}`;
-      } else if (otherParticipantId) {
-        // Log warning if we got an invalid ID
-        console.warn(
-          "Invalid otherParticipantId extracted:",
-          otherParticipantId,
-          "type:",
-          typeof otherParticipantId,
-          "from participant:",
-          otherParticipant
-        );
+      } catch (error) {
+        console.error("[MessagesPage] Error preloading profile:", error);
+        // Silently fail - we'll use userId as fallback
       }
-    }
+    };
 
-    return "Direct Message";
-  };
-
-  const getLastMessagePreview = (room: ChatRoom) => {
-    // Check if lastMessage is a full object with content, not just an ID string
-    const hasFullMessage =
-      room.lastMessage &&
-      typeof room.lastMessage === "object" &&
-      "content" in room.lastMessage;
-
-    if (!hasFullMessage) {
-      // If there's a message count greater than 0, show it instead of "No messages yet"
-      if (room.messageCount && room.messageCount > 0) {
-        return `${room.messageCount} ${
-          room.messageCount === 1 ? "message" : "messages"
-        }`;
-      }
-      return "No messages yet";
-    }
-
-    const message = room.lastMessage;
-    if (message.type === "text") {
-      return message.content.length > 50
-        ? `${message.content.substring(0, 50)}...`
-        : message.content;
-    } else if (message.type === "image") {
-      return "📷 Image";
-    } else if (message.type === "file") {
-      return "📎 File";
-    } else if (message.type === "video") {
-      return "🎥 Video";
-    } else if (message.type === "audio") {
-      return "🎵 Audio";
-    }
-    return "Message";
-  };
+    preloadProfile();
+  }, [selectedChat, getOtherParticipantId, selectedChatData]);
 
   // Convert API ChatMessage to UI Message format
-  const convertToUIMessage = (apiMessage: ChatMessage): Message => {
-    const currentUserId = userId || user?.id || fallbackUserId;
-
-    // Normalize IDs to strings for comparison - handle both ObjectId and string formats
-    const normalizeId = (
-      id: string | { _id?: string; id?: string } | null | undefined
-    ): string => {
-      if (!id) return "";
-      // If it's already a string, return it trimmed
-      if (typeof id === "string") return id.trim();
-      // If it's an object with _id or id property, extract it
-      if (typeof id === "object" && id !== null) {
-        return String(id._id || id.id || "").trim();
-      }
-      // Otherwise convert to string
-      return String(id).trim();
-    };
-
-    const senderIdStr = normalizeId(apiMessage.senderId);
-    const currentUserIdStr = normalizeId(currentUserId);
-
-    // Compare normalized IDs
-    const isOwn =
-      senderIdStr !== "" &&
-      currentUserIdStr !== "" &&
-      senderIdStr === currentUserIdStr;
-
-    // Debug logging for message conversion
-    console.log("convertToUIMessage:", {
-      apiMessageSenderId: apiMessage.senderId,
-      senderIdStr,
-      currentUserId,
-      currentUserIdStr,
-      isOwn,
-      messageContent: apiMessage.content?.substring(0, 20),
-    });
-
-    return {
-      id: apiMessage.id,
-      sender: isOwn ? "me" : "other",
-      type: apiMessage.type as "text" | "audio" | "video" | "image" | "pricing",
-      content: apiMessage.content,
-      timestamp: formatTime(apiMessage.createdAt),
-      duration: apiMessage.metadata?.duration as string | undefined,
-      videoThumbnail:
-        (apiMessage.metadata?.imageUrl as string) ||
-        apiMessage.attachments?.[0],
-    };
-  };
-
-  const renderMessage = (message: Message) => {
-    const isOwnMessage = message.sender === "me";
-
-    if (message.type === "pricing" && message.pricing) {
-      return (
-        <div className="space-y-3">
-          {/* Short Time Card */}
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Incall</span>
-                <span className="text-white font-semibold text-[20px]">
-                  50,000.00 APH
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Outcall</span>
-                <span className="text-white font-semibold text-[20px]">
-                  70,000.00 APH
-                </span>
-              </div>
-            </div>
-            <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium">
-              Book short time
-            </button>
-          </div>
-
-          {/* Overnight Card */}
-          <div className="bg-gray-800 rounded-[20px] p-4 w-[317px] h-[180px] flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Incall</span>
-                <span className="text-white font-semibold text-[20px]">
-                  70,000.00 APH
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-white text-[20px]">Outcall</span>
-                <span className="text-white font-semibold text-[20px]">
-                  100,000.00 APH
-                </span>
-              </div>
-            </div>
-            <button className="w-full bg-[#FA266D] text-white py-2 px-4 rounded-[30px] text-[20px] font-medium">
-              Book overnight
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    if (message.type === "audio") {
-      return (
-        <div
-          className={`flex items-center gap-3 rounded-lg p-3 max-w-xs ${
-            isOwnMessage ? "bg-white" : "bg-[#FA266D]"
-          }`}
-        >
-          <button
-            className={`w-8 h-8 rounded-full flex items-center justify-center ${
-              isOwnMessage ? "bg-gray-200" : "bg-white/20"
-            }`}
-          >
-            <Play
-              className={`h-4 w-4 ${
-                isOwnMessage ? "text-gray-600" : "text-white"
-              }`}
-            />
-          </button>
-          <div className="flex-1">
-            <div
-              className={`w-32 h-2 rounded-full ${
-                isOwnMessage ? "bg-gray-300" : "bg-white/30"
-              }`}
-            ></div>
-            <div
-              className={`flex justify-between text-xs mt-1 ${
-                isOwnMessage ? "text-gray-500" : "text-white/80"
-              }`}
-            >
-              <span>{message.duration}</span>
-              <span>01:25</span>
-            </div>
-          </div>
-          {isOwnMessage && (
-            <div className="flex items-center gap-1">
-              <CheckCheck className="h-3 w-3 text-blue-500" />
-              <span className="text-xs text-gray-500">Sent</span>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    if (message.type === "video") {
-      return (
-        <div
-          className={`rounded-lg p-2 max-w-xs ${
-            isOwnMessage ? "bg-white" : "bg-[#FA266D]/10"
-          }`}
-        >
-          <div
-            className="relative cursor-pointer"
-            onClick={() =>
-              handleMediaClick(
-                "video",
-                message.videoThumbnail || "",
-                message.duration
-              )
-            }
-          >
-            <div className="w-48 h-32 bg-gray-300 rounded-lg flex items-center justify-center hover:bg-gray-400 transition-colors">
-              <Play className="h-8 w-8 text-gray-600" />
-            </div>
-            <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-              {message.duration}
-            </div>
-          </div>
-          <div
-            className={`flex items-center justify-between mt-2 ${
-              isOwnMessage ? "justify-end" : "justify-start"
-            }`}
-          >
-            <span
-              className={`text-xs ${
-                isOwnMessage ? "text-gray-500" : "text-white/80"
-              }`}
-            >
-              {message.timestamp}
-            </span>
-            {isOwnMessage && <CheckCheck className="h-3 w-3 text-blue-500" />}
-          </div>
-        </div>
-      );
-    }
-
-    if (message.type === "image") {
-      return (
-        <div
-          className={`rounded-lg p-2 max-w-xs ${
-            isOwnMessage ? "bg-white" : "bg-[#FA266D]/10"
-          }`}
-        >
-          <div
-            className="relative cursor-pointer"
-            onClick={() =>
-              handleMediaClick("image", message.videoThumbnail || "")
-            }
-          >
-            <img
-              src={message.videoThumbnail || "/api/placeholder/200/150"}
-              alt="Message image"
-              className="w-48 h-32 object-cover rounded-lg hover:opacity-90 transition-opacity"
-            />
-          </div>
-          <div
-            className={`flex items-center justify-between mt-2 ${
-              isOwnMessage ? "justify-end" : "justify-start"
-            }`}
-          >
-            <span
-              className={`text-xs ${
-                isOwnMessage ? "text-gray-500" : "text-white/80"
-              }`}
-            >
-              {message.timestamp}
-            </span>
-            {isOwnMessage && <CheckCheck className="h-3 w-3 text-blue-500" />}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div
-        className={`rounded-lg p-3 max-w-xs ${
-          isOwnMessage ? "bg-white text-gray-800" : "bg-[#FA266D] text-white"
-        }`}
-      >
-        <p className="text-sm">{message.content}</p>
-        <div
-          className={`flex items-center justify-end gap-1 mt-1 ${
-            isOwnMessage ? "text-gray-500" : "text-pink-100"
-          }`}
-        >
-          <span className="text-xs">{message.timestamp}</span>
-          {isOwnMessage && <CheckCheck className="h-3 w-3" />}
-        </div>
-      </div>
-    );
+  const handleSelectChat = (roomId: string) => {
+    setSelectedChat(roomId);
   };
 
   return (
-    <div className="flex h-full bg-[#1F1B2C] overflow-hidden">
-      {/* Left Sidebar - Chat List */}
-      <div className="w-[360px] bg-[#1F1B2C] border-r border-white/10 flex flex-col h-full">
-        {/* Header */}
-        <div className="p-6 border-b border-white/10 flex-shrink-0">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-white text-xl font-semibold">Messages</h1>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowNewChatDialog(true)}
-                className="bg-[#FA266D] hover:bg-pink-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-              >
-                New Chat
-              </button>
-              <button className="text-[#FA266D] hover:text-pink-400 transition-colors">
-                <Menu className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Search Bar */}
-          <div className="relative">
-            <div className="flex items-center bg-white/10 rounded-lg px-4 py-2">
-              <Search className="h-4 w-4 text-gray-400 mr-3" />
-              <input
-                type="text"
-                placeholder="Search for chats"
-                className="bg-transparent text-white placeholder-gray-400 focus:outline-none flex-1 text-sm"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Chat List - Scrollable */}
-        <div className="flex-1 overflow-y-auto scrollbar-hide">
-          {loading && (!Array.isArray(rooms) || rooms.length > 0) ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FA266D]"></div>
-            </div>
-          ) : error ? (
-            <div className="p-4 text-center">
-              <p className="text-red-400 mb-2">{error}</p>
-              <button
-                onClick={() => refetchRooms()}
-                className="px-4 py-2 bg-[#FA266D] text-white rounded-lg hover:bg-pink-600"
-              >
-                Retry
-              </button>
-            </div>
-          ) : !Array.isArray(rooms) || rooms.length === 0 ? (
-            <div className="p-4 text-center text-gray-400">
-              <p>No conversations yet</p>
-              <p className="text-sm">
-                Start a new conversation to begin chatting
-              </p>
-            </div>
-          ) : (
-            rooms
-              .filter((room) => room.id)
-              .map((room) => (
-                <div
-                  key={room.id}
-                  onClick={() => {
-                    console.log(
-                      "Chat clicked, room ID:",
-                      room.id,
-                      "full room:",
-                      room
-                    );
-                    if (room.id) {
-                      setSelectedChat(room.id);
-                    } else {
-                      console.error("Room has no ID:", room);
-                    }
-                  }}
-                  className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${
-                    selectedChat === room.id ? "bg-white/10" : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Avatar */}
-                    <div className="w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center relative overflow-hidden">
-                      {(() => {
-                        const otherParticipant = room.participants.find((p) => {
-                          const pId = extractParticipantId(p);
-                          return pId && pId !== currentUserId;
-                        });
-                        const otherParticipantId = otherParticipant
-                          ? extractParticipantId(otherParticipant)
-                          : null;
-                        const avatar =
-                          otherParticipantId &&
-                          typeof otherParticipantId === "string"
-                            ? participantAvatars.get(otherParticipantId)
-                            : null;
-
-                        if (avatar) {
-                          return (
-                            <img
-                              src={avatar}
-                              alt={getRoomDisplayName(room)}
-                              className="w-full h-full object-cover"
-                            />
-                          );
-                        }
-
-                        return (
-                          <span className="text-gray-600 font-semibold text-sm">
-                            {getRoomDisplayName(room).charAt(0).toUpperCase()}
-                          </span>
-                        );
-                      })()}
-                      {/* Online status could be added here if available */}
-                    </div>
-
-                    {/* Chat Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="text-white font-medium text-sm truncate">
-                          {getRoomDisplayName(room)}
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          {room.lastMessage && (
-                            <span className="text-gray-400 text-xs">
-                              {formatTime(room.lastMessage.createdAt)}
-                            </span>
-                          )}
-                          <Check className="h-3 w-3 text-[#FA266D]" />
-                        </div>
-                      </div>
-                      <p className="text-gray-400 text-xs truncate">
-                        {getLastMessagePreview(room)}
-                      </p>
-                      {room.unreadCount && room.unreadCount > 0 && (
-                        <div className="flex justify-end mt-1">
-                          <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
-                            {room.unreadCount > 99 ? "99+" : room.unreadCount}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))
-          )}
-        </div>
+    <div className="flex flex-col md:flex-row bg-[#1F1B2C] h-full min-h-0">
+      <div
+        className={`${selectedChat ? "hidden md:block" : "block"} h-full`}
+      >
+        {isSidebarOpen && (
+          <ChatSidebar
+            rooms={rooms}
+            loadingRooms={loadingRooms}
+            error={error}
+            onRetry={refetchRooms}
+            selectedChatId={selectedChat}
+            onSelectChat={handleSelectChat}
+            participantNames={participantNames}
+            participantAvatars={participantAvatars}
+            currentUserId={userId || user?.id || fallbackUserId}
+            extractParticipantId={extractParticipantId}
+            onCloseSidebar={() => setIsSidebarOpen(false)}
+          />
+        )}
       </div>
 
-      {/* Right Section - Chat Area */}
-      <div className="flex-1 bg-[#1F1B2C] flex flex-col">
+      <div
+        className={`flex-1 bg-[#1F1B2C] flex flex-col min-h-0 ${
+          !selectedChat ? "hidden md:flex" : "flex"
+        }`}
+      >
         {selectedChat ? (
           <>
-            {/* Chat Header */}
-            <div className="bg-[#1F1B2C] border-b border-white/10 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleBackClick}
-                  className="text-white hover:text-gray-300"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-                <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center relative">
-                  <span className="text-gray-600 font-semibold text-sm">
-                    {selectedChatData
-                      ? getRoomDisplayName(selectedChatData)
-                          .charAt(0)
-                          .toUpperCase()
-                      : "?"}
-                  </span>
-                  {/* Online status could be added here if available */}
-                </div>
-                <div>
-                  <h3 className="text-white font-medium">
-                    {selectedChatData
-                      ? getRoomDisplayName(selectedChatData)
-                      : "Unknown"}
-                  </h3>
-                  <p className="text-gray-400 text-sm">
-                    {selectedChatData?.type === "group"
-                      ? "Group Chat"
-                      : "Direct Message"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button className="text-white hover:text-gray-300">
-                  <Video className="h-5 w-5" />
-                </button>
-                <button className="bg-[#FA266D] text-white px-4 py-2 rounded-lg text-sm font-medium">
-                  View Profile
-                </button>
-                <button className="text-white hover:text-gray-300">
-                  <MoreVertical className="h-5 w-5" />
-                </button>
-              </div>
+            <ChatHeader
+              isSidebarOpen={isSidebarOpen}
+              onOpenSidebar={() => setIsSidebarOpen(true)}
+              onBack={handleBackClick}
+              selectedChatData={selectedChatData}
+              getOtherParticipantId={getOtherParticipantId}
+              participantAvatars={participantAvatars}
+              participantNames={participantNames}
+              onViewProfile={handleViewProfile}
+            />
+
+            <div className="flex-1 flex flex-col min-h-0">
+              <ChatMessagesSection
+                messages={messages}
+                messagesLoading={messagesLoading}
+                messagesError={messagesError}
+                selectedChat={selectedChat}
+                onRetry={() => {
+                  refetchMessages();
+                }}
+                onClearSelectedChat={() => {
+                  setSelectedChat(null);
+                }}
+                currentUserId={userId || user?.id || fallbackUserId}
+                messageInput={messageInput}
+                onChangeMessageInput={setMessageInput}
+                onSendMessage={sendMessage}
+                sending={sending}
+                canSharePricing={
+                  isDiva || isHunk || user?.userType === "diva" || user?.userType === "hunk"
+                }
+                onSharePricing={handleSharePricing}
+                onMediaClick={handleMediaClick}
+                onBookShortTime={handleBookShortTime}
+                onBookOvernight={handleBookOvernight}
+                onBookWeekend={handleBookWeekend}
+                onBookCustomPrice={handleBookCustomPrice}
+              />
             </div>
-
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto scrollbar-hide p-4">
-              {messagesLoading ? (
-                <div className="flex items-center justify-center h-64">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FA266D]"></div>
-                </div>
-              ) : messagesError ? (
-                <div className="flex items-center justify-center h-64 text-red-400">
-                  <div className="text-center max-w-md">
-                    <p className="text-lg mb-2 font-semibold">
-                      Error loading messages
-                    </p>
-                    <p className="text-sm mb-4">
-                      {"data" in messagesError &&
-                      messagesError.data &&
-                      typeof messagesError.data === "object" &&
-                      "message" in messagesError.data
-                        ? String(messagesError.data.message)
-                        : "message" in messagesError
-                        ? String(messagesError.message)
-                        : "Failed to load messages"}
-                    </p>
-                    {messagesError &&
-                      typeof messagesError === "object" &&
-                      "message" in messagesError &&
-                      String(messagesError.message).includes(
-                        "not a participant"
-                      ) && (
-                        <p className="text-xs text-yellow-400 mb-4">
-                          This might happen if the room was created with a
-                          different account. Try creating a new chat.
-                        </p>
-                      )}
-                    <div className="flex gap-2 justify-center">
-                      <button
-                        onClick={() => {
-                          console.log(
-                            "[MessagesPage] Retrying messages fetch for room:",
-                            selectedChat
-                          );
-                          refetchMessages();
-                        }}
-                        className="px-4 py-2 bg-[#FA266D] text-white rounded-lg hover:bg-pink-600"
-                      >
-                        Retry
-                      </button>
-                      <button
-                        onClick={() => {
-                          console.log(
-                            "[MessagesPage] Clearing selected chat due to error"
-                          );
-                          setSelectedChat(null);
-                        }}
-                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : !Array.isArray(messages) || messages.length === 0 ? (
-                <div className="flex items-center justify-center h-64 text-gray-400">
-                  <div className="text-center">
-                    <p className="text-lg mb-2">No messages yet</p>
-                    <p className="text-sm">Start the conversation!</p>
-                  </div>
-                </div>
-              ) : (
-                messages.map((apiMessage, index) => {
-                  const message = convertToUIMessage(apiMessage);
-                  const isOwnMessage = message.sender === "me";
-
-                  // Use a unique key: prefer message.id, fallback to index + timestamp
-                  const uniqueKey =
-                    apiMessage.id ||
-                    message.id ||
-                    `msg-${index}-${apiMessage.createdAt || Date.now()}`;
-
-                  // Debug: Log message alignment
-                  console.log("Rendering message:", {
-                    id: message.id,
-                    apiMessageId: apiMessage.id,
-                    uniqueKey,
-                    sender: message.sender,
-                    isOwnMessage,
-                    content: message.content?.substring(0, 20),
-                    alignment: isOwnMessage ? "right" : "left",
-                  });
-
-                  return (
-                    <div
-                      key={uniqueKey}
-                      className={`flex w-full mb-3 ${
-                        isOwnMessage ? "justify-end" : "justify-start"
-                      }`}
-                    >
-                      <div
-                        className={`max-w-[70%] ${
-                          isOwnMessage ? "ml-auto" : "mr-auto"
-                        }`}
-                      >
-                        {renderMessage(message)}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Message Input */}
-            <div className="bg-[#1F1B2C]  p-4">
-              <div className="space-y-3">
-                {/* Input Field */}
-
-                <input
-                  type="text"
-                  placeholder="Write message..."
-                  value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      sendMessage(e);
-                    }
-                  }}
-                  className="bg-transparent text-white placeholder-gray-400 focus:outline-none flex-1 text-base rounded-[32px] border border-white/10 py-[18px] pl-[24px] w-full"
-                  disabled={sending}
-                />
-
-                {/* Bottom Row */}
-                <div className="flex items-center justify-end gap-3">
-                  {/* Action Buttons */}
-                  <button
-                    onClick={handleSharePricing}
-                    className="text-[#FA266D] hover:text-pink-400 flex items-center gap-2 text-sm"
-                  >
-                    <MapPin className="h-4 w-4" />
-                    Share Pricing Plan
-                  </button>
-                  <button className="w-10 h-10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
-                    <Image className="h-5 w-5 text-white" />
-                  </button>
-                  <button className="w-10 h-10 border border-white/20 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
-                    <Mic className="h-5 w-5 text-white" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      sendMessage(e);
-                    }}
-                    disabled={!messageInput.trim() || sending}
-                    className="bg-[#FA266D] text-white px-6 py-2 rounded-full flex items-center gap-2 hover:bg-pink-600 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
-                  >
-                    {sending ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    ) : (
-                      <>
-                        <span className="text-sm font-medium">Send</span>
-                        <Send className="h-4 w-4" />
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
+            {showCheckout && selectedChat && (
+              <CheckoutModal
+                open={showCheckout}
+                plan={checkoutPlan}
+                amounts={checkoutAmounts}
+                providerUserId={getOtherParticipantId() || ""}
+                roomId={selectedChat}
+                onClose={() => setShowCheckout(false)}
+              />
+            )}
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center relative">
+            {!isSidebarOpen && (
+              <div className="absolute top-4 left-4">
+                <button
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="text-white hover:text-gray-300"
+                  aria-label="Open sidebar"
+                >
+                  <Menu className="h-6 w-6" />
+                </button>
+              </div>
+            )}
             <div className="text-center">
               {/* Inbox Icon with Glow Effect */}
               <div className="relative mb-6">
@@ -2293,377 +1562,36 @@ export default function MessagesPage() {
         )}
       </div>
 
-      {/* Media Modal */}
-      {modalContent && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
-          onClick={closeModal}
-        >
-          <div
-            className="relative max-w-4xl max-h-[90vh] bg-black rounded-lg overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={closeModal}
-              className="absolute top-4 right-4 z-10 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors"
-            >
-              <X className="h-6 w-6" />
-            </button>
+      <MediaModal content={modalContent} onClose={closeModal} />
 
-            {modalContent.type === "video" ? (
-              <div className="relative">
-                <video
-                  src={modalContent.src}
-                  controls
-                  className="w-full h-auto max-h-[80vh]"
-                  autoPlay
-                >
-                  Your browser does not support the video tag.
-                </video>
-                {modalContent.duration && (
-                  <div className="absolute bottom-4 right-4 bg-black/70 text-white text-sm px-3 py-1 rounded">
-                    {modalContent.duration}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="relative">
-                <img
-                  src={modalContent.src}
-                  alt="Full size image"
-                  className="w-full h-auto max-h-[80vh] object-contain"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <PricingPlanDialog
+        open={showPricingDialog}
+        selectedPlan={selectedPlan}
+        onSelectPlan={handlePlanSelect}
+        customPrice={customPrice}
+        onChangeCustomPrice={setCustomPrice}
+        onSend={handleSendPricing}
+        onClose={closePricingDialog}
+        pricing={formattedPricing}
+      />
 
-      {/* Pricing Plan Dialog */}
-      {showPricingDialog && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
-          onClick={closePricingDialog}
-        >
-          <div
-            className="relative max-w-[706px] w-full mx-4 bg-black/90 rounded-[24px] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={closePricingDialog}
-              className="absolute top-4 right-4 z-10 bg-white/10 text-white p-2 rounded-full hover:bg-white/20 transition-colors"
-            >
-              <X className="h-6 w-6" />
-            </button>
-
-            <div className="p-8 text-center">
-              <h2 className="text-white text-[40px] font-bold mb-2">
-                Select Plan
-              </h2>
-              <p className="text-[16px] font-medium mb-8">
-                Select the plan you will like to share with the client below.
-              </p>
-
-              {/* 2x2 + 1 Grid Layout */}
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                {/* Plan 1 - Short Time Incall */}
-                <div
-                  onClick={() => handlePlanSelect("short-time")}
-                  className={`bg-gray-800/50 rounded-[20px] p-6 cursor-pointer border-2 transition-all ${
-                    selectedPlan === "short-time"
-                      ? "border-[#FA266D] bg-[#FA266D]/10"
-                      : "border-transparent hover:border-white/20"
-                  }`}
-                >
-                  {/* <div className="flex items-center justify-between mb-2">
-                    {selectedPlan === "short-incall" && (
-                      <div className="w-6 h-6 bg-[#FA266D] rounded-full flex items-center justify-center">
-                        <Check className="h-4 w-4 text-white" />
-                      </div>
-                    )}
-                  </div> */}
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="font-semibold text-white text-[20px]">
-                      Incall
-                    </p>
-                    <p className="text-[16px] font-medium text-white">
-                      50,000.00 APH
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-white text-[20px]">
-                      Outcall
-                    </p>
-                    <p className="text-[16px] font-medium text-white">
-                      70,000.00 APH
-                    </p>
-                  </div>
-
-                  <button className="mt-6 w-full bg-[#FA266D] text-white py-2 px-4 rounded-[15px] text-[20px] font-medium">
-                    <span className="text-[24px] font-bold">Short Time</span>
-                  </button>
-                </div>
-
-                {/* Plan 2 - Overnight */}
-                <div
-                  onClick={() => handlePlanSelect("overnight")}
-                  className={`bg-gray-800/50 rounded-[20px] p-6 cursor-pointer border-2 transition-all ${
-                    selectedPlan === "overnight"
-                      ? "border-[#FA266D] bg-[#FA266D]/10"
-                      : "border-transparent hover:border-white/20"
-                  }`}
-                >
-                  {/* <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-white font-semibold text-lg">
-                      Short Time
-                    </h3>
-                    {selectedPlan === "short-outcall" && (
-                      <div className="w-6 h-6 bg-[#FA266D] rounded-full flex items-center justify-center">
-                        <Check className="h-4 w-4 text-white" />
-                      </div>
-                    )}
-                  </div> */}
-
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="font-semibold text-white text-[20px]">
-                      Incall
-                    </p>
-                    <p className="text-[16px] font-medium text-white">
-                      50,000.00 APH
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-white text-[20px]">
-                      Outcall
-                    </p>
-                    <p className="text-[16px] font-medium text-white">
-                      70,000.00 APH
-                    </p>
-                  </div>
-
-                  <button className="mt-6 w-full bg-[#FA266D] text-white py-2 px-4 rounded-[15px] text-[20px] font-medium">
-                    <span className="text-[24px] font-bold">Overnight</span>
-                  </button>
-                </div>
-
-                {/* Plan 3 - Overnight Incall */}
-                <div
-                  onClick={() => handlePlanSelect("weekend")}
-                  className={`bg-gray-800/50 rounded-[20px] p-6 cursor-pointer border-2 transition-all ${
-                    selectedPlan === "weekend"
-                      ? "border-[#FA266D] bg-[#FA266D]/10"
-                      : "border-transparent hover:border-white/20"
-                  }`}
-                >
-                  {/* <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-white font-semibold text-lg">
-                      Overnight
-                    </h3>
-                    {selectedPlan === "overnight-incall" && (
-                      <div className="w-6 h-6 bg-[#FA266D] rounded-full flex items-center justify-center">
-                        <Check className="h-4 w-4 text-white" />
-                      </div>
-                    )}
-                  </div> */}
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="font-semibold text-white text-[20px]">
-                      Incall
-                    </p>
-                    <p className="text-[16px] font-medium text-white">---</p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-white text-[20px]">
-                      Outcall
-                    </p>
-                    <p className="text-[16px] font-medium text-white">
-                      70,000.00 APH
-                    </p>
-                  </div>
-
-                  <button className="mt-6 w-full bg-[#FA266D] text-white py-2 px-4 rounded-[15px] text-[20px] font-medium">
-                    <span className="text-[24px] font-bold">Weekend</span>
-                  </button>
-                </div>
-
-                {/* Plan 4 - Overnight Outcall */}
-                <div
-                  onClick={() => handlePlanSelect("custom-price")}
-                  className={`bg-gray-800/50 rounded-[20px] p-6 cursor-pointer border-2 transition-all ${
-                    selectedPlan === "custom-price"
-                      ? "border-[#FA266D] bg-[#FA266D]/10"
-                      : "border-transparent hover:border-white/20"
-                  }`}
-                >
-                  {/* input price */}
-                  <div className="relative">
-                    {/* Briefcase inside input */}
-                    <Briefcase className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white/60 h-5 w-5" />
-
-                    <input
-                      type="number"
-                      placeholder="Input price here"
-                      className="w-full pl-12 pr-4 py-3 bg-transparent border border-white/20 rounded-[40px] text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  </div>
-
-                  <button className="mt-6 w-full bg-[#FA266D] text-white py-2 px-4 rounded-[15px] text-[20px] font-medium">
-                    <span className="text-[24px] font-bold">Custom Price</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-4 mt-8">
-                {/* <button
-                  onClick={closePricingDialog}
-                  className="flex-1 bg-white/10 text-white py-3 rounded-[40px] font-semibold hover:bg-white/20 transition-colors"
-                >
-                  Cancel
-                </button> */}
-                <button
-                  onClick={handleSendPricing}
-                  disabled={!selectedPlan}
-                  className={`flex-1 py-3 rounded-[40px] font-semibold transition-colors ${
-                    selectedPlan
-                      ? "bg-[#FA266D] text-white hover:bg-pink-600"
-                      : "bg-gray-700 text-gray-500 cursor-not-allowed"
-                  }`}
-                >
-                  Send Pricing
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* New Chat Dialog */}
-      {showNewChatDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-[#1F1B2C] rounded-lg p-6 w-full max-w-md mx-4 border border-white/10">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-white text-xl font-semibold">
-                Start New Conversation
-              </h2>
-              <button
-                onClick={() => {
-                  setShowNewChatDialog(false);
-                  setNewChatUserId("");
-                }}
-                className="text-gray-400 hover:text-white"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {authLoading && (
-              <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-3 mb-4">
-                <p className="text-blue-400 text-sm">
-                  Loading user information...
-                </p>
-              </div>
-            )}
-
-            {!authLoading && !isAuthenticated && (
-              <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-3 mb-4">
-                <p className="text-yellow-400 text-sm">
-                  Please log in to start a chat
-                </p>
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 mb-4">
-                <p className="text-red-400 text-sm">{error}</p>
-              </div>
-            )}
-
-            {processingUserId && (
-              <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-3 mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
-                  <p className="text-blue-400 text-sm">Creating chat room...</p>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-gray-300 text-sm mb-2">
-                  User ID
-                </label>
-                <input
-                  type="text"
-                  value={newChatUserId}
-                  onChange={(e) => {
-                    setNewChatUserId(e.target.value);
-                    setError(null); // Clear error when typing
-                  }}
-                  placeholder="Enter user ID to start chatting"
-                  className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FA266D]"
-                  onKeyPress={(e) => {
-                    if (
-                      e.key === "Enter" &&
-                      newChatUserId.trim() &&
-                      !processingUserId
-                    ) {
-                      e.preventDefault();
-                      handleStartNewChat();
-                    }
-                  }}
-                  autoFocus
-                />
-                <p className="text-gray-400 text-xs mt-2">
-                  Enter the user ID of the person you want to chat with
-                </p>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowNewChatDialog(false);
-                    setNewChatUserId("");
-                  }}
-                  className="flex-1 bg-white/10 text-white py-2 rounded-lg hover:bg-white/20 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log(
-                      "Start Chat button clicked, userId:",
-                      newChatUserId.trim()
-                    );
-                    handleStartNewChat();
-                  }}
-                  disabled={
-                    !newChatUserId.trim() ||
-                    processingUserId === newChatUserId.trim() ||
-                    authLoading ||
-                    !isAuthenticated
-                  }
-                  className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
-                    newChatUserId.trim() &&
-                    processingUserId !== newChatUserId.trim() &&
-                    !authLoading &&
-                    isAuthenticated
-                      ? "bg-[#FA266D] text-white hover:bg-pink-600 cursor-pointer"
-                      : "bg-gray-700 text-gray-500 cursor-not-allowed"
-                  }`}
-                >
-                  {authLoading
-                    ? "Loading..."
-                    : processingUserId === newChatUserId.trim()
-                    ? "Starting..."
-                    : "Start Chat"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <NewChatDialog
+        open={showNewChatDialog}
+        authLoading={authLoading}
+        isAuthenticated={isAuthenticated}
+        error={error}
+        processingUserId={processingUserId}
+        newChatUserId={newChatUserId}
+        onChangeUserId={(value) => {
+          setNewChatUserId(value);
+          setError(null);
+        }}
+        onStartChat={handleStartNewChat}
+        onClose={() => {
+          setShowNewChatDialog(false);
+          setNewChatUserId("");
+        }}
+      />
     </div>
   );
 }

@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './useAuth';
@@ -12,7 +14,7 @@ const getWebSocketUrl = (): string => {
 
   // For development, use localhost:5001 (as per documentation)
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    return 'https://be-aphrodite-8wrp.onrender.com';
+    return 'http://localhost:5001';
   }
   
   // For production, use the backend URL
@@ -90,6 +92,7 @@ interface MessageDeliveredData {
 interface UseChatSocketReturn {
   socket: Socket | null;
   connected: boolean;
+  reconnecting: boolean;
   sendMessage: (data: SendMessageData) => void;
   joinRoom: (roomId: string) => void;
   leaveRoom: (roomId: string) => void;
@@ -97,12 +100,15 @@ interface UseChatSocketReturn {
   markAsRead: (roomId: string, messageIds: string[]) => void;
   getUnreadCount: (roomId: string) => void;
   getUserRooms: () => void;
+  getRoomList: () => void;
+  getAllUnreadCounts: () => void;
 }
 
 export const useChatSocket = (): UseChatSocketReturn => {
   const { accessToken, isAuthenticated } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -110,15 +116,12 @@ export const useChatSocket = (): UseChatSocketReturn => {
   useEffect(() => {
     // Only connect if authenticated and have token
     if (!isAuthenticated || !accessToken) {
-      console.log('[useChatSocket] Not authenticated or no token, skipping connection');
       return;
     }
 
     const wsUrl = getWebSocketUrl();
     // Socket.IO automatically handles the /chat namespace
     const socketUrl = `${wsUrl}/chat`;
-    console.log('[useChatSocket] Connecting to WebSocket:', socketUrl);
-    console.log('[useChatSocket] Using access token:', accessToken ? `${accessToken.substring(0, 20)}...` : 'none');
 
     const newSocket = io(socketUrl, {
       withCredentials: true,
@@ -139,20 +142,23 @@ export const useChatSocket = (): UseChatSocketReturn => {
 
     // Connection events
     newSocket.on('connect', () => {
-      console.log('[useChatSocket] Socket connected:', newSocket.id);
       setConnected(true);
+      setReconnecting(false);
       reconnectAttempts.current = 0;
     });
 
     newSocket.on('connected', (data) => {
-      console.log('[useChatSocket] Server confirmed connection:', data);
       setConnected(true);
+      setReconnecting(false);
       reconnectAttempts.current = 0;
     });
 
     newSocket.on('disconnect', (reason) => {
-      console.log('[useChatSocket] Socket disconnected:', reason);
       setConnected(false);
+      if (reason === 'io server disconnect') {
+        // Server disconnected, need manual reconnect
+        setReconnecting(true);
+      }
     });
 
     newSocket.on('error', (error) => {
@@ -164,15 +170,17 @@ export const useChatSocket = (): UseChatSocketReturn => {
       console.error('[useChatSocket] Connection error:', error);
       console.error('[useChatSocket] Error details:', {
         message: error.message,
-        type: error.type,
-        description: error.description,
-        context: error.context,
+        type: (error as any).type,
+        description: (error as any).description,
+        context: (error as any).context,
       });
       setConnected(false);
+      setReconnecting(true);
       
       // Don't retry on authentication errors
       if (error.message?.includes('Authentication') || error.message?.includes('Unauthorized')) {
         console.error('[useChatSocket] Authentication failed - check token validity');
+        setReconnecting(false);
         return;
       }
       
@@ -180,7 +188,6 @@ export const useChatSocket = (): UseChatSocketReturn => {
       reconnectAttempts.current += 1;
       if (reconnectAttempts.current < maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-        console.log(`[useChatSocket] Will retry connection in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
         
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
@@ -191,7 +198,14 @@ export const useChatSocket = (): UseChatSocketReturn => {
         }, delay);
       } else {
         console.error('[useChatSocket] Max reconnection attempts reached');
+        setReconnecting(false);
       }
+    });
+
+    // Add ping/pong for heartbeat
+    newSocket.on('ping', (data) => {
+      // Respond to server ping
+      newSocket.emit('pong', { timestamp: new Date() });
     });
 
     setSocket(newSocket);
@@ -201,10 +215,10 @@ export const useChatSocket = (): UseChatSocketReturn => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      console.log('[useChatSocket] Cleaning up socket connection');
       newSocket.close();
       setSocket(null);
       setConnected(false);
+      setReconnecting(false);
     };
   }, [isAuthenticated, accessToken]);
 
@@ -214,7 +228,6 @@ export const useChatSocket = (): UseChatSocketReturn => {
       return;
     }
 
-    console.log('[useChatSocket] Sending message:', data);
     socket.emit('sendMessage', {
       receiverId: data.receiverId,
       roomId: data.roomId,
@@ -231,7 +244,6 @@ export const useChatSocket = (): UseChatSocketReturn => {
       return;
     }
 
-    console.log('[useChatSocket] Joining room:', roomId);
     socket.emit('joinRoom', { roomId });
   }, [socket, connected]);
 
@@ -241,7 +253,6 @@ export const useChatSocket = (): UseChatSocketReturn => {
       return;
     }
 
-    console.log('[useChatSocket] Leaving room:', roomId);
     socket.emit('leaveRoom', { roomId });
   }, [socket, connected]);
 
@@ -280,9 +291,28 @@ export const useChatSocket = (): UseChatSocketReturn => {
     socket.emit('getUserRooms');
   }, [socket, connected]);
 
+  const getRoomList = useCallback(() => {
+    if (!socket || !connected) {
+      console.warn('[useChatSocket] Cannot get room list: socket not connected');
+      return;
+    }
+
+    socket.emit('getRoomList');
+  }, [socket, connected]);
+
+  const getAllUnreadCounts = useCallback(() => {
+    if (!socket || !connected) {
+      console.warn('[useChatSocket] Cannot get all unread counts: socket not connected');
+      return;
+    }
+
+    socket.emit('getAllUnreadCounts');
+  }, [socket, connected]);
+
   return {
     socket,
     connected,
+    reconnecting,
     sendMessage,
     joinRoom,
     leaveRoom,
@@ -290,6 +320,8 @@ export const useChatSocket = (): UseChatSocketReturn => {
     markAsRead,
     getUnreadCount,
     getUserRooms,
+    getRoomList,
+    getAllUnreadCounts,
   };
 };
 
@@ -304,4 +336,3 @@ export type {
   RoomJoinedData,
   MessageDeliveredData,
 };
-

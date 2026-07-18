@@ -120,6 +120,47 @@ export interface SendOTPPayload {
 }
 
 /**
+ * Check Availability Payload
+ */
+export interface CheckAvailabilityPayload {
+  username?: string;
+  email?: string;
+  phoneNumber?: string;
+  countryCode?: string;
+}
+
+/**
+ * Check Availability Response
+ */
+export interface CheckAvailabilityResponse {
+  username?: { available: boolean; message?: string };
+  email?: { available: boolean; message?: string };
+  phoneNumber?: { available: boolean; message?: string };
+}
+
+/**
+ * Introspect Token Payload
+ */
+export interface IntrospectTokenPayload {
+  token: string;
+}
+
+/**
+ * Introspect Token Response
+ */
+export interface IntrospectTokenResponse {
+  active: boolean;
+  payload: {
+    sub: string;
+    email?: string;
+    iat: number;
+    exp: number;
+  };
+  user?: User;
+  expiresAt: number;
+}
+
+/**
  * Verify OTP Payload
  */
 export interface VerifyOTPPayload {
@@ -151,108 +192,6 @@ export interface ProfileUpdatePayload {
   maritalStatus?: string;
 }
 
-/**
- * Chat Types
- */
-export type MessageType = 'text' | 'image' | 'file' | 'video' | 'audio';
-export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
-export type RoomType = 'direct' | 'group';
-
-/**
- * Chat Message Interface
- */
-export interface ChatMessage {
-  id: string;
-  senderId: string;
-  receiverId?: string;
-  roomId: string;
-  content: string;
-  type: MessageType;
-  status: MessageStatus;
-  createdAt: string;
-  updatedAt: string;
-  metadata?: Record<string, unknown>;
-  attachments?: string[];
-  readAt?: string;
-  deliveredAt?: string;
-  replyTo?: string;
-  tempId?: string;
-}
-
-/**
- * Chat Room Interface
- */
-export interface ChatRoom {
-  id: string;
-  roomId?: string; // Some APIs use roomId separately from id
-  name?: string;
-  description?: string;
-  type: RoomType;
-  participants: string[];
-  settings?: {
-    notifications: boolean;
-    autoDelete: boolean;
-  };
-  createdAt: string;
-  updatedAt: string;
-  lastMessage?: ChatMessage;
-  unreadCount?: number;
-}
-
-/**
- * Send Message Payload
- * Matches API endpoint: POST /chat/messages
- */
-export interface SendMessagePayload {
-  receiverId: string; // Required: ID of the user receiving the message
-  content: string; // Required: Message content
-  type: MessageType; // Required: Message type (text, image, file, video, audio)
-  metadata?: Record<string, unknown>; // Optional: Additional metadata (e.g., { imageUrl: "..." })
-  attachments?: string[]; // Optional: Array of attachment URLs
-  replyTo?: string; // Optional: ID of message being replied to
-  tempId?: string; // Optional: Temporary ID for optimistic UI updates
-}
-
-/**
- * Create Room Payload
- */
-export interface CreateRoomPayload {
-  name?: string;
-  description?: string;
-  type: RoomType;
-  participants: string[];
-  settings?: {
-    notifications: boolean;
-    autoDelete: boolean;
-  };
-}
-
-/**
- * Get Messages Query Parameters
- */
-export interface GetMessagesQuery {
-  limit?: number;
-  offset?: number;
-  before?: string;
-  after?: string;
-}
-
-/**
- * Update Message Status Payload
- */
-export interface UpdateMessageStatusPayload {
-  status: MessageStatus;
-}
-
-/**
- * Room Statistics Interface
- */
-export interface RoomStats {
-  totalMessages: number;
-  unreadCount: number;
-  lastActivity: string;
-  participants: number;
-}
 
 /**
  * Authenticated User Profile Response
@@ -306,6 +245,13 @@ export interface Pricing {
     incall?: string | number;
     outcall?: string | number;
   };
+  customCategories?: Array<{
+    categoryName: string;
+    duration: string;
+    incall: string | number;
+    outcall: string | number;
+    currency?: string;
+  }>;
   custom?: {
     price?: string | number;
   };

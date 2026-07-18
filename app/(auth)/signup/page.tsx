@@ -177,11 +177,12 @@ function SignUpForm() {
           </button>
           <button
             type="button"
-            onClick={() => setRegistrationMethod("email")}
-            className={`flex-1 py-2 px-4 rounded-[40px] text-sm font-medium transition-all duration-200 ${
+            onClick={() => {}} // Disabled - do nothing
+            disabled
+            className={`flex-1 py-2 px-4 rounded-[40px] text-sm font-medium transition-all duration-200 opacity-50 cursor-not-allowed ${
               registrationMethod === "email"
                 ? "bg-pink-500 text-white"
-                : "text-white/60 hover:text-white"
+                : "text-white/60"
             }`}
           >
             <Mail className="h-4 w-4 inline mr-2" />

@@ -94,7 +94,7 @@ export const authApiSlice = apiSlice.injectEndpoints({
     }),
     completeBasicDetails: builder.mutation({
       query: ({ userId, ...data }) => ({
-        url: endpoints.USER_BASIC_DETAILS(userId),
+        url: endpoints.AUTH_BASIC_DETAILS(userId),
         method: "POST",
         body: data,
       }),

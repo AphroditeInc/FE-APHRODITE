@@ -11,9 +11,7 @@ import type { AuthTokens, User } from '../types';
  */
 export const saveAuthTokens = (tokens: AuthTokens): void => {
   try {
-    console.log('[Storage] Saving auth tokens:', tokens);
     localStorage.setItem(STORAGE_KEYS.AUTH_TOKENS, JSON.stringify(tokens));
-    console.log('[Storage] Auth tokens saved successfully');
   } catch (error) {
     console.error('[Storage] Failed to save auth tokens:', error);
   }
@@ -24,10 +22,18 @@ export const saveAuthTokens = (tokens: AuthTokens): void => {
  */
 export const getAuthTokens = (): AuthTokens | null => {
   try {
-    const tokens = localStorage.getItem(STORAGE_KEYS.AUTH_TOKENS);
-    const parsed = tokens ? JSON.parse(tokens) : null;
-    console.log('[Storage] Retrieved auth tokens:', parsed ? 'Present' : 'Not found');
-    return parsed;
+    // authSlice stores tokens with keys 'accessToken' and 'refreshToken'
+    // not as a single 'auth_tokens' object
+    const accessToken = localStorage.getItem('accessToken');
+    const refreshToken = localStorage.getItem('refreshToken');
+    const expiresIn = localStorage.getItem('expiresIn') || '';
+    
+    if (accessToken && refreshToken) {
+      const tokens: AuthTokens = { accessToken, refreshToken, expiresIn };
+      return tokens;
+    }
+    
+    return null;
   } catch (error) {
     console.error('[Storage] Failed to get auth tokens:', error);
     return null;
@@ -50,9 +56,7 @@ export const removeAuthTokens = (): void => {
  */
 export const saveUser = (user: User): void => {
   try {
-    console.log('[Storage] Saving user:', { id: user.id, username: user.username });
     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-    console.log('[Storage] User saved successfully');
   } catch (error) {
     console.error('[Storage] Failed to save user:', error);
   }
@@ -65,7 +69,6 @@ export const getUser = (): User | null => {
   try {
     const user = localStorage.getItem(STORAGE_KEYS.USER);
     const parsed = user ? JSON.parse(user) : null;
-    console.log('[Storage] Retrieved user:', parsed ? { id: parsed.id, username: parsed.username } : 'Not found');
     return parsed;
   } catch (error) {
     console.error('[Storage] Failed to get user:', error);

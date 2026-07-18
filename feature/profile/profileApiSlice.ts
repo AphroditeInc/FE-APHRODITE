@@ -2,6 +2,7 @@ import { apiSlice } from "../../app/api/apiSlice";
 import endpoints from "../../app/utils/endpoints";
 
 export const profileApiSlice = apiSlice.injectEndpoints({
+  overrideExisting: true, // Allow overriding existing endpoints in development
   endpoints: (builder) => ({
     createProfile: builder.mutation({
       query: (data) => ({
@@ -13,13 +14,13 @@ export const profileApiSlice = apiSlice.injectEndpoints({
       invalidatesTags: ['Profile'],
     }),
     updateProfile: builder.mutation({
-      query: ({ id, ...data }) => {
+      query: ({ id, data }) => {
         const url = endpoints.PROFILE_UPDATE(id);
         console.log("UpdateProfile mutation - URL:", url, "Body:", data, "ID:", id);
         return {
           url,
           method: "PUT",
-          body: data, // id is NOT included in body, only in URL
+          body: data,
         };
       },
       extraOptions: { serviceKey: "us" },

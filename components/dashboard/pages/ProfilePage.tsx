@@ -1,12 +1,20 @@
 "use client";
 
-import { User, Mail, Phone, MapPin, Calendar, Edit, ArrowLeft, Star, Check, Users, Calendar as CalendarIcon, X, Heart, BookOpen, MessageCircle, UserPlus, Info, Coins, Play, ThumbsUp, ThumbsDown, ChevronDown } from "lucide-react";
+import { Edit, ArrowLeft, Info, Coins, ThumbsUp, ThumbsDown, Plus, Pencil, Star } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
-import { useUpdateProfileMutation, useUpdateProfileMediaMutation, useCreateProfileServiceMutation } from "@/feature/profile/profileApiSlice";
 import { ProfilePageSkeleton } from "@/components/ui/Skeleton";
+import { ProfileHeader } from "@/components/dashboard/profile/ProfileHeader";
+import { ProfileMediaHero } from "@/components/dashboard/profile/ProfileMediaHero";
+import { ProfileAboutGrid } from "@/components/dashboard/profile/ProfileAboutGrid";
+import { ProfileMediaGrid } from "@/components/dashboard/profile/ProfileMediaGrid";
+import { ProfileEditModal } from "@/components/dashboard/profile/ProfileEditModal";
+import { ProfileMediaUploadModal } from "@/components/dashboard/profile/ProfileMediaUploadModal";
+import { ProfileServicesModal } from "@/components/dashboard/profile/ProfileServicesModal";
+import { ProfilePricingEditModal } from "@/components/dashboard/profile/ProfilePricingEditModal";
+import CustomPricingModal from "@/components/dashboard/modals/CustomPricingModal";
 
 // Mock reviews data
 const mockReviews = [
@@ -42,81 +50,23 @@ const mockReviews = [
   }
 ];
 
-// Available services
-const availableServices = [
-  "Domination (Receiving)", "Lap Dance", "Belly Dance", "Tango", "Pole Fitness", "Being Filmed",
-  "Salsa", "Bachata", "Girlfriend Experience", "Sex Toys", "Role Play & Fantasies", "Erotic Massage",
-  "Erotic Spanking", "MMF 3somes", "Dinner Dates", "French Kissing", "Smoking Fetish", "Missionary", "69", "Doggy"
-];
-
-export default function ProfilePage() {
+export function ProviderProfilePage() {
+  const router = useRouter();
   const { user: authUser } = useAuth();
   const { profile, loading, error, refetch } = useEnrichedProfile(authUser?.id || null);
-  const [updateProfile, { isLoading: isUpdatingProfile }] = useUpdateProfileMutation();
-  const [updateProfileMedia, { isLoading: isUpdatingMedia }] = useUpdateProfileMediaMutation();
-  const [createProfileService, { isLoading: isCreatingService }] = useCreateProfileServiceMutation();
-  const { uploadMultiple, isUploading, progress, error: uploadError } = useCloudinaryUpload({
-    folder: 'aphrodite/profile-media',
-    resourceType: 'auto', // Auto-detect image or video
-  });
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
+  const [isCustomPricingModalOpen, setIsCustomPricingModalOpen] = useState(false);
+  const [isEditPricingModalOpen, setIsEditPricingModalOpen] = useState(false);
+  const [editingPricingType, setEditingPricingType] = useState<'shortTime' | 'overnight' | 'weekend' | null>(null);
   const [currentFormStep, setCurrentFormStep] = useState(1);
   const [activeTab, setActiveTab] = useState("About");
   const [reviewText, setReviewText] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
-  const [selectedServices, setSelectedServices] = useState<string[]>([]);
-  const [customServices, setCustomServices] = useState<string[]>([]);
-  const [customServiceInput, setCustomServiceInput] = useState("");
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
-
-  // Initialize services from profile.services when profile loads
-  useEffect(() => {
-    if (profile?.services && Array.isArray(profile.services)) {
-      // Extract service names from services array (array of strings - IDs or names)
-      const existingServiceNames = profile.services
-        .map(service => typeof service === 'string' ? service : (service.name || service.id || ''))
-        .filter((s): s is string => s !== '');
-      
-      // Separate into available services and custom services
-      const availableServiceNames = existingServiceNames.filter(name => 
-        availableServices.includes(name)
-      );
-      const customServiceNames = existingServiceNames.filter(name => 
-        !availableServices.includes(name)
-      );
-      
-      setSelectedServices(availableServiceNames);
-      setCustomServices(customServiceNames);
-    }
-  }, [profile?.services]);
-
-  // Initialize formData from profile when profile loads
-  useEffect(() => {
-    if (profile) {
-      setFormData(prev => ({
-        ...prev,
-        ethnicity: profile.ethnicity || prev.ethnicity,
-        sexualOrientation: profile.sexualOrientation || prev.sexualOrientation,
-        bustSize: profile.bustSize || prev.bustSize,
-        gender: profile.gender || prev.gender,
-        nationality: profile.nationality || prev.nationality,
-        bodyBuild: profile.bodyBuild || prev.bodyBuild,
-        looks: profile.looks || prev.looks,
-        smoker: profile.smoker === true ? "Yes" : profile.smoker === false ? "No" : prev.smoker,
-        education: profile.education || prev.education,
-        state: profile.state || authUser?.state || prev.state,
-        occupation: profile.occupation || prev.occupation,
-        country: authUser?.country || prev.country,
-        city: profile.city || authUser?.city || prev.city,
-        bio: profile.bio || prev.bio,
-      }));
-    }
-  }, [profile, authUser]);
 
   // Auto-rotate media carousel every 5 seconds
   useEffect(() => {
@@ -140,266 +90,13 @@ export default function ProfilePage() {
   useEffect(() => {
     setCurrentMediaIndex(0);
   }, [profile?.id]);
-  const [formData, setFormData] = useState({
-    // First form data
-    location: "Rumuokoro, Port Harcourt",
-    ethnicity: "",
-    sexualOrientation: "Bisexual",
-    bustSize: "Medium C-cup",
-    gender: "",
-    nationality: "",
-    bodyBuild: "Chubby",
-    looks: "Sexy",
-    // Second form data
-    smoker: "Yes",
-    education: "Bachelors",
-    state: "Lagos",
-    occupation: "Yoga Instructor",
-    country: "Nigeria",
-    city: "Lekki",
-    bio: ""
-  });
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleContinue = () => {
-    setCurrentFormStep(2);
-  };
-
-  const handleSubmit = async () => {
-    console.log("=== handleSubmit called ===", {
-      formData,
-      profileId: profile?.id,
-      hasProfile: !!profile,
-    });
-
-    // Get profile ID - use profile.id (the profile's own ID, not userId)
-    const profileId = profile?.id || null;
-
-    if (!profileId) {
-      console.error('Profile ID is missing', {
-        profile,
-        profileId: profile?.id,
-        userId: profile?.userId,
-        authUserId: authUser?.id
-      });
-      alert('Profile ID not found. Please ensure your profile is created first.');
-      return;
-    }
-
-    try {
-      // Map formData to API payload structure
-      // Convert smoker from "Yes"/"No"/"Occasionally" to boolean
-      const smokerValue = formData.smoker === "Yes" ? true : formData.smoker === "No" ? false : undefined;
-      
-      // Get media URLs from profile.media if it exists
-      const mediaUrls = profile?.media && Array.isArray(profile.media) ? profile.media : [];
-      
-      // Get service IDs/names from profile.services if it exists
-      const serviceIds = profile?.services && Array.isArray(profile.services)
-        ? profile.services.map(service => typeof service === 'string' ? service : (service.id || service.name || ''))
-            .filter((s): s is string => s !== '')
-        : [];
-
-      // Map form fields to API structure
-      // The mutation extracts 'id' from the parameters, so we only pass the body fields
-      // Note: userType is NOT a profile property - it's a user property, so we don't send it here
-      const updatePayload: Record<string, unknown> = {
-        // Map form fields to API structure
-        gender: formData.gender || undefined,
-        sexualOrientation: formData.sexualOrientation || undefined,
-        bodyBuild: formData.bodyBuild || undefined,
-        bustSize: formData.bustSize || undefined,
-        nationality: formData.nationality || undefined,
-        ethnicity: formData.ethnicity || undefined,
-        state: formData.state || undefined,
-        city: formData.city || undefined,
-        smoker: smokerValue,
-        looks: formData.looks || undefined,
-        bio: formData.bio || undefined,
-        education: formData.education || undefined,
-        occupation: formData.occupation || undefined,
-        maritalStatus: profile?.maritalStatus || undefined, // Keep existing if not in form
-        media: mediaUrls,
-        services: serviceIds,
-      };
-
-      // Remove undefined values to avoid sending them
-      const cleanedPayload = Object.fromEntries(
-        Object.entries(updatePayload).filter(([_, value]) => value !== undefined)
-      );
-
-      console.log('Updating profile with payload:', cleanedPayload);
-      console.log('Profile ID:', profileId);
-      
-      const result = await updateProfile({
-        id: String(profileId),
-        ...cleanedPayload,
-      }).unwrap();
-
-      console.log('Profile update result:', result);
-
-      if (result) {
-        // Refetch profile to get updated data
-        await refetch();
-    setIsEditModalOpen(false);
-    setCurrentFormStep(1);
-        console.log('Profile updated successfully!');
-      }
-    } catch (error: unknown) {
-      console.error('Error updating profile:', error);
-      const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
-        ? String(error.data.message)
-        : (error && typeof error === 'object' && 'message' in error)
-          ? String(error.message)
-          : 'Unknown error occurred during profile update.';
-      alert(`Error updating profile: ${errorMessage}`);
-    }
-  };
-
-  const handleCloseModal = () => {
-    setIsEditModalOpen(false);
-    setCurrentFormStep(1);
-  };
-
-  const handleCloseMediaModal = () => {
-    setIsMediaModalOpen(false);
-    setSelectedFiles([]);
-  };
-
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    setSelectedFiles(prev => [...prev, ...files]);
-  };
-
-  const handleRemoveFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleUploadMedia = async () => {
-    console.log('=== handleUploadMedia called ===', { 
-      selectedFilesCount: selectedFiles.length, 
-      profileId: profile?.id,
-      hasProfile: !!profile,
-      profile: profile 
-    });
-
-    // Check Cloudinary configuration first
-    const cloudinaryConfig = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-    
-    console.log('Cloudinary config check:', { 
-      hasCloudName: !!cloudinaryConfig, 
-      hasUploadPreset: !!uploadPreset 
-    });
-
-    if (selectedFiles.length === 0) {
-      console.warn('No files selected');
-      alert('Please select at least one file to upload');
-      return;
-    }
-
-    // Get profile ID - use profile.id (the profile's own ID, not userId)
-    // The profile response has: { id: "profile-id", userId: "user-id", ... }
-    const profileId = profile?.id || null;
-    
-    console.log('Profile ID resolution:', {
-      'profile?.id': profile?.id,
-      'profile?.userId': profile?.userId,
-      'authUser?.id': authUser?.id,
-      'resolved profileId': profileId,
-      'full profile object': profile
-    });
-    
-    if (!profileId) {
-      console.error('Profile ID is missing', { 
-        profile, 
-        profileId: profile?.id, 
-        userId: profile?.userId, 
-        authUserId: authUser?.id 
-      });
-      alert('Profile ID not found. Please ensure your profile is created first. You may need to complete the basic details form.');
-      return;
-    }
-    
-    console.log('Using profile ID for media upload:', profileId);
-
-    if (!cloudinaryConfig || !uploadPreset) {
-      console.error('Cloudinary configuration missing', { cloudinaryConfig, uploadPreset });
-      alert('Cloudinary is not configured. Please set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET in your .env.local file.\n\nSee CLOUDINARY_SETUP.md for instructions.');
-      return;
-    }
-
-    try {
-      console.log('Starting Cloudinary upload...', selectedFiles.length, 'files');
-      
-      // Upload files to Cloudinary
-      const uploadResults = await uploadMultiple(selectedFiles);
-      console.log('Upload results:', uploadResults);
-
-      // Filter successful uploads and extract URLs
-      const uploadedUrls = uploadResults
-        .filter((result) => result.success && result.data?.secure_url)
-        .map((result) => result.data!.secure_url);
-
-      console.log('Uploaded URLs:', uploadedUrls);
-
-      if (uploadedUrls.length === 0) {
-        const errors = uploadResults
-          .filter((r) => !r.success)
-          .map((r) => r.error)
-          .filter(Boolean);
-        console.error('No files were uploaded successfully. Errors:', errors);
-        alert(`Upload failed: ${errors.join(', ') || 'Unknown error'}`);
-        return;
-      }
-
-      // Double-check we have a valid profile ID before making the API call
-      if (!profileId) {
-        console.error('Profile ID is undefined at API call time', { 
-          profileId, 
-          profile, 
-          authUser 
-        });
-        alert('Profile ID is missing. Please refresh the page and try again.');
-        return;
-      }
-      
-      // Get existing media URLs from profile.media
-      const existingMediaUrls = profile?.media && Array.isArray(profile.media) ? profile.media : [];
-      
-      // Combine existing media with new uploaded media
-      const combinedMediaUrls = [...existingMediaUrls, ...uploadedUrls];
-      
-      console.log('Adding media to profile with ID:', profileId);
-      console.log('Existing media URLs:', existingMediaUrls);
-      console.log('New media URLs to upload:', uploadedUrls);
-      console.log('Combined media URLs:', combinedMediaUrls);
-      console.log('Request payload:', { id: profileId, mediaUrls: combinedMediaUrls });
-      
-      // PUT /profiles/{id} with combined media array in body
-      const updateResult = await updateProfileMedia({
-        id: String(profileId), // Ensure it's a string
-        mediaUrls: combinedMediaUrls, // Send combined array (existing + new)
-      }).unwrap();
-
-      console.log('Profile update result:', updateResult);
-
-      if (updateResult) {
-        // Success - refetch profile to get updated data
-        console.log('Refetching profile...');
-        await refetch();
-        // Clear selected files and close modal
-        setSelectedFiles([]);
-    handleCloseMediaModal();
-        console.log('Upload completed successfully!');
-      }
-    } catch (error) {
-      console.error('Error uploading media:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Error uploading media: ${errorMessage}`);
+  const handlePrimaryActionClick = () => {
+    if (activeTab === "Media") {
+      setIsMediaModalOpen(true);
+    } else if (activeTab === "Services") {
+      setIsServicesModalOpen(true);
+    } else {
+      setIsEditModalOpen(true);
     }
   };
 
@@ -422,118 +119,6 @@ export default function ProfilePage() {
     setReplyText("");
   };
 
-  const handleCloseServicesModal = () => {
-    setIsServicesModalOpen(false);
-  };
-
-  const handleToggleService = (service: string) => {
-    setSelectedServices(prev => 
-      prev.includes(service) 
-        ? prev.filter(s => s !== service)
-        : [...prev, service]
-    );
-  };
-
-  const handleAddCustomService = () => {
-    if (customServiceInput.trim() && !customServices.includes(customServiceInput.trim())) {
-      setCustomServices(prev => [...prev, customServiceInput.trim()]);
-      setCustomServiceInput("");
-    }
-  };
-
-  const handleRemoveCustomService = (service: string) => {
-    setCustomServices(prev => prev.filter(s => s !== service));
-  };
-
-  const handleSubmitServices = async () => {
-    console.log("=== handleSubmitServices called ===", {
-      selectedServices,
-      customServices,
-      profileId: profile?.id,
-      hasProfile: !!profile,
-    });
-
-    // Get profile ID - use profile.id (the profile's own ID, not userId)
-    const profileId = profile?.id || null;
-
-    if (!profileId) {
-      console.error('Profile ID is missing', {
-        profile,
-        profileId: profile?.id,
-        userId: profile?.userId,
-        authUserId: authUser?.id
-      });
-      alert('Profile ID not found. Please ensure your profile is created first.');
-      return;
-    }
-
-    // Combine selected services and custom services
-    const allServices = [...selectedServices, ...customServices];
-
-    if (allServices.length === 0) {
-      alert('Please select at least one service.');
-      return;
-    }
-
-    try {
-      console.log('Updating services for profile:', profileId);
-      console.log('Services to update:', allServices);
-
-      // Get existing services from profile.services (array of strings - IDs or names)
-      // profile.services can be string[] or Service[], so we extract strings
-      const existingServices: string[] = profile?.services && Array.isArray(profile.services)
-        ? profile.services.map(service => typeof service === 'string' ? service : (service.id || service.name || ''))
-            .filter((s): s is string => s !== '')
-        : [];
-
-      // Combine existing services with new service names
-      // Start with existing services
-      const servicesArray: string[] = [...existingServices];
-      
-      // Add new services that don't already exist
-      allServices.forEach(serviceName => {
-        // Check if service already exists (by exact match or case-insensitive)
-        const exists = servicesArray.some(existing => 
-          existing === serviceName || existing.toLowerCase() === serviceName.toLowerCase()
-        );
-        
-        if (!exists) {
-          // New service, send as name (backend will create it)
-          servicesArray.push(serviceName);
-        }
-      });
-
-      console.log('Existing services from profile.services:', existingServices);
-      console.log('Selected services (names):', allServices);
-      console.log('Services array to send (existing + new):', servicesArray);
-      
-      // Use PUT /profiles/{id} with services array
-      const result = await updateProfile({
-        id: String(profileId),
-        services: servicesArray,
-      }).unwrap();
-
-      console.log('Profile update result:', result);
-
-      if (result) {
-        // Refetch profile to get updated services
-        await refetch();
-        
-        // Close modal and show success
-    handleCloseServicesModal();
-        console.log('Services updated successfully!');
-      }
-    } catch (error: unknown) {
-      console.error('Error updating services:', error);
-      const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
-        ? String(error.data.message)
-        : (error && typeof error === 'object' && 'message' in error)
-          ? String(error.message)
-          : 'Unknown error occurred during service update.';
-      alert(`Error updating services: ${errorMessage}`);
-    }
-  };
-
   // Loading state
   if (loading) {
     return <ProfilePageSkeleton />;
@@ -548,7 +133,7 @@ export default function ProfilePage() {
           <div className="text-white/80 mb-4">{error}</div>
           <button 
             onClick={refetch}
-            className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-lg transition-colors"
+            className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-2 rounded-lg transition-colors cursor-pointer"
           >
             Try Again
           </button>
@@ -568,35 +153,39 @@ export default function ProfilePage() {
 
   return (
       <div className="min-h-screen bg-[#1F1B2C]">
-      {/* Header */}
       <div className="flex items-center justify-between p-4 sm:p-6">
-        <button className="flex items-center gap-2 text-white hover:text-pink-300 transition-colors">
+        <button
+          onClick={() => {
+            if (typeof window !== "undefined" && window.history.length > 1) {
+              router.back();
+            } else {
+              router.push("/dashboard");
+            }
+          }}
+          className="flex items-center gap-2 text-white hover:text-pink-300 transition-colors cursor-pointer"
+        >
           <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
           <span className="text-sm sm:text-base">Back</span>
         </button>
         {activeTab !== "Reviews" && (
-        <button 
-          onClick={() => {
-            if (activeTab === "Media") {
-              setIsMediaModalOpen(true);
-            } else if (activeTab === "Services") {
-              setIsServicesModalOpen(true);
-            } else {
-              setIsEditModalOpen(true);
-            }
-          }}
-            className=" hover:bg-pink-600 text-white px-3 sm:px-4 py-2 rounded-full flex items-center gap-1 sm:gap-2  border-[1px] border-white/10  text-sm sm:text-base"
+          <button
+            onClick={handlePrimaryActionClick}
+            className="hover:bg-pink-600 text-white px-3 sm:px-4 py-2 rounded-full flex items-center gap-1 sm:gap-2 border-[1px] border-white/10 text-sm sm:text-base cursor-pointer"
           >
             <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="hidden sm:inline">
-              {activeTab === "Media" ? "Add Media" : 
-               activeTab === "Services" ? "Edit Services" : 
-               "Edit Profile"}
+              {activeTab === "Media"
+                ? "Add Media"
+                : activeTab === "Services"
+                ? "Edit Services"
+                : "Edit Profile"}
             </span>
             <span className="sm:hidden">
-              {activeTab === "Media" ? "Add" : 
-               activeTab === "Services" ? "Edit" : 
-               "Edit"}
+              {activeTab === "Media"
+                ? "Add"
+                : activeTab === "Services"
+                ? "Edit"
+                : "Edit"}
             </span>
           </button>
         )}
@@ -605,149 +194,23 @@ export default function ProfilePage() {
       {/* Main Profile Section */}
       <div className="px-4 sm:px-8 lg:px-12 pb-6">
         <div className="flex flex-col lg:flex-row gap-6 sm:gap-8">
-          {/* Profile Image/Media */}
-          <div className="lg:w-1/3">
-            <div className="relative">
-              {/* Display media from profile.media array */}
-              {profile?.media && Array.isArray(profile.media) && profile.media.length > 0 ? (
-                <div className="w-full h-64 sm:h-80 lg:h-96 bg-gray-700 rounded-xl sm:rounded-2xl overflow-hidden relative">
-                  {/* Show current media item based on currentMediaIndex */}
-                  {(() => {
-                    const currentMedia = profile.media[currentMediaIndex] || profile.media[0];
-                    const isVideo = /\.(mp4|webm|ogg|avi|mov|wmv|flv|mkv)$/i.test(currentMedia);
-                    
-                    return isVideo ? (
-                      <video 
-                        src={currentMedia} 
-                        className="w-full h-full object-cover"
-                        controls
-                        key={currentMediaIndex} // Key to force re-render on change
-                      />
-                    ) : (
-                      <img 
-                        src={currentMedia} 
-                        alt={`Profile media ${currentMediaIndex + 1}`}
-                        className="w-full h-full object-cover transition-opacity duration-500"
-                        key={currentMediaIndex} // Key to force re-render on change
-                      />
-                    );
-                  })()}
-                  
-                  {/* Media count badge */}
-                  {profile.media.length > 1 && (
-                    <div className="absolute top-2 right-2 bg-black/60 text-white px-2 py-1 rounded-full text-xs font-medium">
-                      {currentMediaIndex + 1} / {profile.media.length}
-                    </div>
-                  )}
-                </div>
-              ) : (
-              <div className="w-full h-64 sm:h-80 lg:h-96 bg-gray-700 rounded-xl sm:rounded-2xl overflow-hidden">
-                <img 
-                  src="/images/intimate-couple.svg" 
-                  alt="Profile" 
-                  className="w-full h-full object-cover"
-                />
-            </div>
-              )}
-            </div>
-            {/* Image carousel dots - show if there are multiple media items */}
-            {profile?.media && Array.isArray(profile.media) && profile.media.length > 1 && (
-              <div className="flex justify-center gap-2 mt-3 sm:mt-4">
-                {profile.media.map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setCurrentMediaIndex(index)}
-                    className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-all ${
-                      index === currentMediaIndex 
-                        ? 'bg-pink-500 w-6 sm:w-8' 
-                        : 'bg-white/30 hover:bg-white/50'
-                    }`}
-                    aria-label={`Go to media ${index + 1}`}
-                  ></button>
-                ))}
-            </div>
-            )}
+          <ProfileMediaHero
+            profile={profile}
+            currentMediaIndex={currentMediaIndex}
+            setCurrentMediaIndex={setCurrentMediaIndex}
+          />
+          <ProfileHeader profile={profile} authUser={authUser} />
         </div>
-
-        {/* Profile Details */}
-          <div className="lg:w-2/3 space-y-3 sm:space-y-4">
-            {/* Name with verification */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">
-                {profile?.user?.userName || authUser?.username}
-              </h1>
-              <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-                <Check className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-              </div>
-            </div>
-            
-     
-
-            {/* Location */}
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-pink-500" />
-              <span className="text-white text-sm sm:text-base">
-                {authUser?.city && authUser?.state ? `${authUser.city}, ${authUser.state}` : 
-                 authUser?.city || authUser?.state }
-              </span>
-            </div>
-
-            {/* Rating */}
-            <div className="flex items-center gap-2">
-              <div className="flex">
-                {[...Array(5)].map((_, i) => (
-                  <Star 
-                    key={i} 
-                    className={`w-4 h-4 sm:w-5 sm:h-5 ${i < Math.floor(profile?.reviews?.stats?.averageRating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} 
-                  />
-                ))}
-              </div>
-              <span className="text-white font-semibold text-sm sm:text-base">
-                {profile?.reviews?.stats?.averageRating ? profile.reviews.stats.averageRating.toFixed(1) : '0.0'}
-              </span>
-              <span className="text-sm text-gray-400">
-                ({profile?.reviews?.stats?.totalReviews || 0} reviews)
-              </span>
-            </div>
-
-            {/* Bio */}
-            <div className="space-y-2 sm:space-y-3 text-white">
-              <p className="text-base sm:text-lg">{profile?.bio || 'No bio available'}</p>
-              {profile?.education && profile.education !== 'Not specified' && (
-                <p className="text-xs sm:text-sm text-pink-300">Education: {profile.education}</p>
-              )}
-              {profile?.occupation && profile.occupation !== 'Not specified' && (
-                <p className="text-xs sm:text-sm text-pink-300">Occupation: {profile.occupation}</p>
-              )}
-            </div>
-
-            {/* Joined Date */}
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5 text-pink-500" />
-              <span className="text-white text-sm sm:text-base">
-                Joined {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown'}
-              </span>
-            </div>
-
-            {/* Followers/Following */}
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-pink-500" />
-              <span className="text-white text-sm sm:text-base">{profile?.followersCount || 0} Followers</span>
-              <span className="text-white/60 text-sm sm:text-base">•</span>
-              <span className="text-white text-sm sm:text-base">{profile?.reviews?.stats?.totalReviews || 0} Reviews</span>
-            </div>
-              </div>
-            </div>
-          </div>
+      </div>
 
       {/* Navigation Tabs */}
       <div className="px-4 sm:px-8 lg:px-12 pb-4 sm:pb-6">
         <div className="flex space-x-4 sm:space-x-8 border-b border-white/20 overflow-x-auto scrollbar-hide">
           <button 
             onClick={() => setActiveTab("About")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap ${
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
               activeTab === "About" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -755,9 +218,9 @@ export default function ProfilePage() {
           </button>
           <button 
             onClick={() => setActiveTab("Services")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap ${
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
               activeTab === "Services" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -765,9 +228,9 @@ export default function ProfilePage() {
           </button>
           <button 
             onClick={() => setActiveTab("Media")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap ${
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
               activeTab === "Media" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -775,9 +238,9 @@ export default function ProfilePage() {
           </button>
           <button 
             onClick={() => setActiveTab("Reviews")}
-            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap ${
+            className={`pb-3 sm:pb-4 px-1 font-semibold transition-colors text-sm sm:text-base whitespace-nowrap cursor-pointer ${
               activeTab === "Reviews" 
-                ? "text-pink-500 border-b-2 border-pink-500" 
+                ? "text-[#FA266D] border-b-2 border-[#FA266D]" 
                 : "text-white/60 hover:text-white"
             }`}
           >
@@ -786,79 +249,8 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Tab Content */}
       <div className="px-4 sm:px-8 lg:px-12 pb-4 sm:pb-6">
-        {activeTab === "About" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            {/* Left Column */}
-            <div className="space-y-3 sm:space-y-4">
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Gender</p>
-                <p className="text-white text-sm sm:text-base capitalize">{authUser?.gender}</p>
-              </div>
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Sexual Orientation</p>
-                <p className="text-white text-sm sm:text-base">Null</p>
-              </div>
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Looks</p>
-                <p className="text-white text-sm sm:text-base">Null</p>
-              </div>
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Education</p>
-                <p className="text-white text-sm sm:text-base">{profile?.education}</p>
-              </div>
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">City</p>
-                <p className="text-white text-sm sm:text-base">{authUser?.city }</p>
-              </div>
-            </div>
-
-            {/* Middle Column */}
-            <div className="space-y-3 sm:space-y-4">
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Ethnicity</p>
-                <p className="text-white text-sm sm:text-base">Null</p>
-              </div>
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Body Build</p>
-                <p className="text-white text-sm sm:text-base">Null</p>
-              </div>
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Smoker</p>
-                <p className="text-white text-sm sm:text-base">{profile?.smoker ? 'Yes' : 'No'}</p>
-              </div>
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Country</p>
-                <p className="text-white text-sm sm:text-base">{authUser?.country}</p>
-              </div>
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Last Seen</p>
-                <p className="text-white text-sm sm:text-base">18 hours ago (null)</p>
-              </div>
-            </div>
-
-            {/* Right Column */}
-            <div className="space-y-3 sm:space-y-4">
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Nationality</p>
-                <p className="text-white text-sm sm:text-base">{authUser?.country}</p>
-              </div>
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Bust Size</p>
-                <p className="text-white text-sm sm:text-base">Null</p>
-              </div>
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">Occupation</p>
-                <p className="text-white text-sm sm:text-base">{profile?.occupation}</p>
-              </div>
-              <div className="flex-col pt-2 sm:pt-3 justify-between">
-                <p className="text-pink-500 pb-2 sm:pb-4 font-semibold text-sm sm:text-base">State</p>
-                <p className="text-white text-sm sm:text-base">{authUser?.state }</p>
-              </div>
-            </div>
-          </div>
-        )}
+        {activeTab === "About" && <ProfileAboutGrid profile={profile} authUser={authUser} />}
 
         {activeTab === "Services" && (
           <div className="space-y-8">
@@ -886,142 +278,206 @@ export default function ProfilePage() {
 
             {/* Pricing Section */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <h3 className="text-2xl font-bold text-pink-500">Pricing</h3>
-                <Info className="w-5 h-5 text-white/60" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-2xl font-bold text-[#FA266D]">Pricing</h3>
+                  <Info className="w-5 h-5 text-white/60" />
+                </div>
+                <button
+                  onClick={() => setIsCustomPricingModalOpen(true)}
+                  className="h-[48px] rounded-[30px]  px-6 py-3 flex items-center gap-4 text-white transition-colors border-[1px] border-[#FFFFFF1A] cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 text-[#FA266D]" />
+                  <span className="text-[#FA266D] font-normal text-[14px] sm:text-base">Add Custom Pricing</span>
+                </button>
               </div>
               
               <div className="grid md:grid-cols-3 gap-6">
                 {/* Short Time Card */}
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                    Short Time
+                  <div className="bg-[#FA266D] text-white text-[24px] font-bold py-2 px-4 rounded-lg mb-4 flex items-center justify-between relative">
+                    <div className="flex-1"></div>
+                    <span className="flex-1 text-center whitespace-nowrap">Short Time</span>
+                    <button
+                      onClick={() => {
+                        setEditingPricingType("shortTime");
+                        setIsEditPricingModalOpen(true);
+                      }}
+                      className="flex-1 flex justify-end cursor-pointer"
+                    >
+                      <Pencil className="w-4 h-4 text-white" />
+                    </button>
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-white">Incall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">50,000.00 APH</span>
-                      </div>
+                      {profile?.pricing?.shortTime?.incall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.shortTime.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-white">Outcall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">80,000.00 APH</span>
-                      </div>
+                      {profile?.pricing?.shortTime?.outcall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.shortTime.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Overnight Card */}
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                    Overnight
+                  <div className="bg-[#FA266D] text-white text-[24px] font-bold py-2 px-4 rounded-lg mb-4 flex items-center justify-between relative">
+                    <div className="flex-1"></div>
+                    <span className="flex-1 text-center">Overnight</span>
+                    <button
+                      onClick={() => {
+                        setEditingPricingType("overnight");
+                        setIsEditPricingModalOpen(true);
+                      }}
+                      className="flex-1 flex justify-end cursor-pointer"
+                    >
+                      <Pencil className="w-4 h-4 text-white" />
+                    </button>
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-white">Incall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">50,000.00 APH</span>
-                      </div>
+                      {profile?.pricing?.overnight?.incall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.overnight.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-white">Outcall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">80,000.00 APH</span>
-                      </div>
+                      {profile?.pricing?.overnight?.outcall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.overnight.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Weekend Card */}
                 <div className="bg-white/5 rounded-lg p-6 border border-white/10">
-                  <div className="bg-pink-500 text-white font-semibold py-2 px-4 rounded-lg text-center mb-4">
-                    Weekend
+                  <div className="bg-[#FA266D] text-white text-[24px] font-bold py-2 px-4 rounded-lg mb-4 flex items-center justify-between relative">
+                    <div className="flex-1"></div>
+                    <span className="flex-1 text-center">Weekend</span>
+                    <button
+                      onClick={() => {
+                        setEditingPricingType("weekend");
+                        setIsEditPricingModalOpen(true);
+                      }}
+                      className="flex-1 flex justify-end cursor-pointer"
+                    >
+                      <Pencil className="w-4 h-4 text-white" />
+                    </button>
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-white">Incall</span>
-                      <span className="text-white/60">---</span>
+                      {profile?.pricing?.weekend?.incall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.weekend.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-white">Outcall</span>
-                      <div className="flex items-center gap-1">
-                        <Coins className="w-4 h-4 text-yellow-400" />
-                        <span className="text-white font-semibold">80,000.00 APH</span>
-                      </div>
+                      {profile?.pricing?.weekend?.outcall ? (
+                        <div className="flex items-center gap-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-white font-semibold">
+                            {Number(profile.pricing.weekend.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-white/60">---</span>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
 
-        {activeTab === "Media" && (
-          <div className="space-y-6">
-            {/* Media Header */}
-            <div className="flex items-center justify-between">
-              <h3 className="text-2xl font-bold text-pink-500">Media</h3>
-              <div className="text-white/60 text-sm">
-                {profile?.media?.length || 0} {profile?.media?.length === 1 ? 'item' : 'items'}
-              </div>
-            </div>
-
-            {/* Media Grid */}
-            {/* Map media URLs from profile.media array (from API response: data.media) */}
-            {profile && profile.media && Array.isArray(profile.media) && profile.media.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {profile.media.map((mediaUrl, index) => {
-                  // Check if media is video based on file extension
-                  const isVideo = /\.(mp4|webm|ogg|avi|mov|wmv|flv|mkv)$/i.test(mediaUrl);
-                  
-                  return (
-                    <div key={index} className="relative group cursor-pointer">
-                      <div 
-                        className="aspect-square rounded-2xl overflow-hidden bg-cover bg-center bg-gray-700"
-                        style={{ 
-                          backgroundImage: mediaUrl ? `url(${mediaUrl})` : 'none'
-                        }}
-                      >
-                        <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                        
-                        {/* Play Button for Videos */}
-                        {isVideo && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-16 h-16 bg-pink-500 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                              <Play className="w-8 h-8 text-white ml-1" fill="currentColor" />
-                            </div>
+              {/* Custom Pricing Categories */}
+              {profile?.pricing?.customCategories && profile.pricing.customCategories.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="text-lg font-semibold text-pink-500 mb-4">Custom Pricing</h4>
+                  <div className="grid md:grid-cols-3 gap-6">
+                    {profile.pricing.customCategories.map((category: any, index: number) => (
+                      <div key={index} className="bg-gradient-to-br from-pink-500 to-purple-500 rounded-lg p-6 border border-white/10">
+                        <div className="text-white text-[20px] font-bold mb-2">
+                          {category.categoryName}
+                        </div>
+                        <div className="text-white/80 text-sm mb-4">{category.duration}</div>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">Incall</span>
+                            {category.incall ? (
+                              <div className="flex items-center gap-1">
+                                <Coins className="w-4 h-4 text-yellow-400" />
+                                <span className="text-white font-semibold">
+                                  {Number(category.incall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-white/60">---</span>
+                            )}
                           </div>
-                        )}
-
-                        {/* Media Type Indicator */}
-                        <div className="absolute top-2 right-2">
-                          <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            isVideo 
-                              ? 'bg-red-500/80 text-white' 
-                              : 'bg-blue-500/80 text-white'
-                          }`}>
-                            {isVideo ? 'VIDEO' : 'IMAGE'}
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">Outcall</span>
+                            {category.outcall ? (
+                              <div className="flex items-center gap-1">
+                                <Coins className="w-4 h-4 text-yellow-400" />
+                                <span className="text-white font-semibold">
+                                  {Number(category.outcall).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} APH
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-white/60">---</span>
+                            )}
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="text-white/60 text-lg mb-4">No media available</div>
-                <div className="text-white/40 text-sm">This user hasn&apos;t uploaded any media yet.</div>
-              </div>
-            )}
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
+
+        {activeTab === "Media" && <ProfileMediaGrid profile={profile} />}
 
         {activeTab === "Reviews" && (
           <div className="space-y-8">
@@ -1060,17 +516,17 @@ export default function ProfilePage() {
                       <div className="flex items-center gap-4">
                         <button 
                           onClick={() => handleReplyToReview(review.id.toString())}
-                          className="text-pink-500 hover:text-pink-400 transition-colors text-sm font-medium"
+                          className="text-pink-500 hover:text-pink-400 transition-colors text-sm font-medium cursor-pointer"
                         >
                           Write a reply
                         </button>
-                        <button className="flex items-center gap-2 text-white hover:text-white/80 transition-colors">
+                        <button className="flex items-center gap-2 text-white hover:text-white/80 transition-colors cursor-pointer">
                           <ThumbsUp className="w-4 h-4" />
                         </button>
-                        <button className="flex items-center gap-2 text-white hover:text-white/80 transition-colors">
+                        <button className="flex items-center gap-2 text-white hover:text-white/80 transition-colors cursor-pointer">
                           <ThumbsDown className="w-4 h-4" />
                         </button>
-                        <button className="text-[#E05050] hover:text-[#E05050]/80 transition-colors text-sm">
+                        <button className="text-[#E05050] hover:text-[#E05050]/80 transition-colors text-sm cursor-pointer">
                           Report
                         </button>
                       </div>
@@ -1095,13 +551,13 @@ export default function ProfilePage() {
                                 </div>
                                 <p className="text-white text-sm leading-relaxed">{reply.text}</p>
                                 <div className="flex items-center gap-4">
-                                  <button className="flex items-center gap-1 text-white hover:text-white/80 transition-colors">
+                                  <button className="flex items-center gap-1 text-white hover:text-white/80 transition-colors cursor-pointer">
                                     <ThumbsUp className="w-3 h-3" />
                                   </button>
-                                  <button className="flex items-center gap-1 text-white hover:text-white/80 transition-colors">
+                                  <button className="flex items-center gap-1 text-white hover:text-white/80 transition-colors cursor-pointer">
                                     <ThumbsDown className="w-3 h-3" />
                                   </button>
-                                  <button className="text-[#E05050] hover:text-[#E05050]/80 transition-colors text-xs">
+                                  <button className="text-[#E05050] hover:text-[#E05050]/80 transition-colors text-xs cursor-pointer">
                                     Delete
                                   </button>
                                 </div>
@@ -1131,13 +587,13 @@ export default function ProfilePage() {
                               <button
                                 onClick={handleSubmitReply}
                                 disabled={!replyText.trim()}
-                                className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm disabled:bg-gray-500 disabled:cursor-not-allowed cursor-pointer"
                               >
                                 Reply
                               </button>
                               <button
                                 onClick={handleCancelReply}
-                                className="px-4 py-2 text-white/60 hover:text-white transition-colors text-sm"
+                                className="px-4 py-2 text-white/60 hover:text-white transition-colors text-sm cursor-pointer"
                               >
                                 Cancel
                               </button>
@@ -1153,7 +609,7 @@ export default function ProfilePage() {
 
             {/* Show More Reviews */}
             {/* <div className="text-left">
-              <button className="flex items-center gap-2 text-pink-500 hover:text-pink-400 transition-colors">
+              <button className="flex items-center gap-2 text-pink-500 hover:text-pink-400 transition-colors cursor-pointer">
                 <span>Show more reviews</span>
                 <ChevronDown className="w-4 h-4" />
               </button>
@@ -1162,510 +618,49 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* Edit Profile Modal */}
-      {isEditModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Edit Profile</h2>
-              <button 
-                onClick={handleCloseModal}
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
-              >
-                <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
-              </button>
-            </div>
+      <ProfileEditModal
+        open={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        profile={profile}
+        authUser={authUser}
+        onUpdated={refetch}
+      />
 
-            {/* First Form */}
-            {currentFormStep === 1 && (
-              <div className="space-y-4 sm:space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                  {/* Left Column */}
-                  <div className="space-y-3 sm:space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
-                      <input
-                        type="text"
-                        value={formData.location}
-                        onChange={(e) => handleInputChange('location', e.target.value)}
-                        className="w-full px-3 sm:px-4 h-12 sm:h-14 border border-[#807E7E] text-[#807E7E] rounded-[24px] sm:rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent placeholder:text-[#807E7E] text-sm sm:text-base"
-                        placeholder="Enter location"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Ethnicity</label>
-                      <select
-                        value={formData.ethnicity}
-                        onChange={(e) => handleInputChange('ethnicity', e.target.value)}
-                        className="w-full px-3 sm:px-4 h-12 sm:h-14 border border-[#807E7E] text-[#807E7E] rounded-[24px] sm:rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none bg-white text-sm sm:text-base"
-                      >
-                        <option value="" className="text-[#807E7E]">Select your ethnic group</option>
-                        <option value="Black African" className="text-[#807E7E]">Black African</option>
-                        <option value="White" className="text-[#807E7E]">White</option>
-                        <option value="Asian" className="text-[#807E7E]">Asian</option>
-                        <option value="Hispanic" className="text-[#807E7E]">Hispanic</option>
-                        <option value="Mixed" className="text-[#807E7E]">Mixed</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Sexual Orientation</label>
-                      <select
-                        value={formData.sexualOrientation}
-                        onChange={(e) => handleInputChange('sexualOrientation', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] text-[#807E7E] rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none bg-white"
-                      >
-                        <option value="Bisexual" className="text-[#807E7E]">Bisexual</option>
-                        <option value="Straight" className="text-[#807E7E]">Straight</option>
-                        <option value="Gay" className="text-[#807E7E]">Gay</option>
-                        <option value="Lesbian" className="text-[#807E7E]">Lesbian</option>
-                        <option value="Pansexual" className="text-[#807E7E]">Pansexual</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Bust Size</label>
-                      <select
-                        value={formData.bustSize}
-                        onChange={(e) => handleInputChange('bustSize', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] text-[#807E7E] rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none bg-white"
-                      >
-                        <option value="Small A-cup" className="text-[#807E7E]">Small A-cup</option>
-                        <option value="Medium B-cup" className="text-[#807E7E]">Medium B-cup</option>
-                        <option value="Medium C-cup" className="text-[#807E7E]">Medium C-cup</option>
-                        <option value="Large D-cup" className="text-[#807E7E]">Large D-cup</option>
-                        <option value="Extra Large DD-cup" className="text-[#807E7E]">Extra Large DD-cup</option>
-                      </select>
-                    </div>
-                  </div>
+      <ProfileMediaUploadModal
+        open={isMediaModalOpen}
+        onClose={() => setIsMediaModalOpen(false)}
+        profile={profile}
+        authUser={authUser}
+        onUpdated={refetch}
+      />
+      <ProfileServicesModal
+        open={isServicesModalOpen}
+        onClose={() => setIsServicesModalOpen(false)}
+        profileId={String(profile.id)}
+        existingServices={profile.services}
+        onUpdated={refetch}
+      />
 
-                  {/* Right Column */}
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
-                      <select
-                        value={formData.gender}
-                        onChange={(e) => handleInputChange('gender', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none bg-white text-[#807E7E]"
-                      >
-                        <option value="" className="text-[#807E7E]">Select Gender</option>
-                        <option value="Female" className="text-[#807E7E]">Female</option>
-                        <option value="Male" className="text-[#807E7E]">Male</option>
-                        <option value="Non-binary" className="text-[#807E7E]">Non-binary</option>
-                        <option value="Transgender" className="text-[#807E7E]">Transgender</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Nationality</label>
-                      <select
-                        value={formData.nationality}
-                        onChange={(e) => handleInputChange('nationality', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] text-[#807E7E] rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none bg-white"
-                      >
-                        <option value="" className="text-[#807E7E]">Select nationality</option>
-                        <option value="Ghana" className="text-[#807E7E]">Ghana</option>
-                        <option value="Nigeria" className="text-[#807E7E]">Nigeria</option>
-                        <option value="South Africa" className="text-[#807E7E]">South Africa</option>
-                        <option value="Kenya" className="text-[#807E7E]">Kenya</option>
-                        <option value="Other" className="text-[#807E7E]">Other</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Body Build</label>
-                      <select
-                        value={formData.bodyBuild}
-                        onChange={(e) => handleInputChange('bodyBuild', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] text-[#807E7E] rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none bg-white"
-                      >
-                        <option value="Slim" className="text-[#807E7E]">Slim</option>
-                        <option value="Athletic" className="text-[#807E7E]">Athletic</option>
-                        <option value="Average" className="text-[#807E7E]">Average</option>
-                        <option value="Chubby" className="text-[#807E7E]">Chubby</option>
-                        <option value="Curvy" className="text-[#807E7E]">Curvy</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Looks</label>
-                      <select
-                        value={formData.looks}
-                        onChange={(e) => handleInputChange('looks', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] text-[#807E7E] rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none bg-white"
-                      >
-                        <option value="Cute" className="text-[#807E7E]">Cute</option>
-                        <option value="Beautiful" className="text-[#807E7E]">Beautiful</option>
-                        <option value="Sexy" className="text-[#807E7E]">Sexy</option>
-                        <option value="Attractive" className="text-[#807E7E]">Attractive</option>
-                        <option value="Gorgeous" className="text-[#807E7E]">Gorgeous</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
+      <ProfilePricingEditModal
+        open={isEditPricingModalOpen}
+        onClose={() => {
+          setIsEditPricingModalOpen(false);
+          setEditingPricingType(null);
+        }}
+        profileId={String(profile.id)}
+        pricingType={editingPricingType}
+        currentPricing={profile.pricing}
+        onUpdated={refetch}
+      />
 
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 pt-4 sm:pt-6">
-                  <button
-                    onClick={handleCloseModal}
-                    className="px-4 sm:px-6 py-2 sm:py-3 text-pink-500 font-medium hover:text-pink-600 transition-colors text-sm sm:text-base"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleContinue}
-                    className="px-6 sm:px-8 py-2 sm:py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm sm:text-base"
-                  >
-                    Continue
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Second Form */}
-            {currentFormStep === 2 && (
-              <div className="space-y-6">
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Left Column */}
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Smoker</label>
-                      <select
-                        value={formData.smoker}
-                        onChange={(e) => handleInputChange('smoker', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] rounded-[32px] text-[#807E7E] focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none bg-white"
-                      >
-                        <option value="Yes" className="text-[#807E7E]">Yes</option>
-                        <option value="No" className="text-[#807E7E]">No</option>
-                        <option value="Occasionally" className="text-[#807E7E]">Occasionally</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Education</label>
-                      <select
-                        value={formData.education}
-                        onChange={(e) => handleInputChange('education', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] rounded-[32px] text-[#807E7E] focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none bg-white"
-                      >
-                        <option value="High School" className="text-[#807E7E]">High School</option>
-                        <option value="Bachelors" className="text-[#807E7E]">Bachelors</option>
-                        <option value="Masters" className="text-[#807E7E]">Masters</option>
-                        <option value="PhD" className="text-[#807E7E]">PhD</option>
-                        <option value="Other" className="text-[#807E7E]">Other</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
-                      <select
-                        value={formData.state}
-                        onChange={(e) => handleInputChange('state', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] rounded-[32px] text-[#807E7E] focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none bg-white"
-                      >
-                        <option value="Lagos" className="text-[#807E7E]">Lagos</option>
-                        <option value="Abuja" className="text-[#807E7E]">Abuja</option>
-                        <option value="Rivers" className="text-[#807E7E]">Rivers</option>
-                        <option value="Kano" className="text-[#807E7E]">Kano</option>
-                        <option value="Other" className="text-[#807E7E]">Other</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Right Column */}
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Occupation</label>
-                      <input
-                        type="text"
-                        value={formData.occupation}
-                        onChange={(e) => handleInputChange('occupation', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent text-[#807E7E] placeholder:text-[#807E7E]"
-                        placeholder="Enter occupation"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
-                      <select
-                        value={formData.country}
-                        onChange={(e) => handleInputChange('country', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent appearance-none bg-white"
-                      >
-                        <option value="Nigeria" className="text-[#807E7E]">Nigeria</option>
-                        <option value="Ghana" className="text-[#807E7E]">Ghana</option>
-                        <option value="South Africa" className="text-[#807E7E]">South Africa</option>
-                        <option value="Kenya" className="text-[#807E7E]">Kenya</option>
-                        <option value="Other" className="text-[#807E7E]">Other</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
-                      <input
-                        type="text"
-                        value={formData.city}
-                        onChange={(e) => handleInputChange('city', e.target.value)}
-                        className="w-full px-4 h-14 border border-[#807E7E] rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent text-[#807E7E] placeholder:text-[#807E7E]"
-                        placeholder="Enter city"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Bio Section */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
-                  <textarea
-                    value={formData.bio}
-                    onChange={(e) => handleInputChange('bio', e.target.value)}
-                    placeholder="Start writing here"
-                    rows={4}
-                    className="w-full px-4 pt-3 h-[138px] border border-[#807E7E] rounded-[32px] focus:ring-2 focus:ring-pink-500 focus:border-transparent resize-none text-[#807E7E] placeholder:text-[#807E7E]"
-                  />
-              </div>
-
-                {/* Action Buttons */}
-                <div className="flex justify-end gap-4 pt-6">
-                  <button
-                    onClick={() => setCurrentFormStep(1)}
-                    className="px-6 py-3 text-pink-500 font-medium hover:text-pink-600 transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    disabled={isUpdatingProfile}
-                    className="px-8 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
-                  >
-                    {isUpdatingProfile ? 'Updating...' : 'Submit'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Media Upload Modal */}
-      {isMediaModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Add Media</h2>
-              <button 
-                onClick={handleCloseMediaModal}
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
-              >
-                <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
-              </button>
-            </div>
-
-            {/* File Upload Area */}
-            <div className="space-y-6">
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-pink-500 transition-colors">
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*,video/*"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  id="media-upload"
-                />
-                <label
-                  htmlFor="media-upload"
-                  className="cursor-pointer flex flex-col items-center space-y-4"
-                >
-                  <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center">
-                    <Edit className="w-8 h-8 text-pink-500" />
-                  </div>
-                  <div>
-                    <p className="text-lg font-medium text-gray-900">Upload Media</p>
-                    <p className="text-sm text-gray-500">Click to select images or videos</p>
-                    <p className="text-xs text-gray-400 mt-1">Supports: JPG, PNG, MP4, MOV, etc.</p>
-                  </div>
-                </label>
-              </div>
-
-              {/* Upload Error Display */}
-              {uploadError && (
-                <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4">
-                  <p className="text-red-400 text-sm">Upload Error: {uploadError}</p>
-                </div>
-              )}
-
-              {/* Upload Progress */}
-              {/* {(isUploading || isUpdatingProfile) && (
-                <div className="bg-blue-500/10 border border-blue-500/50 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-blue-400 text-sm">
-                      {isUploading ? 'Uploading to Cloudinary...' : 'Saving to profile...'}
-                    </p>
-                    <p className="text-blue-400 text-sm font-medium">{Math.round(progress)}%</p>
-                  </div>
-                  <div className="w-full bg-blue-500/20 rounded-full h-2">
-                    <div
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${progress}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )} */}
-
-              {/* Selected Files Preview */}
-              {selectedFiles.length > 0 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-800">Selected Files ({selectedFiles.length})</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {selectedFiles.map((file, index) => (
-                      <div key={index} className="relative group">
-                        <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
-                          {file.type.startsWith('image/') ? (
-                            <img
-                              src={URL.createObjectURL(file)}
-                              alt={file.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                              <Play className="w-8 h-8 text-gray-400" />
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handleRemoveFile(index)}
-                          disabled={isUploading || isUpdatingProfile || isUpdatingMedia}
-                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                        <p className="text-xs text-gray-600 mt-1 truncate">{file.name}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 pt-4 sm:pt-6">
-                <button
-                  onClick={handleCloseMediaModal}
-                  disabled={isUploading || isUpdatingProfile || isUpdatingMedia}
-                  className="px-4 sm:px-6 py-2 sm:py-3 text-pink-500 font-medium hover:text-pink-600 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleUploadMedia}
-                  disabled={selectedFiles.length === 0 || isUploading || isUpdatingProfile || isUpdatingMedia}
-                  className="px-6 sm:px-8 py-2 sm:py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm sm:text-base disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {(isUploading || isUpdatingProfile || isUpdatingMedia) ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      {isUploading ? `Uploading... ${Math.round(progress)}%` : 'Saving...'}
-                    </>
-                  ) : (
-                    `Upload ${selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''}`
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Services Modal */}
-      {isServicesModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1F1B2C] rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl sm:text-2xl font-bold text-white">Edit Services</h2>
-              <button 
-                onClick={handleCloseServicesModal}
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-              >
-                <X className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-              </button>
-            </div>
-
-            {/* Services Grid */}
-            <div className="space-y-6">
-              <div className="flex flex-wrap gap-3">
-                {availableServices.map((service) => (
-                  <button
-                    key={service}
-                    onClick={() => handleToggleService(service)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      selectedServices.includes(service)
-                        ? 'bg-pink-500 text-white border-2 border-pink-500'
-                        : 'bg-transparent text-white border-2 border-white/30 hover:border-white/50'
-                    }`}
-                  >
-                    {service}
-                  </button>
-                ))}
-              </div>
-
-              {/* Custom Services Section */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-white">Others</h3>
-                
-                {/* Custom Services Tags */}
-                {customServices.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {customServices.map((service, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center gap-2 px-3 py-1 bg-pink-500 text-white rounded-full text-sm"
-                      >
-                        <span>{service}</span>
-                        <button
-                          onClick={() => handleRemoveCustomService(service)}
-                          className="hover:text-pink-200 transition-colors"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add Custom Service Input */}
-                <div className="flex gap-3">
-                  <input
-                    type="text"
-                    value={customServiceInput}
-                    onChange={(e) => setCustomServiceInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleAddCustomService()}
-                    placeholder="Type here"
-                    className="flex-1 px-4 py-3 bg-transparent border border-white/30 rounded-lg text-white placeholder-white/60 focus:outline-none focus:border-pink-500 transition-colors"
-                  />
-                  <button
-                    onClick={handleAddCustomService}
-                    disabled={!customServiceInput.trim()}
-                    className="px-6 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row justify-end gap-3 sm:gap-4 pt-6 mt-6 border-t border-white/10">
-              <button
-                onClick={handleCloseServicesModal}
-                className="px-4 sm:px-6 py-2 sm:py-3 text-pink-500 font-medium hover:text-pink-400 transition-colors text-sm sm:text-base"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmitServices}
-                disabled={isUpdatingProfile}
-                className="px-6 sm:px-8 py-2 sm:py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm sm:text-base disabled:bg-gray-500 disabled:cursor-not-allowed"
-              >
-                {isUpdatingProfile ? 'Updating...' : 'Submit'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CustomPricingModal
+        isOpen={isCustomPricingModalOpen}
+        onClose={() => setIsCustomPricingModalOpen(false)}
+        profileId={String(profile.id)}
+      />
 
     </div>
   );
 }
+
+export default ProviderProfilePage;

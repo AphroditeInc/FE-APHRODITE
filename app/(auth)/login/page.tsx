@@ -45,25 +45,42 @@ export default function LoginPage() {
       let loginData;
       if (loginMethod === 'email') {
         console.log('[LoginPage] Attempting email login for:', formData.email);
-        loginData = { email: formData.email, password: formData.password };
+        loginData = { 
+          email: formData.email, 
+          password: formData.password 
+        };
       } else {
-        // For phone login, we need to send both phone number and country code with password
-        const phoneWithCode = `${formData.countryCode}${formData.phone}`;
-        console.log('[LoginPage] Attempting phone login for:', phoneWithCode);
-        loginData = { email: phoneWithCode, password: formData.password };
+        // For phone login, send phoneNumber and countryCode as separate fields
+        console.log('[LoginPage] Attempting phone login for:', formData.countryCode, formData.phone);
+        loginData = { 
+          phoneNumber: formData.phone,
+          countryCode: formData.countryCode,
+          password: formData.password 
+        };
       }
 
       const result = await login(loginData).unwrap();
       
       if (result && result.data) {
         const data = result.data;
-        // Handle different response formats
         const tokens = data.tokens || data;
         const user = data.user || data.data?.user;
+
+        const accessToken = tokens.accessToken || tokens.access_token;
+        const refreshToken = tokens.refreshToken || tokens.refresh_token;
+        const expiresIn = tokens.expiresIn || tokens.expires_in || '';
+
+        if (typeof window !== 'undefined' && expiresIn) {
+          try {
+            localStorage.setItem('expiresIn', String(expiresIn));
+          } catch (storageError) {
+            console.error('[LoginPage] Failed to store expiresIn:', storageError);
+          }
+        }
         
         dispatch(setCredentials({
-          access_token: tokens.accessToken || tokens.access_token,
-          refresh_token: tokens.refreshToken || tokens.refresh_token,
+          access_token: accessToken,
+          refresh_token: refreshToken,
           user: user,
           uid: user?.id || data.uid || data.userId,
         }));

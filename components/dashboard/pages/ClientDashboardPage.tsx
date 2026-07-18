@@ -34,7 +34,7 @@ const getRandomBackgroundImage = (index: number) => {
 };
 
 
-export default function OverviewPage() {
+export default function ClientDashboardPage() {
   const router = useRouter();
   const [selectedUserType, setSelectedUserType] = useState<'hunk' | 'diva'>('diva'); // Default to 'diva'
   const [likedProfiles, setLikedProfiles] = useState<Set<string>>(new Set());

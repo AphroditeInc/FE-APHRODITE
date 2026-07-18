@@ -68,35 +68,6 @@ function DetailsForm() {
     }
   }, [user, userId]);
 
-  // Check for autofill values
-  useEffect(() => {
-    const checkAutofill = () => {
-      if (
-        passwordRef.current &&
-        passwordRef.current.value !== formData.password
-      ) {
-        setFormData((prev) => ({
-          ...prev,
-          password: passwordRef.current?.value || "",
-        }));
-      }
-      if (
-        confirmPasswordRef.current &&
-        confirmPasswordRef.current.value !== formData.confirmPassword
-      ) {
-        setFormData((prev) => ({
-          ...prev,
-          confirmPassword: confirmPasswordRef.current?.value || "",
-        }));
-      }
-    };
-
-    checkAutofill();
-    const timeout = setTimeout(checkAutofill, 100);
-
-    return () => clearTimeout(timeout);
-  }, []);
-
   const [formData, setFormData] = useState({
     // Step 1: Basic Info
     age: "",
@@ -124,6 +95,15 @@ function DetailsForm() {
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  // Auto-set userType to "hunk" when gender is "male" (only if userType not set from URL)
+  useEffect(() => {
+    const userTypeParam = searchParams.get("userType");
+    // Only auto-set if no userType from URL params and gender is male
+    if (!userTypeParam && formData.gender === "male") {
+      setUserType("hunk");
+    }
+  }, [formData.gender, searchParams]);
 
   // Dropdown options
   const genderOptions = [
@@ -816,7 +796,7 @@ function DetailsForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-transparent flex items-center justify-center p-4">
       <AuthCard title={getStepTitle()} description={getStepDescription()}>
         <div className="space-y-8">
           {/* Error Display */}
@@ -867,7 +847,7 @@ function DetailsForm() {
               className={`${currentStep === 1 ? "w-full" : "w-[70%]"} ${
                 currentStep === 3 || currentStep === 4
                   ? "bg-gradient-to-r from-pink-500 to-pink-600"
-                  : ""
+                  : "bg-pink-600 hover:bg-pink-700"
               }`}
             >
               {isLoading ? "Submitting..." : getButtonText()}
@@ -883,7 +863,7 @@ export default function DetailsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+        <div className="min-h-screen bg-transparent flex items-center justify-center p-4">
           <div className="text-white text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-4"></div>
             <p>Loading...</p>
