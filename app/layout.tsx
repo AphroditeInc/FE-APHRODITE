@@ -10,7 +10,7 @@ const urbanist = Urbanist({
 });
 
 export const metadata: Metadata = {
-  title: "Aphrodite",
+  title: "Aphrodite Inc.",
   description: "Find your perfect match for any service or talent you need",
 };
 

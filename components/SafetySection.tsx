@@ -1,75 +1,103 @@
 "use client";
 
-import { AlertTriangle, Mail, Phone } from "lucide-react";
+const SAFETY_TIPS = [
+  "Trust your instincts and report any suspicious behavior",
+  "Keep personal information private until you feel comfortable",
+  "Use the platform's messaging system for all communications",
+  "Report any violations of our community guidelines immediately",
+];
+
+type Contact = {
+  icon: string;
+  label: string;
+  value: string;
+  note: string;
+};
+
+const CONTACTS: Contact[] = [
+  {
+    icon: "/safety/icon-sms.svg",
+    label: "Email",
+    value: "aphroditeincorporation@gmail.com",
+    note: "(24/7 Response within 24 hours)",
+  },
+  {
+    icon: "/safety/icon-call.svg",
+    label: "Phone",
+    value: "+234 (813) 108 8821",
+    note: "(24/7 Hotline)",
+  },
+];
+
+function ContactRow({ icon, label, value, note }: Contact) {
+  return (
+    <div className="flex items-start gap-4 lg:items-center">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#FEF4F7] lg:size-14">
+        <img src={icon} alt="" className="size-4 lg:size-6" />
+      </div>
+      <div className="flex min-w-0 flex-col gap-2">
+        <p className="text-[14px] font-semibold capitalize text-[#121212] lg:text-[16px]">
+          {label}
+        </p>
+        <div className="flex flex-col gap-1 leading-[24px] lg:flex-row lg:items-center lg:gap-[10px]">
+          <p className="text-[14px] text-[#807E7E] lg:text-[16px]">{value}</p>
+          <p className="whitespace-nowrap text-[12px] text-[#FA266D]">{note}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function SafetySection() {
-  const safetyTips = [
-    "Trust your instincts and report any suspicious behavior",
-    "Keep personal information private until you feel comfortable",
-    "Use the platform's messaging system for all communications",
-    "Report any violations of our community guidelines immediately"
-  ];
-
   return (
-    <section className="py-20 bg-white">
-      <div className="max-w-7xl mx-auto px-6">
-        {/* Title and Subtitle */}
-        <div className="text-center mb-16">
-          <h2 className="text-5xl md:text-6xl font-bold mb-6 text-gray-900">
+    <section className="w-full bg-white">
+      <div className="mx-auto max-w-[1248px] px-6 pb-10 pt-10 lg:pb-16 lg:pt-16">
+        {/* Header */}
+        <div className="mx-auto flex max-w-[588px] flex-col items-center gap-2 text-center lg:gap-4">
+          <h2 className="text-[24px] font-bold leading-[40px] text-[#121212] lg:text-[40px] lg:leading-[48px]">
             Your Safety, Our Priority
           </h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            We maintain the highest standards of safety and security to protect our community members.
+          <p className="text-[14px] font-normal leading-[24px] text-[#807E7E] opacity-80 lg:text-[18px] lg:leading-[35px]">
+            We maintain the highest standards of safety and security to protect
+            our community members.
           </p>
         </div>
 
-        {/* Content Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {/* Left Column - Safety Tips */}
-          <div>
-            <div className="flex items-center mb-6">
-              <div className="w-8 h-8 bg-pink-600 rounded-lg flex items-center justify-center mr-3">
-                <AlertTriangle className="w-5 h-5 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900">Safety Tips</h3>
+        {/* Safety tips (left) + emergency contact box (right) */}
+        <div className="mt-10 flex flex-col gap-10 lg:mt-14 lg:flex-row lg:items-start lg:gap-6">
+          {/* Safety tips */}
+          <div className="flex flex-col gap-4 lg:w-[588px] lg:gap-6">
+            <div className="flex items-center gap-4">
+              <img
+                src="/safety/icon-danger.svg"
+                alt=""
+                className="size-6 lg:size-8"
+              />
+              <h3 className="text-[16px] font-semibold leading-[24px] text-[#121212] lg:text-[20px]">
+                Safety Tips
+              </h3>
             </div>
-            
-            <ul className="space-y-4">
-              {safetyTips.map((tip, index) => (
-                <li key={index} className="flex items-start">
-                  <span className="w-2 h-2 bg-pink-600 rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                  <span className="text-gray-700 leading-relaxed">{tip}</span>
+            <ul className="list-disc pl-[21px] text-black lg:pl-6">
+              {SAFETY_TIPS.map((tip) => (
+                <li
+                  key={tip}
+                  className="text-[14px] leading-[24px] lg:text-[16px] lg:leading-[40px]"
+                >
+                  {tip}
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Right Column - Emergency Contact */}
-          <div className="bg-[#FCFCFC] rounded-2xl p-8">
-            <h3 className="text-2xl font-bold text-gray-900 mb-6">For Emergency Case</h3>
-            
-            <div className="space-y-6">
-              {/* Email Contact */}
-              <div className="flex items-center">
-                <div className="w-10 h-10 bg-pink-600 rounded-lg flex items-center justify-center mr-4">
-                  <Mail className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-gray-900 font-medium">contact@afretrade.com {""}
-                  <span className="text-pink-600 text-sm">(24/7 Response within 24 hours)</span></p>
-                </div>
-              </div>
-
-              {/* Phone Contact */}
-              <div className="flex items-center">
-                <div className="w-10 h-10 bg-pink-600 rounded-lg flex items-center justify-center mr-4">
-                  <Phone className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-gray-900 font-medium">+1 (555) 123-4567 {" "}
-                  <span className="text-pink-600 text-sm">(24/7 Hotline)</span> </p>
-                </div>
-              </div>
+          {/* Emergency contact box */}
+          <div className="rounded-[20px] bg-[#FCFCFC] p-4 lg:w-[588px] lg:p-6">
+            <p className="text-[16px] font-semibold leading-[24px] text-[#FA266D] lg:text-[20px]">
+              For Emergency Case
+            </p>
+            <div className="mt-4 flex flex-col gap-3 lg:mt-6 lg:gap-6">
+              {CONTACTS.map((c) => (
+                <ContactRow key={c.label} {...c} />
+              ))}
             </div>
           </div>
         </div>

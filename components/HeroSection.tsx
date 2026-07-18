@@ -1,59 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { ArrowRight } from "lucide-react";
-import Button from "./button";
-import { useState, useEffect } from "react";
+import HeroImageGrid from "./HeroImageGrid";
 
 export default function HeroSection() {
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
-
-  // Optimized Cloudinary URL with better compression and format
-  const optimizedImageUrl = 'https://res.cloudinary.com/dpynyht1l/image/upload/f_auto,q_auto,w_1920,h_1080,c_fill/v1760294571/image_grid_kib4ze.png';
-
-  useEffect(() => {
-    // Preload the optimized hero image
-    const img = new window.Image();
-    img.onload = () => setImageLoaded(true);
-    img.onerror = () => setImageError(true);
-    img.src = optimizedImageUrl;
-  }, []);
-
   return (
     <div id="hero-section" className="min-h-screen relative overflow-hidden">
       {/* Instant CSS Gradient Fallback */}
       <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-pink-900 to-red-900"></div>
-      
-      {/* Optimized Background Image */}
-      {!imageError && (
-        <div className="absolute inset-0">
-          <Image
-            src={optimizedImageUrl}
-            alt="Premium companionship background"
-            fill
-            priority
-            quality={85}
-            className={`object-cover transition-opacity duration-700 ${
-              imageLoaded ? 'opacity-100' : 'opacity-0'
-            }`}
-            onLoad={() => setImageLoaded(true)}
-            onError={() => setImageError(true)}
-            sizes="100vw"
-          />
-        </div>
-      )}
 
-      {/* Dark Overlay */}
-      <div className="absolute inset-0 bg-black/60"></div>
+      {/* Staggered photo grid background - ported 1:1 from the Figma design */}
+      <HeroImageGrid />
+
+      {/* Gradient Overlay - vignette matching the layered gradients in the design:
+          darkest at the very top, lightest around the headline, deepening again toward the bottom */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(to bottom, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.46) 50%, rgba(0,0,0,0.58) 68%, rgba(0,0,0,0.83) 87%, rgba(0,0,0,0.95) 100%)',
+        }}
+      ></div>
 
       {/* Main Content */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center px-4 sm:px-6">
-        <div className="max-w-4xl mx-auto text-center">
+      <div className="relative z-10 min-h-screen flex items-end justify-center px-4 sm:px-6 pb-[12.8vh]">
+        <div className="max-w-[894px] mx-auto text-center">
           {/* Main Headline */}
-          <div className="mb-6 sm:mb-8">
-            <h1 className="font-bold text-center text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl leading-tight sm:leading-tight md:leading-tight lg:leading-tight xl:leading-tight" style={{
+          <div className="mb-4">
+            <h1 className="font-bold text-center text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-[80px] leading-tight sm:leading-tight md:leading-tight lg:leading-tight xl:leading-[100px]" style={{
               fontFamily: 'Urbanist',
               fontWeight: 700,
               letterSpacing: '0%'
@@ -64,7 +39,7 @@ export default function HeroSection() {
           </div>
 
           {/* Description */}
-          <p className="text-white mb-8 sm:mb-10 lg:mb-12 max-w-2xl mx-auto text-center text-base sm:text-lg md:text-xl lg:text-2xl leading-relaxed px-2" style={{
+          <p className="text-white/80 mb-10 max-w-none mx-auto text-center text-base sm:text-lg md:text-xl lg:text-[24px] leading-relaxed lg:leading-[35px] px-2" style={{
             fontFamily: 'Urbanist',
             fontWeight: 400,
             letterSpacing: '0%'
