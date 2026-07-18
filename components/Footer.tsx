@@ -1,123 +1,85 @@
 "use client";
 
-import { Facebook, Instagram, Twitter } from "lucide-react";
+const PLATFORM_LINKS = ["For Divas/Hunks", "For Clients", "For AphroRyders"];
+const LEGAL_LINKS = ["Terms of Service", "Privacy Policy", "Help Center"];
+
+function FooterColumn({ title, links }: { title: string; links: string[] }) {
+  return (
+    <div className="flex flex-col gap-4 lg:w-[282px] lg:gap-6">
+      <h4 className="text-[16px] font-semibold leading-[24px] text-white lg:text-[20px]">
+        {title}
+      </h4>
+      <ul className="flex flex-col gap-4">
+        {links.map((l) => (
+          <li key={l}>
+            <a
+              href="#"
+              className="text-[14px] leading-[24px] text-white/90 opacity-80 transition-opacity hover:opacity-100 lg:text-[18px] lg:leading-[35px]"
+            >
+              {l}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export default function Footer() {
   return (
-    <footer className="bg-pink-600 text-white">
-      <div className=" mx-auto py-16">
-        {/* Main Footer Content */}
-        <div className="flex flex-col lg:flex-row justify-between items-start mx-auto max-w-7xl mb-8 px-4 sm:px-6">
-          {/* Logo Section - Left */}
-          <div className="mb-8 lg:mb-0 w-full lg:w-auto">
-            <div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-2">LOGO HERE</h3>
-              <p className="text-white/90 opacity-[80%] text-base sm:text-lg max-w-[282px]">
-                Experience luxury, and discretion with Aphrodite&apos;s exclusive platform.
-              </p>
+    <footer className="w-full bg-[#FA266D] text-white">
+      <div className="mx-auto max-w-[1248px] px-6 pt-10 lg:pt-16">
+        {/* Top: logo + tagline, then Platform / Legal columns */}
+        <div className="flex flex-col gap-10 lg:flex-row lg:justify-between lg:gap-0">
+          <div className="flex flex-col gap-4 lg:w-[282px]">
+            <div className="flex items-center gap-3">
+              <img
+                src="/footer/logo-white.svg"
+                alt="Aphrodite Inc."
+                className="h-6 w-[17px] lg:h-10 lg:w-[28px]"
+              />
+              <span className="whitespace-nowrap text-[17px] font-semibold tracking-[-0.34px] text-white lg:text-[28px] lg:tracking-[-0.57px]">
+                Aphrodite Inc.
+              </span>
             </div>
-          </div>
-
-          {/* Right Side - Platform and Legal */}
-          <div className="flex flex-col sm:flex-row gap-8 sm:gap-12 lg:gap-16 w-full lg:w-auto">
-            {/* Platform Links */}
-            <div>
-              <h4 className="mb-4 text-white text-lg sm:text-xl font-semibold leading-6">
-                Platform
-              </h4>
-              <ul className="space-y-2">
-                <li>
-                  <a 
-                    href="/divas-hunks" 
-                    className="text-base sm:text-lg leading-[35px] opacity-[80%] text-white/90 hover:text-white transition-colors"
-                  >
-                    For Divas/Hunks
-                  </a>
-                </li>
-                <li>
-                  <a 
-                    href="/clients" 
-                    className="text-base sm:text-lg leading-[35px] opacity-[80%] text-white/90 hover:text-white transition-colors"
-                  >
-                    For Clients
-                  </a>
-                </li>
-                <li>
-                  <a 
-                    href="/aphro-ryders" 
-                    className="text-base sm:text-lg leading-[35px] opacity-[80%] text-white/90 hover:text-white transition-colors"
-                  >
-                    For AphroRyders
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            {/* Legal Links */}
-            <div>
-              <h4 className="mb-4 text-white text-lg sm:text-xl font-semibold leading-6">
-                Legal
-              </h4>
-              <ul className="space-y-2">
-                <li>
-                  <a 
-                    href="/terms" 
-                    className="opacity-[80%] text-base sm:text-lg leading-[35px] text-white/90 hover:text-white transition-colors"
-                  >
-                    Terms of Service
-                  </a>
-                </li>
-                <li>
-                  <a 
-                    href="/privacy" 
-                    className="opacity-[80%] text-base sm:text-lg leading-[35px] text-white/90 hover:text-white transition-colors"
-                  >
-                    Privacy Policy
-                  </a>
-                </li>
-                <li>
-                  <a 
-                    href="/help" 
-                    className="opacity-[80%] text-base sm:text-lg leading-[35px] text-white/90 hover:text-white transition-colors"
-                  >
-                    Help Center
-                  </a>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Dashed Line Separator */}
-        <div className="border-t border-dashed border-pink-300 mb-8"></div>
-
-        {/* Bottom Section */}
-        <div className="flex flex-col sm:flex-row justify-between items-center max-w-7xl mx-auto px-4 sm:px-6">
-          {/* Copyright */}
-          <div className="mb-4 sm:mb-0 text-center sm:text-left">
-            <p className="text-white/90 opacity-[80%] text-sm sm:text-base">
-              © 2025 Aphrodite Inc. All Rights Reserved.
+            <p className="max-w-[282px] text-[16px] font-normal leading-[24px] text-white/90 opacity-80 lg:text-[18px] lg:leading-[35px]">
+              Experience luxury, and discretion with Aphrodite&apos;s exclusive
+              platform.
             </p>
           </div>
 
-          {/* Social Media and Cookie Policy */}
-          <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
-            <span className="text-white/90 opacity-[80%] text-sm sm:text-base">Connect with us:</span>
-            
-            {/* Social Media Icons */}
-            <div className="flex items-center space-x-3">
-              <a href="#" className="w-7 h-7 sm:w-8 sm:h-8 bg-pink-500 rounded-full flex items-center justify-center hover:bg-pink-400 transition-colors">
-                <Facebook className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-              </a>
-              <a href="#" className="w-7 h-7 sm:w-8 sm:h-8 bg-pink-500 rounded-lg flex items-center justify-center hover:bg-pink-400 transition-colors">
-                <Instagram className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-              </a>
-              <a href="#" className="w-7 h-7 sm:w-8 sm:h-8 bg-pink-500 rounded-lg flex items-center justify-center hover:bg-pink-400 transition-colors">
-                <Twitter className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-              </a>
+          <div className="flex flex-col gap-10 lg:flex-row lg:gap-6">
+            <FooterColumn title="Platform" links={PLATFORM_LINKS} />
+            <FooterColumn title="Legal" links={LEGAL_LINKS} />
+          </div>
+        </div>
+
+        {/* Bottom bar */}
+        <div className="mt-10 flex flex-col items-center gap-6 border-t-[0.5px] border-dashed border-white/90 pb-10 pt-6 text-center lg:mt-20 lg:flex-row lg:justify-between lg:gap-0 lg:pb-16 lg:text-left">
+          <p className="text-[14px] font-normal leading-[24px] text-white/90 opacity-80 lg:text-[18px] lg:leading-[35px]">
+            © 2025 Aphrodite Inc. All Rights Reserved.
+          </p>
+          <div className="flex flex-col items-center gap-6 lg:flex-row">
+            <div className="flex items-center gap-4">
+              <span className="text-[14px] font-normal text-white/90 opacity-80 lg:text-[18px]">
+                Connect with us:
+              </span>
+              <div className="flex items-center gap-2 lg:gap-4">
+                <a href="#" aria-label="Facebook">
+                  <img src="/footer/social-facebook.svg" alt="" className="size-6 lg:size-7" />
+                </a>
+                <a href="#" aria-label="Instagram">
+                  <img src="/footer/social-instagram.svg" alt="" className="size-6 lg:size-7" />
+                </a>
+                <a href="#" aria-label="X">
+                  <img src="/footer/social-x.svg" alt="" className="size-6 lg:size-7" />
+                </a>
+              </div>
             </div>
-            {/* Cookie Policy */}
-            <a href="/cookies" className="text-white/90 opacity-[80%] hover:text-white transition-colors text-sm sm:text-base">
+            <a
+              href="#"
+              className="text-[14px] font-normal text-white/90 opacity-80 transition-opacity hover:opacity-100 lg:text-[18px]"
+            >
               Cookie Policy
             </a>
           </div>
