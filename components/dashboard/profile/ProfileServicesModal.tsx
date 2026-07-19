@@ -134,7 +134,7 @@ export function ProfileServicesModal({
 
       const result = await updateProfile({
         id: String(profileId),
-        services: servicesArray,
+        data: { services: servicesArray },
       }).unwrap();
 
       if (result) {

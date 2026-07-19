@@ -107,7 +107,7 @@ export const profileApiSlice = apiSlice.injectEndpoints({
     updateProfileVideo: builder.mutation({
       query: ({ userId, ...data }) => ({
         url: endpoints.PROFILE_VIDEO(userId),
-        method: "PUT",
+        method: "POST",
         body: data,
       }),
       extraOptions: { serviceKey: "us" },
@@ -143,6 +143,18 @@ export const profileApiSlice = apiSlice.injectEndpoints({
       extraOptions: { serviceKey: "us" },
       invalidatesTags: ['Profile'],
     }),
+    createReview: builder.mutation<
+      { success: boolean; data: unknown },
+      { profileId: string; rating: number; comment?: string }
+    >({
+      query: ({ profileId, rating, comment }) => ({
+        url: endpoints.PROFILE_REVIEWS(profileId),
+        method: "POST",
+        body: { profileId, rating, comment },
+      }),
+      extraOptions: { serviceKey: "us" },
+      invalidatesTags: ['Profile'],
+    }),
   }),
 });
 
@@ -159,4 +171,5 @@ export const {
   useUpdateProfileMediaMutation,
   useGetProfileReviewsQuery,
   useFollowProfileMutation,
+  useCreateReviewMutation,
 } = profileApiSlice;

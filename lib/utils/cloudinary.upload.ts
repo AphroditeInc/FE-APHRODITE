@@ -64,10 +64,6 @@ export const uploadToCloudinary = async (
       formData.append('folder', options.folder);
     }
 
-    if (options.resourceType && options.resourceType !== 'auto') {
-      formData.append('resource_type', options.resourceType);
-    }
-
     if (options.transformation) {
       formData.append('transformation', options.transformation);
     }
@@ -143,7 +139,7 @@ export const uploadToCloudinary = async (
         });
       });
 
-      xhr.open('POST', getCloudinaryUploadUrl());
+      xhr.open('POST', getCloudinaryUploadUrl(options.resourceType || 'auto'));
       xhr.send(formData);
     });
   } catch (error) {

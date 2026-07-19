@@ -174,11 +174,32 @@ function DetailsForm() {
     try {
       // Check if this is phone registration (has userId) or email registration (no userId)
       if (finalUserId) {
-        // Phone Registration Path: Complete basic details
+        // Step 4: user is already authenticated from step 3 — just update profile and go to dashboard
+        if (currentStep === 4) {
+          const profileUpdatePayload = {
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+          };
+          try {
+            await updateProfile(profileUpdatePayload).unwrap();
+            router.push("/dashboard");
+          } catch (error: unknown) {
+            const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+              ? String(error.data.message)
+              : (error && typeof error === 'object' && 'message' in error)
+                ? String(error.message)
+                : 'Profile update failed';
+            setError(errorMessage);
+          }
+          return;
+        }
+
+        // Step 3: call completeBasicDetails exactly once with the username as typed
         const basicDetailsPayload = {
           is18: formData.age === "Yes",
           dob: formData.dateOfBirth,
-          username: formData.username + Math.random().toString(36).substr(2, 5), // Add random suffix to ensure uniqueness
+          username: formData.username,
           gender: formData.gender,
           country: formData.country,
           state: formData.state,
@@ -186,16 +207,13 @@ function DetailsForm() {
           password: formData.password,
         };
 
-        console.log("Sending basic details payload:", basicDetailsPayload);
         const result = await completeBasicDetails({ userId: finalUserId, ...basicDetailsPayload }).unwrap();
-        console.log("Basic details response:", result);
 
         if (result && result.data) {
           const data = result.data;
-          // Handle different response formats
           const tokens = data.tokens || data;
           const userData = data.user || data.data?.user;
-          
+
           if (tokens && (tokens.accessToken || tokens.access_token)) {
             dispatch(setCredentials({
               access_token: tokens.accessToken || tokens.access_token,
@@ -204,74 +222,32 @@ function DetailsForm() {
               uid: userData?.id || data.uid || data.userId,
             }));
           }
-          
-          console.log("Basic details completed successfully, user is now authenticated");
-          
-          if (currentStep === 3) {
-            // Create profile with bio, education, occupation, maritalStatus
-            const currentUserId = userData?.id || data.uid || data.userId || finalUserId;
-            
-            if (currentUserId && (formData.bio || formData.educationLevel || formData.occupation || formData.maritalStatus)) {
-              try {
-                const profilePayload = {
-                  userId: currentUserId,
-                  bio: formData.bio || "",
-                  education: formData.educationLevel || "",
-                  occupation: formData.occupation || "",
-                  maritalStatus: formData.maritalStatus || "",
-                };
-                
-                console.log("Creating profile with:", profilePayload);
-                await createProfile(profilePayload).unwrap();
-                console.log("Profile created successfully");
-              } catch (error: unknown) {
-                console.error("Profile creation error:", error);
-                
-                // Check if it's a 409 conflict (profile already exists)
-                const is409 = error && typeof error === 'object' && 'status' in error && error.status === 409;
-                
-                if (is409) {
-                  console.log("Profile already exists, proceeding to next step");
-                  // Profile already exists, that's okay - continue to next step
-                } else {
-                  // Other errors should be shown to the user
-                  const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
-                    ? String(error.data.message)
-                    : (error && typeof error === 'object' && 'message' in error)
-                      ? String(error.message)
-                      : 'Failed to create profile';
-                  setError(errorMessage);
-                  return; // Don't proceed if profile creation fails
-                }
+
+          // Optionally create profile with bio/education/occupation/maritalStatus
+          const currentUserId = userData?.id || data.uid || data.userId || finalUserId;
+          if (currentUserId && (formData.bio || formData.educationLevel || formData.occupation || formData.maritalStatus)) {
+            try {
+              await createProfile({
+                userId: currentUserId,
+                bio: formData.bio || "",
+                education: formData.educationLevel || "",
+                occupation: formData.occupation || "",
+                maritalStatus: formData.maritalStatus || "",
+              }).unwrap();
+            } catch (error: unknown) {
+              const is409 = error && typeof error === 'object' && 'status' in error && error.status === 409;
+              if (!is409) {
+                const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
+                  ? String(error.data.message)
+                  : 'Failed to create profile';
+                setError(errorMessage);
+                return;
               }
             }
-            
-            // Move to step 4 (profile details)
-            setCurrentStep(4);
-          } else if (currentStep === 4) {
-            // Handle profile update with firstName, lastName, email
-            const profileUpdatePayload = {
-              firstName: formData.firstName,
-              lastName: formData.lastName,
-              email: formData.email,
-            };
-
-            console.log("Updating profile with:", profileUpdatePayload);
-            try {
-              await updateProfile(profileUpdatePayload).unwrap();
-              console.log("Profile updated successfully");
-              // Profile updated successfully, redirect to dashboard
-              router.push("/dashboard");
-            } catch (error: unknown) {
-              console.error("Profile update error:", error);
-              const errorMessage = (error && typeof error === 'object' && 'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data)
-                ? String(error.data.message)
-                : (error && typeof error === 'object' && 'message' in error)
-                  ? String(error.message)
-                  : 'Profile update failed';
-              setError(errorMessage);
-            }
           }
+
+          // Move to step 4 so user can optionally add firstName/lastName/email
+          setCurrentStep(4);
         }
       } else {
         // Email Registration Path: Register with email and password
