@@ -298,7 +298,11 @@ export interface EnrichedProfile {
   smoker?: boolean;
   looks?: string;
   hasVideoProof?: boolean;
+  videoProofUrl?: string;
+  videoProofFileType?: string;
+  issuedIdUrl?: string;
   issuedIdVerified?: boolean;
+  isVerified?: boolean;
   media?: string[];
   services?: Service[] | string[];
   followersCount?: number;

@@ -15,6 +15,7 @@ import { ProfileMediaUploadModal } from "@/components/dashboard/profile/ProfileM
 import { ProfileServicesModal } from "@/components/dashboard/profile/ProfileServicesModal";
 import { ProfilePricingEditModal } from "@/components/dashboard/profile/ProfilePricingEditModal";
 import CustomPricingModal from "@/components/dashboard/modals/CustomPricingModal";
+import { ProfileCompletionBanner } from "@/components/dashboard/profile/ProfileCompletionBanner";
 
 // Mock reviews data
 const mockReviews = [
@@ -190,6 +191,14 @@ export function ProviderProfilePage() {
           </button>
         )}
       </div>
+
+      {/* ── Profile Completion Banner ── */}
+      <ProfileCompletionBanner
+        profile={profile}
+        onEditProfile={() => setIsEditModalOpen(true)}
+        onEditServices={() => setIsServicesModalOpen(true)}
+        onAddMedia={() => setIsMediaModalOpen(true)}
+      />
 
       {/* Main Profile Section */}
       <div className="px-4 sm:px-8 lg:px-12 pb-6">

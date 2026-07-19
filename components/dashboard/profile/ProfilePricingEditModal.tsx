@@ -37,6 +37,13 @@ export function useToast(timeout = 3000) {
   return { toast, showToast };
 }
 
+// Default duration labels per pricing type
+const DEFAULT_DURATIONS: Record<string, string> = {
+  shortTime: "2 hours",
+  overnight: "overnight",
+  weekend: "weekend",
+};
+
 export function ProfilePricingEditModal({
   open,
   onClose,
@@ -47,6 +54,7 @@ export function ProfilePricingEditModal({
 }: ProfilePricingEditModalProps) {
   const [incall, setIncall] = useState("");
   const [outcall, setOutcall] = useState("");
+  const [duration, setDuration] = useState("");
   const { toast, showToast } = useToast();
 
   const [updatePricing, { isLoading: isUpdatingPricing }] = useUpdatePricingMutation();
@@ -55,6 +63,7 @@ export function ProfilePricingEditModal({
     if (!open || !pricingType || !currentPricing) {
       setIncall("");
       setOutcall("");
+      setDuration("");
       return;
     }
 
@@ -70,11 +79,13 @@ export function ProfilePricingEditModal({
         ? String(pricing.outcall)
         : ""
     );
+    setDuration(pricing?.duration || DEFAULT_DURATIONS[pricingType] || "");
   }, [open, pricingType, currentPricing]);
 
   const handleClose = () => {
     setIncall("");
     setOutcall("");
+    setDuration("");
     onClose();
   };
 
@@ -96,24 +107,18 @@ export function ProfilePricingEditModal({
     try {
       const pricingData: any = {};
 
-      const incallValue = incall ? Number(incall) : undefined;
-      const outcallValue = outcall ? Number(outcall) : undefined;
+      const incallValue = incall ? Number(incall) : 0;
+      const outcallValue = outcall ? Number(outcall) : 0;
+      const durationValue = duration.trim() || DEFAULT_DURATIONS[pricingType] || pricingType;
+
+      const band = { incall: incallValue, outcall: outcallValue, duration: durationValue };
 
       if (pricingType === "shortTime") {
-        pricingData.shortTime = {
-          incall: incallValue,
-          outcall: outcallValue,
-        };
+        pricingData.shortTime = band;
       } else if (pricingType === "overnight") {
-        pricingData.overnight = {
-          incall: incallValue,
-          outcall: outcallValue,
-        };
+        pricingData.overnight = band;
       } else if (pricingType === "weekend") {
-        pricingData.weekend = {
-          incall: incallValue,
-          outcall: outcallValue,
-        };
+        pricingData.weekend = band;
       }
 
       const result = await updatePricing({ id: profileId, data: pricingData }).unwrap();
@@ -172,6 +177,18 @@ export function ProfilePricingEditModal({
         </div>
 
         <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Duration <span className="text-gray-400 font-normal">(e.g. "2 hours", "overnight")</span>
+            </label>
+            <input
+              type="text"
+              value={duration}
+              onChange={e => setDuration(e.target.value)}
+              placeholder={DEFAULT_DURATIONS[pricingType ?? "shortTime"]}
+              className="w-full px-4 h-14 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent text-gray-800"
+            />
+          </div>
           <div className="grid md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

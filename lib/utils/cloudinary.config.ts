@@ -32,8 +32,8 @@ export const getCloudinaryConfig = (): CloudinaryConfig => {
   };
 };
 
-export const getCloudinaryUploadUrl = (): string => {
+export const getCloudinaryUploadUrl = (resourceType: 'image' | 'video' | 'raw' | 'auto' = 'auto'): string => {
   const config = getCloudinaryConfig();
-  return `https://api.cloudinary.com/v1_1/${config.cloudName}/upload`;
+  return `https://api.cloudinary.com/v1_1/${config.cloudName}/${resourceType}/upload`;
 };
 
