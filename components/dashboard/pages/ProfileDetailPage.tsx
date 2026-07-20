@@ -917,43 +917,36 @@ export default function ProfileDetailPage() {
             ) : (
             <div className="space-y-6">
               {reviews.map((review) => {
-                // Generate initials from userId or use default
-                const reviewId = review.id || review.userId || '';
-                const initials = reviewId 
-                  ? reviewId.slice(0, 2).toUpperCase()
-                  : 'AN';
-                // Generate avatar color based on userId hash
-                const hashColor = reviewId
-                  ? `#${reviewId.slice(-6).padStart(6, '0').replace(/(.{2})/g, '$1')}`
-                  : '#FA266D';
-                const avatarColor = `bg-[${hashColor}]`;
-                
+                // Reviewer display name — use populated fields from backend
+                const displayName: string =
+                  (review as any).reviewerName ||
+                  (review as any).reviewerUserName ||
+                  `User ${(review.reviewerId || '').slice(-4)}` ||
+                  'Anonymous';
+
+                const initials = displayName.slice(0, 2).toUpperCase();
+
                 // Format timestamp
                 const timestamp = review.createdAt
-                  ? new Date(review.createdAt).toLocaleDateString('en-US', { 
-                      month: 'short', 
-                      day: 'numeric', 
-                      year: 'numeric' 
+                  ? new Date(review.createdAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric'
                     })
                   : 'Recently';
-                
-                // Get reviewer name from userId or use anonymous
-                const reviewerName = review.userId 
-                  ? `User ${review.userId.slice(-4)}`
-                  : 'Anonymous';
 
                 return (
-                <div key={review.id || reviewId} className="p-6">
+                <div key={review.id || review.reviewerId} className="p-6">
                   <div className="flex items-start gap-4">
                     {/* Avatar */}
-                    <div className={`w-12 h-12 bg-[#FA266D] rounded-full flex items-center justify-center text-white font-semibold text-lg`}>
+                    <div className="w-12 h-12 bg-[#FA266D] rounded-full flex items-center justify-center text-white font-semibold text-lg">
                       {initials}
                     </div>
-                    
+
                     {/* Review Content */}
                     <div className="flex-1 space-y-3">
                       {/* Name */}
-                      <h4 className="text-[#E05090] font-semibold text-lg">{reviewerName}</h4>
+                      <h4 className="text-[#E05090] font-semibold text-lg">{displayName}</h4>
                       
                       {/* Rating and Timestamp */}
                       <div className="flex items-center gap-3">

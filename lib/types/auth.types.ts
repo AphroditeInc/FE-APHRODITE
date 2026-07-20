@@ -263,6 +263,10 @@ export interface Pricing {
  */
 export interface ReviewItem {
   id?: string;
+  reviewerId?: string;
+  reviewerName?: string;
+  reviewerUserName?: string;
+  /** @deprecated use reviewerId — kept for backwards compat */
   userId?: string;
   rating?: number;
   comment?: string;
