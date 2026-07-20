@@ -16,7 +16,16 @@ import { ProfileMediaUploadModal } from "@/components/dashboard/profile/ProfileM
 export default function ClientProfilePage() {
   const router = useRouter();
   const { user: authUser } = useAuth();
-  const { profile, loading, error, refetch } = useEnrichedProfile(authUser?.id || null);
+  const { profile: rawProfile, loading, error, refetch } = useEnrichedProfile(authUser?.id || null);
+
+  // Guard: only use the profile if it actually belongs to this logged-in user.
+  // If the fetched profile's userId doesn't match authUser.id, treat it as null
+  // (can happen when auth state has a stale uid from a previous session).
+  const profile = rawProfile && authUser?.id && rawProfile.userId === authUser.id
+    ? rawProfile
+    : rawProfile && !rawProfile.userId
+      ? rawProfile   // profile exists but userId field absent — allow it
+      : null;
   const [activeTab, setActiveTab] = useState<"About" | "Media" | "Payment History" | "Verification">("About");
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
