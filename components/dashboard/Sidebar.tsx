@@ -20,10 +20,11 @@ import {
   Users,
   Megaphone,
   Lock,
+  Wallet,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSelector } from "react-redux";
-import { selectUid } from "@/feature/authentication/authSlice";
+import { selectUid, selectCurrentUser } from "@/feature/authentication/authSlice";
 import { useGetEnrichedProfileQuery } from "@/feature/profile/profileApiSlice";
 
 interface SidebarProps {
@@ -39,6 +40,7 @@ const sidebarItems = [
   { id: "feeds", label: "Feeds", icon: Smile, href: "/feeds" },
   { id: "strip-room", label: "Strip Room", icon: Play, href: "/strip-room" },
   { id: "orders", label: "Orders", icon: ShoppingCart, href: "/orders" },
+  { id: "wallet", label: "Wallet", icon: Wallet, href: "/wallet" },
   { id: "chats", label: "Chats", icon: MessageCircle, href: "/chat" },
   { id: "connections", label: "Connections", icon: Users, href: "/connections" },
   { id: "advertisement", label: "Advertisement", icon: Megaphone, href: "/advertisement" },
@@ -55,10 +57,15 @@ export default function Sidebar({
   const router = useRouter();
   const pathname = usePathname();
   const uid = useSelector(selectUid);
-  const { data: profileData } = useGetEnrichedProfileQuery(uid!, { skip: !uid });
+  const authUser = useSelector(selectCurrentUser);
+  const isProvider = authUser?.userType === 'diva' || authUser?.userType === 'hunk';
+
+  // Only fetch provider profile for diva/hunk users — clients don't have one
+  const { data: profileData } = useGetEnrichedProfileQuery(uid!, { skip: !uid || !isProvider });
   const profile = (profileData as any)?.data || (profileData as any);
 
-  const isProfileComplete = !!(
+  // Completion banner only relevant for providers (diva/hunk)
+  const isProfileComplete = !isProvider || !!(
     profile?.bio &&
     profile?.occupation &&
     profile?.education &&

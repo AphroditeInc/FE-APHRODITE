@@ -1,12 +1,13 @@
 "use client";
 
-import { Check, MapPin, ChevronDown } from "lucide-react";
+import { Check, MapPin, ChevronDown, AlertTriangle, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { useCreateOrderMutation, useGetWalletBalanceQuery } from "@/app/api/apiSlice";
+import { useCreateOrderMutation, useGetWalletBalanceQuery, useFundWalletMutation } from "@/app/api/apiSlice";
 import type { CreateOrderPayload } from "@/lib/types";
 import { useEnrichedProfile } from "@/lib/hooks/useEnrichedProfile";
+import { useAuthProfile } from "@/lib/hooks";
 
 type PricingAmounts = { incall: string; outcall: string };
 
@@ -41,6 +42,10 @@ export function CheckoutModal({
   const [driverMessage, setDriverMessage] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showTopUp, setShowTopUp] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState("");
+  const [topUpError, setTopUpError] = useState<string | null>(null);
+  const { user: authUser } = useAuthProfile();
 
   const { profile: providerProfile } = useEnrichedProfile(providerUserId || null);
 
@@ -76,6 +81,41 @@ export function CheckoutModal({
   }, [walletResp]);
 
   const [createOrder, { isLoading }] = useCreateOrderMutation();
+  const [fundWallet, { isLoading: isFunding }] = useFundWalletMutation();
+
+  const insufficientBalance = total > 0 && walletBalance < total;
+  const shortfall = Math.max(0, total - walletBalance);
+
+  const handleTopUp = async () => {
+    setTopUpError(null);
+    const ngnAmount = parseFloat(topUpAmount);
+    if (!ngnAmount || ngnAmount <= 0) {
+      setTopUpError("Enter a valid amount in NGN.");
+      return;
+    }
+    if (!authUser?.email) {
+      setTopUpError("Your email is required. Please update your profile.");
+      return;
+    }
+    const aphEquivalent = ngnAmount / 1.25;
+    if (aphEquivalent < 100) {
+      setTopUpError(`Minimum top-up is 100 APH (₦${Math.ceil(100 * 1.25).toLocaleString()} NGN).`);
+      return;
+    }
+    try {
+      const result = await fundWallet({
+        amount: aphEquivalent,
+        email: authUser.email,
+        callbackUrl: typeof window !== "undefined" ? `${window.location.origin}/wallet` : undefined,
+      }).unwrap();
+      if (result.success && result.data?.authorization_url) {
+        window.location.href = result.data.authorization_url;
+      }
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.message || "Failed to initialize payment.";
+      setTopUpError(Array.isArray(msg) ? msg.join(", ") : msg);
+    }
+  };
 
   if (!open) return null;
 
@@ -257,26 +297,76 @@ export function CheckoutModal({
 
               <div className="mt-6">
                 <p className="text-base mb-2">Payment Method</p>
-                <div className="flex items-center justify-between border border-white/20 rounded-[20px] p-4">
+                <div className={`flex items-center justify-between border rounded-[20px] p-4 ${insufficientBalance ? "border-red-500/40 bg-red-500/5" : "border-white/20"}`}>
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">₳</div>
                     <div>
                       <p className="text-sm">Wallet</p>
-                      <p className="text-xs text-white/70">
+                      <p className={`text-xs ${insufficientBalance ? "text-red-400" : "text-white/70"}`}>
                         {walletBalance.toLocaleString()} APH
+                        {insufficientBalance && ` · Need ${shortfall.toLocaleString()} more`}
                       </p>
                     </div>
                   </div>
-                  <div className="w-5 h-5 rounded-full border border-white/30" />
+                  <div className={`w-5 h-5 rounded-full border ${insufficientBalance ? "border-red-400" : "border-white/30"}`} />
                 </div>
+
+                {/* Insufficient balance — top-up section */}
+                {insufficientBalance && (
+                  <div className="mt-3 rounded-[16px] border border-yellow-500/20 bg-yellow-500/5 p-4 space-y-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-yellow-300">
+                        Your balance is {shortfall.toLocaleString()} APH short. Top up your wallet to continue.
+                      </p>
+                    </div>
+                    {!showTopUp ? (
+                      <button
+                        onClick={() => setShowTopUp(true)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-[#FA266D] hover:text-pink-400 transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Top up wallet
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-white/50">₦</span>
+                            <input
+                              type="number"
+                              placeholder="Amount in NGN"
+                              value={topUpAmount}
+                              onChange={(e) => setTopUpAmount(e.target.value)}
+                              className="w-full pl-7 pr-3 py-2 rounded-[12px] bg-white/10 border border-white/20 text-white text-xs placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-[#FA266D]"
+                            />
+                          </div>
+                          <button
+                            onClick={handleTopUp}
+                            disabled={isFunding}
+                            className="px-4 py-2 rounded-[12px] bg-[#FA266D] text-white text-xs font-semibold hover:bg-pink-600 disabled:bg-gray-600 transition-colors"
+                          >
+                            {isFunding ? "..." : "Fund"}
+                          </button>
+                        </div>
+                        {topUpAmount && parseFloat(topUpAmount) > 0 && (
+                          <p className="text-xs text-white/50">
+                            ≈ {(parseFloat(topUpAmount) / 1.25 * 0.95).toLocaleString("en-US", { maximumFractionDigits: 0 })} APH after 5% fee
+                          </p>
+                        )}
+                        {topUpError && <p className="text-xs text-red-400">{topUpError}</p>}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <button
                 onClick={handlePayNow}
-                disabled={isLoading}
-                className="mt-6 w-full bg-[#FA266D] text-white py-3 px-4 rounded-[20px] text-[18px] font-medium hover:bg-pink-600 disabled:bg-gray-600"
+                disabled={isLoading || insufficientBalance}
+                className="mt-6 w-full bg-[#FA266D] text-white py-3 px-4 rounded-[20px] text-[18px] font-medium hover:bg-pink-600 disabled:bg-gray-600 disabled:cursor-not-allowed"
               >
-                {isLoading ? "Processing..." : "Pay Now"}
+                {isLoading ? "Processing..." : insufficientBalance ? "Insufficient Balance" : "Pay Now"}
               </button>
               {errorMessage && (
                 <p className="mt-3 text-sm text-red-400">{errorMessage}</p>
