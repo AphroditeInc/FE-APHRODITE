@@ -263,6 +263,10 @@ export interface Pricing {
  */
 export interface ReviewItem {
   id?: string;
+  reviewerId?: string;
+  reviewerName?: string;
+  reviewerUserName?: string;
+  /** @deprecated use reviewerId — kept for backwards compat */
   userId?: string;
   rating?: number;
   comment?: string;
@@ -298,7 +302,11 @@ export interface EnrichedProfile {
   smoker?: boolean;
   looks?: string;
   hasVideoProof?: boolean;
+  videoProofUrl?: string;
+  videoProofFileType?: string;
+  issuedIdUrl?: string;
   issuedIdVerified?: boolean;
+  isVerified?: boolean;
   media?: string[];
   services?: Service[] | string[];
   followersCount?: number;

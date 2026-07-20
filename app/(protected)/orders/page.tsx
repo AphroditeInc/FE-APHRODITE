@@ -349,6 +349,7 @@ export default function OrdersPage() {
         (order) =>
           (order.status === "accepted" ||
             order.status === "ongoing" ||
+            order.status === "ready_for_pickup" ||
             order.status === "in_progress") &&
           !!order.riderId
       );
@@ -545,7 +546,16 @@ export default function OrdersPage() {
                   <p className="text-sm font-semibold uppercase tracking-wide text-white/70">
                     Order Details
                   </p>
-                  <p className="mt-1 text-xs text-white/60">Thu, 30th Nov, 2025</p>
+                  <p className="mt-1 text-xs text-white/60">
+                    {selectedOrder.createdAt
+                      ? new Date(selectedOrder.createdAt).toLocaleDateString("en-GB", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : ""}
+                  </p>
                 </div>
                 <button
                   className="text-white/60 hover:text-white"

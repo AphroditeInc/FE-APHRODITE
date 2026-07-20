@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, MapPin, Star, Check, Users, Calendar as CalendarIcon, Heart, BookOpen, MessageCircle, UserPlus, Info, Coins, Play, ThumbsUp, ThumbsDown, ChevronDown, Plus } from "lucide-react";
 import { type Profile } from "@/lib/data/profiles";
-import { useGetProfileByIdQuery } from "@/feature/profile/profileApiSlice";
+import { useGetProfileByIdQuery, useCreateReviewMutation } from "@/feature/profile/profileApiSlice";
 import type { EnrichedProfile } from "@/lib/types/auth.types";
 import { ProfileDetailSkeleton } from "@/components/ui/Skeleton";
 import CustomPricingModal from "../modals/CustomPricingModal";
@@ -50,6 +50,10 @@ export default function ProfileDetailPage() {
     incall: "0",
     outcall: "0",
   });
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSuccess, setReviewSuccess] = useState(false);
+  const [createReview] = useCreateReviewMutation();
 
   // Fetch profile from API
   const { data: profileResponse, isLoading, error } = useGetProfileByIdQuery(profileId, {
@@ -312,9 +316,15 @@ export default function ProfileDetailPage() {
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">
                   {profile.name}
                 </h1>
-                <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-                </div>
+                {enrichedProfile?.isVerified ? (
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Check className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+                  </div>
+                ) : (
+                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 whitespace-nowrap">
+                    Not verified
+                  </span>
+                )}
               </div>
               <button 
                 onClick={handleLike}
@@ -907,43 +917,36 @@ export default function ProfileDetailPage() {
             ) : (
             <div className="space-y-6">
               {reviews.map((review) => {
-                // Generate initials from userId or use default
-                const reviewId = review.id || review.userId || '';
-                const initials = reviewId 
-                  ? reviewId.slice(0, 2).toUpperCase()
-                  : 'AN';
-                // Generate avatar color based on userId hash
-                const hashColor = reviewId
-                  ? `#${reviewId.slice(-6).padStart(6, '0').replace(/(.{2})/g, '$1')}`
-                  : '#FA266D';
-                const avatarColor = `bg-[${hashColor}]`;
-                
+                // Reviewer display name — use populated fields from backend
+                const displayName: string =
+                  (review as any).reviewerName ||
+                  (review as any).reviewerUserName ||
+                  `User ${(review.reviewerId || '').slice(-4)}` ||
+                  'Anonymous';
+
+                const initials = displayName.slice(0, 2).toUpperCase();
+
                 // Format timestamp
                 const timestamp = review.createdAt
-                  ? new Date(review.createdAt).toLocaleDateString('en-US', { 
-                      month: 'short', 
-                      day: 'numeric', 
-                      year: 'numeric' 
+                  ? new Date(review.createdAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric'
                     })
                   : 'Recently';
-                
-                // Get reviewer name from userId or use anonymous
-                const reviewerName = review.userId 
-                  ? `User ${review.userId.slice(-4)}`
-                  : 'Anonymous';
 
                 return (
-                <div key={review.id || reviewId} className="p-6">
+                <div key={review.id || review.reviewerId} className="p-6">
                   <div className="flex items-start gap-4">
                     {/* Avatar */}
-                    <div className={`w-12 h-12 bg-[#FA266D] rounded-full flex items-center justify-center text-white font-semibold text-lg`}>
+                    <div className="w-12 h-12 bg-[#FA266D] rounded-full flex items-center justify-center text-white font-semibold text-lg">
                       {initials}
                     </div>
-                    
+
                     {/* Review Content */}
                     <div className="flex-1 space-y-3">
                       {/* Name */}
-                      <h4 className="text-[#E05090] font-semibold text-lg">{reviewerName}</h4>
+                      <h4 className="text-[#E05090] font-semibold text-lg">{displayName}</h4>
                       
                       {/* Rating and Timestamp */}
                       <div className="flex items-center gap-3">
@@ -1036,16 +1039,45 @@ export default function ProfileDetailPage() {
                 </div>
               </div>
 
+              {/* Feedback */}
+              {reviewError && (
+                <p className="text-red-400 text-sm">{reviewError}</p>
+              )}
+              {reviewSuccess && (
+                <p className="text-green-400 text-sm">Review submitted successfully!</p>
+              )}
+
               {/* Submit Button */}
-              <button 
-                className="text-white font-semibold transition-colors"
+              <button
+                disabled={reviewRating === 0 || reviewSubmitting}
+                onClick={async () => {
+                  if (reviewRating === 0) {
+                    setReviewError("Please select a star rating before submitting.");
+                    return;
+                  }
+                  setReviewError(null);
+                  setReviewSuccess(false);
+                  setReviewSubmitting(true);
+                  try {
+                    await createReview({
+                      profileId,
+                      rating: reviewRating,
+                      comment: reviewText.trim() || undefined,
+                    }).unwrap();
+                    setReviewSuccess(true);
+                    setReviewText("");
+                    setReviewRating(0);
+                  } catch (err: unknown) {
+                    const msg = (err as { data?: { message?: string } })?.data?.message;
+                    setReviewError(msg || "Failed to submit review. Please try again.");
+                  } finally {
+                    setReviewSubmitting(false);
+                  }
+                }}
+                className="text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   width: '200px',
                   height: '56px',
-                  top: '1529px',
-                  left: '80px',
-                  opacity: 1,
-                  gap: '10px',
                   borderRadius: '40px',
                   paddingTop: '13px',
                   paddingRight: '24px',
@@ -1054,7 +1086,7 @@ export default function ProfileDetailPage() {
                   backgroundColor: '#FA266D'
                 }}
               >
-                Submit review
+                {reviewSubmitting ? "Submitting…" : "Submit review"}
               </button>
             </div>
           </div>

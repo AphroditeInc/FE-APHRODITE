@@ -14,9 +14,15 @@ export function ProfileHeader({ profile, authUser }: ProfileHeaderProps) {
         <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">
           {profile?.user?.userName || authUser?.username}
         </h1>
-        <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-          <Check className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-        </div>
+        {profile?.isVerified ? (
+          <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+            <Check className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+          </div>
+        ) : (
+          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 whitespace-nowrap">
+            Not verified
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
