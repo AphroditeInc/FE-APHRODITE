@@ -20,8 +20,12 @@ import {
   Users,
   Megaphone,
   Lock,
+  Wallet,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
+import { useSelector } from "react-redux";
+import { selectUid, selectCurrentUser } from "@/feature/authentication/authSlice";
+import { useGetEnrichedProfileQuery } from "@/feature/profile/profileApiSlice";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -36,6 +40,7 @@ const sidebarItems = [
   { id: "feeds", label: "Feeds", icon: Smile, href: "/feeds" },
   { id: "strip-room", label: "Strip Room", icon: Play, href: "/strip-room" },
   { id: "orders", label: "Orders", icon: ShoppingCart, href: "/orders" },
+  { id: "wallet", label: "Wallet", icon: Wallet, href: "/wallet" },
   { id: "chats", label: "Chats", icon: MessageCircle, href: "/chat" },
   { id: "connections", label: "Connections", icon: Users, href: "/connections" },
   { id: "advertisement", label: "Advertisement", icon: Megaphone, href: "/advertisement" },
@@ -51,6 +56,29 @@ export default function Sidebar({
 }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const uid = useSelector(selectUid);
+  const authUser = useSelector(selectCurrentUser);
+  const isProvider = authUser?.userType === 'diva' || authUser?.userType === 'hunk';
+
+  // Only fetch provider profile for diva/hunk users — clients don't have one
+  const { data: profileData } = useGetEnrichedProfileQuery(uid!, { skip: !uid || !isProvider });
+  const profile = (profileData as any)?.data || (profileData as any);
+
+  // Completion banner only relevant for providers (diva/hunk)
+  const isProfileComplete = !isProvider || !!(
+    profile?.bio &&
+    profile?.occupation &&
+    profile?.education &&
+    profile?.gender &&
+    profile?.ethnicity &&
+    profile?.nationality &&
+    profile?.bodyBuild &&
+    profile?.looks &&
+    Array.isArray(profile?.services) && profile.services.length > 0 &&
+    Array.isArray(profile?.media) && profile.media.length > 0 &&
+    profile?.hasVideoProof &&
+    profile?.issuedIdUrl
+  );
 
   const handleNavigation = (href: string) => {
     router.push(href);
@@ -110,26 +138,28 @@ export default function Sidebar({
           );
         })}
 
-        {/* complete ur profile setup */}
-        <div className="px-3 sm:px-6 pb-4 sm:pb-6">
-          {isOpen && (
-            <div className="mt-6 sm:mt-8 p-3 sm:p-4 bg-white/6 rounded-[20px] sm:rounded-[24px] text-white">
-              <p className="text-base sm:text-[18px] font-bold mb-2">
-                Complete Your Profile Setup Now!
-              </p>
-              <p className="text-xs sm:text-[14px] mb-3 sm:mb-4 text-white/60">
-                Finish setting up your account, add your services and pricing to
-                start getting clients.
-              </p>
-              <button
-                onClick={() => handleNavigation("/profile")}
-                className="w-full flex items-center justify-center px-4 sm:px-[24px] py-2 sm:py-[10px] text-white bg-[#FA266D] rounded-[30px] sm:rounded-[40px] transition-all duration-200 cursor-pointer"
-              >
-                <span className="text-sm sm:text-[16px] font-semibold">Go to Profile</span>
-              </button>
-            </div>
-          )}
-        </div>
+        {/* complete ur profile setup — hidden once all steps are done */}
+        {!isProfileComplete && (
+          <div className="px-3 sm:px-6 pb-4 sm:pb-6">
+            {isOpen && (
+              <div className="mt-6 sm:mt-8 p-3 sm:p-4 bg-white/6 rounded-[20px] sm:rounded-[24px] text-white">
+                <p className="text-base sm:text-[18px] font-bold mb-2">
+                  Complete Your Profile Setup Now!
+                </p>
+                <p className="text-xs sm:text-[14px] mb-3 sm:mb-4 text-white/60">
+                  Finish setting up your account, add your services and pricing to
+                  start getting clients.
+                </p>
+                <button
+                  onClick={() => handleNavigation("/profile")}
+                  className="w-full flex items-center justify-center px-4 sm:px-[24px] py-2 sm:py-[10px] text-white bg-[#FA266D] rounded-[30px] sm:rounded-[40px] transition-all duration-200 cursor-pointer"
+                >
+                  <span className="text-sm sm:text-[16px] font-semibold">Go to Profile</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </nav>
 
       {/* Sidebar Footer */}
